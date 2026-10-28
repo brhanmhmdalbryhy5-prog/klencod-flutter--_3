@@ -13,10 +13,13 @@ class Anime {
   int colorIndex;
   String date;
 
+  // مسار صورة الأنمي المحفوظة محليًا، وهو اختياري.
+  String? imagePath;
+
   Anime({
     required this.id,
-    required this.title,
-    this.status = 'مكتمل',
+    this.title = '',
+    this.status = '',
     this.genre = '',
     this.character = '',
     this.summary = '',
@@ -26,6 +29,7 @@ class Anime {
     this.favorite = false,
     this.colorIndex = 0,
     this.date = '',
+    this.imagePath,
   });
 
   Map<String, dynamic> toJson() {
@@ -42,6 +46,7 @@ class Anime {
       'favorite': favorite,
       'colorIndex': colorIndex,
       'date': date,
+      'imagePath': imagePath,
     };
   }
 
@@ -49,7 +54,7 @@ class Anime {
     return Anime(
       id: json['id'] as String? ?? '',
       title: json['title'] as String? ?? '',
-      status: json['status'] as String? ?? 'مكتمل',
+      status: json['status'] as String? ?? '',
       genre: json['genre'] as String? ?? '',
       character: json['character'] as String? ?? '',
       summary: json['summary'] as String? ?? '',
@@ -59,6 +64,7 @@ class Anime {
       favorite: json['favorite'] as bool? ?? false,
       colorIndex: (json['colorIndex'] as num?)?.toInt() ?? 0,
       date: json['date'] as String? ?? '',
+      imagePath: json['imagePath'] as String?,
     );
   }
 }
