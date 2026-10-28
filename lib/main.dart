@@ -51,16 +51,26 @@ class AnimeMemoryApp extends StatelessWidget {
           ),
         ),
         dividerColor: border,
+        iconTheme: const IconThemeData(
+          color: Colors.white70,
+        ),
         navigationBarTheme: const NavigationBarThemeData(
           backgroundColor: panel,
           indicatorColor: darkRed,
           labelBehavior:
               NavigationDestinationLabelBehavior.alwaysShow,
+          elevation: 0,
+          height: 72,
         ),
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
           fillColor: panel,
-          hintStyle: const TextStyle(color: Colors.white38),
+          hintStyle: const TextStyle(
+            color: Colors.white38,
+          ),
+          labelStyle: const TextStyle(
+            color: Colors.white70,
+          ),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
             borderSide: const BorderSide(color: border),
@@ -77,6 +87,16 @@ class AnimeMemoryApp extends StatelessWidget {
             ),
           ),
         ),
+        snackBarTheme: SnackBarThemeData(
+          backgroundColor: panel,
+          contentTextStyle: const TextStyle(
+            color: textColor,
+          ),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
       ),
       home: const MainNavigation(),
     );
@@ -87,7 +107,8 @@ class MainNavigation extends StatefulWidget {
   const MainNavigation({super.key});
 
   @override
-  State<MainNavigation> createState() => _MainNavigationState();
+  State<MainNavigation> createState() =>
+      _MainNavigationState();
 }
 
 class _MainNavigationState extends State<MainNavigation> {
