@@ -1,5 +1,9 @@
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../models/anime.dart';
 import '../services/storage_service.dart';
@@ -13,6 +17,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final StorageService storage = StorageService();
+  final ImagePicker imagePicker = ImagePicker();
 
   List<Anime> animes = [];
   bool loading = true;
@@ -61,13 +66,38 @@ class _HomeScreenState extends State<HomeScreen> {
         rated.length;
   }
 
+  Future<String> _saveImageLocally(String sourcePath) async {
+    final directory = await getApplicationDocumentsDirectory();
+    final imagesDirectory = Directory(
+      '${directory.path}/anime_images',
+    );
+
+    if (!await imagesDirectory.exists()) {
+      await imagesDirectory.create(recursive: true);
+    }
+
+    final extension = sourcePath.contains('.')
+        ? sourcePath.substring(sourcePath.lastIndexOf('.'))
+        : '.jpg';
+
+    final destinationPath =
+        '${imagesDirectory.path}/${DateTime.now().microsecondsSinceEpoch}$extension';
+
+    final savedFile = await File(sourcePath).copy(destinationPath);
+    return savedFile.path;
+  }
+
   Future<void> addAnime() async {
     final titleController = TextEditingController();
     final episodesController = TextEditingController();
     final genreController = TextEditingController();
+    final characterController = TextEditingController();
+    final summaryController = TextEditingController();
+    final memoryController = TextEditingController();
 
-    String status = 'مخطط له';
+    String status = '';
     int rating = 0;
+    XFile? selectedImage;
 
     final result = await showDialog<Anime>(
       context: context,
@@ -80,90 +110,236 @@ class _HomeScreenState extends State<HomeScreen> {
                 'إضافة أنمي جديد',
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: titleController,
-                      autofocus: true,
-                      decoration: const InputDecoration(
-                        labelText: 'اسم الأنمي',
-                        prefixIcon: Icon(Icons.movie_outlined),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: genreController,
-                      decoration: const InputDecoration(
-                        labelText: 'التصنيف',
-                        prefixIcon: Icon(Icons.category_outlined),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: episodesController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'عدد الحلقات',
-                        prefixIcon: Icon(Icons.play_circle_outline),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    DropdownButtonFormField<String>(
-                      value: status,
-                      decoration: const InputDecoration(
-                        labelText: 'حالة المشاهدة',
-                      ),
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'مكتمل',
-                          child: Text('مكتمل'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'أتابعه',
-                          child: Text('أتابعه'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'مخطط له',
-                          child: Text('مخطط له'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'متوقف',
-                          child: Text('متوقف'),
-                        ),
-                      ],
-                      onChanged: (value) {
-                        if (value != null) {
-                          setDialogState(() => status = value);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    const Align(
-                      alignment: Alignment.centerRight,
-                      child: Text('تقييمك'),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 5,
-                      children: List.generate(5, (index) {
-                        final value = index + 1;
+              content: SizedBox(
+                width: 420,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      GestureDetector(
+                        onTap: () async {
+                          try {
+                            final image = await imagePicker.pickImage(
+                              source: ImageSource.gallery,
+                              imageQuality: 85,
+                            );
 
-                        return IconButton(
-                          onPressed: () {
-                            setDialogState(() => rating = value);
-                          },
-                          icon: Icon(
-                            Icons.star,
-                            color: value <= rating
-                                ? const Color(0xFFFFC857)
-                                : Colors.white24,
+                            if (image != null) {
+                              setDialogState(() {
+                                selectedImage = image;
+                              });
+                            }
+                          } catch (_) {
+                            if (!dialogContext.mounted) return;
+
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'تعذر اختيار الصورة. حاول مرة أخرى.',
+                                ),
+                              ),
+                            );
+                          }
+                        },
+                        child: Container(
+                          width: double.infinity,
+                          height: 155,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF111318),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: const Color(0xFF741C2B),
+                            ),
                           ),
-                        );
-                      }),
-                    ),
-                  ],
+                          clipBehavior: Clip.antiAlias,
+                          child: selectedImage == null
+                              ? const Column(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.add_photo_alternate_outlined,
+                                      size: 42,
+                                      color: Color(0xFFB34E68),
+                                    ),
+                                    SizedBox(height: 9),
+                                    Text('اختر صورة للأنمي (اختياري)'),
+                                    SizedBox(height: 4),
+                                    Text(
+                                      'اضغط هنا لفتح المعرض',
+                                      style: TextStyle(
+                                        color: Colors.white54,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    Image.file(
+                                      File(selectedImage!.path),
+                                      fit: BoxFit.cover,
+                                    ),
+                                    Positioned(
+                                      left: 8,
+                                      top: 8,
+                                      child: IconButton(
+                                        onPressed: () {
+                                          setDialogState(() {
+                                            selectedImage = null;
+                                          });
+                                        },
+                                        style: IconButton.styleFrom(
+                                          backgroundColor: Colors.black87,
+                                          foregroundColor: Colors.white,
+                                        ),
+                                        icon: const Icon(Icons.close),
+                                      ),
+                                    ),
+                                    const Positioned(
+                                      right: 8,
+                                      bottom: 8,
+                                      child: Icon(
+                                        Icons.edit,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      const Align(
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          'المعلومات (كلها اختيارية)',
+                          style: TextStyle(
+                            color: Colors.white60,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: titleController,
+                        autofocus: false,
+                        decoration: const InputDecoration(
+                          labelText: 'اسم الأنمي (اختياري)',
+                          prefixIcon: Icon(Icons.movie_outlined),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: genreController,
+                        decoration: const InputDecoration(
+                          labelText: 'التصنيف (اختياري)',
+                          prefixIcon: Icon(Icons.category_outlined),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: characterController,
+                        decoration: const InputDecoration(
+                          labelText: 'الشخصية المفضلة (اختياري)',
+                          prefixIcon: Icon(Icons.person_outline),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: episodesController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'عدد الحلقات (اختياري)',
+                          prefixIcon: Icon(Icons.play_circle_outline),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        value: status,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'حالة المشاهدة (اختياري)',
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: '',
+                            child: Text('لم أحدد'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'مكتمل',
+                            child: Text('مكتمل'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'أتابعه',
+                            child: Text('أتابعه'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'مخطط له',
+                            child: Text('مخطط له'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'متوقف',
+                            child: Text('متوقف'),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          if (value != null) {
+                            setDialogState(() => status = value);
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      const Align(
+                        alignment: Alignment.centerRight,
+                        child: Text('تقييمك (اختياري)'),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 5,
+                        children: [
+                          ...List.generate(5, (index) {
+                            final value = index + 1;
+
+                            return IconButton(
+                              tooltip: '$value من 5',
+                              onPressed: () {
+                                setDialogState(() {
+                                  rating = rating == value ? 0 : value;
+                                });
+                              },
+                              icon: Icon(
+                                Icons.star,
+                                color: value <= rating
+                                    ? const Color(0xFFFFC857)
+                                    : Colors.white24,
+                              ),
+                            );
+                          }),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: summaryController,
+                        maxLines: 3,
+                        decoration: const InputDecoration(
+                          labelText: 'ملخص القصة (اختياري)',
+                          alignLabelWithHint: true,
+                          prefixIcon: Icon(Icons.menu_book_outlined),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: memoryController,
+                        maxLines: 3,
+                        decoration: const InputDecoration(
+                          labelText: 'ذكرياتك مع الأنمي (اختياري)',
+                          alignLabelWithHint: true,
+                          prefixIcon: Icon(Icons.auto_awesome_outlined),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               actions: [
@@ -176,16 +352,15 @@ class _HomeScreenState extends State<HomeScreen> {
                     backgroundColor: const Color(0xFF741C2B),
                   ),
                   onPressed: () {
-                    final title = titleController.text.trim();
-
-                    if (title.isEmpty) return;
-
                     final anime = Anime(
                       id: DateTime.now()
                           .microsecondsSinceEpoch
                           .toString(),
-                      title: title,
+                      title: titleController.text.trim(),
                       genre: genreController.text.trim(),
+                      character: characterController.text.trim(),
+                      summary: summaryController.text.trim(),
+                      memory: memoryController.text.trim(),
                       episodes:
                           int.tryParse(episodesController.text) ?? 0,
                       status: status,
@@ -196,7 +371,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                     Navigator.pop(dialogContext, anime);
                   },
-                  child: const Text('إضافة'),
+                  child: const Text('حفظ الأنمي'),
                 ),
               ],
             );
@@ -208,18 +383,80 @@ class _HomeScreenState extends State<HomeScreen> {
     titleController.dispose();
     episodesController.dispose();
     genreController.dispose();
+    characterController.dispose();
+    summaryController.dispose();
+    memoryController.dispose();
 
-    if (result != null) {
+    if (result == null) return;
+
+    try {
+      if (selectedImage != null) {
+        result.imagePath =
+            await _saveImageLocally(selectedImage!.path);
+      }
+
       animes.add(result);
-      await storage.saveAnimes(animes);
+      final saved = await storage.saveAnimes(animes);
 
       if (!mounted) return;
 
       setState(() {});
+
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تمت إضافة الأنمي إلى مكتبتك')),
+        SnackBar(
+          content: Text(
+            saved
+                ? 'تم حفظ الأنمي في مكتبتك'
+                : 'تعذر حفظ البيانات. حاول مرة أخرى.',
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'تعذر حفظ الصورة أو البيانات. حاول مرة أخرى.',
+          ),
+        ),
       );
     }
+  }
+
+  Widget _animeImage(Anime anime, Color color) {
+    final path = anime.imagePath;
+
+    if (path != null &&
+        path.isNotEmpty &&
+        File(path).existsSync()) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(13),
+        child: Image.file(
+          File(path),
+          width: 50,
+          height: 50,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            return _imagePlaceholder(color);
+          },
+        ),
+      );
+    }
+
+    return _imagePlaceholder(color);
+  }
+
+  Widget _imagePlaceholder(Color color) {
+    return Container(
+      width: 50,
+      height: 50,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(13),
+      ),
+      child: Icon(Icons.movie_outlined, color: color),
+    );
   }
 
   @override
@@ -384,8 +621,11 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             child: Row(
               children: [
-                const Icon(Icons.star_rounded,
-                    color: Color(0xFFFFC857), size: 32),
+                const Icon(
+                  Icons.star_rounded,
+                  color: Color(0xFFFFC857),
+                  size: 32,
+                ),
                 const SizedBox(width: 12),
                 const Expanded(
                   child: Text(
@@ -461,8 +701,8 @@ class _HomeScreenState extends State<HomeScreen> {
             )
           else
             ...animes.reversed.take(5).map((anime) {
-              final color = colors[
-                  anime.colorIndex.abs() % colors.length];
+              final color =
+                  colors[anime.colorIndex.abs() % colors.length];
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 10),
@@ -476,26 +716,27 @@ class _HomeScreenState extends State<HomeScreen> {
                     horizontal: 14,
                     vertical: 7,
                   ),
-                  leading: Container(
-                    width: 47,
-                    height: 47,
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(13),
-                    ),
-                    child: Icon(
-                      Icons.movie_outlined,
-                      color: color,
-                    ),
-                  ),
+                  leading: _animeImage(anime, color),
                   title: Text(
-                    anime.title,
+                    anime.title.trim().isEmpty
+                        ? 'أنمي بدون اسم'
+                        : anime.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   subtitle: Text(
-                    '${anime.status} • ${anime.episodes} حلقة',
+                    [
+                      if (anime.status.isNotEmpty) anime.status,
+                      if (anime.episodes > 0)
+                        '${anime.episodes} حلقة',
+                    ].join(' • ').isEmpty
+                        ? 'لم تُضف معلومات بعد'
+                        : [
+                            if (anime.status.isNotEmpty) anime.status,
+                            if (anime.episodes > 0)
+                              '${anime.episodes} حلقة',
+                          ].join(' • '),
                     style: const TextStyle(
                       color: Colors.white54,
                       fontSize: 12,
