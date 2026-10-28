@@ -1,5 +1,6 @@
 
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -26,7 +27,7 @@ class StorageService {
             ),
           )
           .toList();
-    } catch (e) {
+    } catch (_) {
       return [];
     }
   }
@@ -41,8 +42,53 @@ class StorageService {
     return prefs.setString(_storageKey, encodedData);
   }
 
-  Future<bool> clearAnimes() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.remove(_storageKey);
+  /// حذف أنمي واحد مع محاولة حذف صورته المحلية.
+  Future<bool> deleteAnime(
+    List<Anime> animes,
+    String animeId,
+  ) async {
+    final animeIndex = animes.indexWhere(
+      (anime) => anime.id == animeId,
+    );
+
+    if (animeIndex == -1) {
+      return false;
+    }
+
+    final Anime anime = animes[animeIndex];
+    final String? imagePath = anime.imagePath;
+
+    animes.removeAt(animeIndex);
+
+    final bool saved = await saveAnimes(animes);
+
+    if (saved && imagePath != null && imagePath.isNotEmpty) {
+      try {
+        final file = File(imagePath);
+
+        if (await file.exists()) {
+          await file.delete();
+        }
+      } catch (_) {
+        // يظل حذف الأنمي محفوظًا حتى لو تعذر حذف الصورة.
+      }
+    }
+
+    return saved;
+  }
+
+  /// التحقق من وجود صورة محفوظة للأنمي.
+  Future<bool> imageExists(Anime anime) async {
+    final String? imagePath = anime.imagePath;
+
+    if (imagePath == null || imagePath.isEmpty) {
+      return false;
+    }
+
+    try {
+      return await File(imagePath).exists();
+    } catch (_) {
+      return false;
+    }
   }
 }
