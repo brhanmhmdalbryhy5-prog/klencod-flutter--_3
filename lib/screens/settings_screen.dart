@@ -1,8 +1,6 @@
 
 import 'package:flutter/material.dart';
 
-import '../services/storage_service.dart';
-
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
@@ -11,53 +9,7 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  final StorageService storage = StorageService();
-
   bool darkMode = true;
-  bool loading = false;
-
-  Future<void> confirmClearLibrary() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1B1F28),
-        title: const Text('حذف جميع الأنميات؟'),
-        content: const Text(
-          'سيتم حذف جميع الأنميات وذكرياتها المحفوظة على هذا الجهاز. '
-          'لا يمكن التراجع عن هذه العملية.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('إلغاء'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF741C2B),
-            ),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('حذف الكل'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true) return;
-
-    setState(() => loading = true);
-
-    await storage.clearAnimes();
-
-    if (!mounted) return;
-
-    setState(() => loading = false);
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('تم حذف المكتبة المحلية'),
-      ),
-    );
-  }
 
   void showAbout() {
     showAboutDialog(
@@ -82,6 +34,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  void showStorageInfo() {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1B1F28),
+        title: const Text('التخزين المحلي'),
+        content: const Text(
+          'يستخدم التطبيق ذاكرة الهاتف لحفظ الأنميات '
+          'والتقييمات والذكريات. لا يحتاج حفظها إلى '
+          'اتصال دائم بالإنترنت.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('حسنًا'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListView(
@@ -100,6 +73,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           style: TextStyle(color: Colors.white60),
         ),
         const SizedBox(height: 24),
+
+        // بطاقة التطبيق
         Container(
           padding: const EdgeInsets.all(19),
           decoration: BoxDecoration(
@@ -144,7 +119,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
           ),
         ),
+
         const SizedBox(height: 25),
+
         const Text(
           'التخصيص',
           style: TextStyle(
@@ -153,6 +130,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         const SizedBox(height: 12),
+
         _settingsTile(
           icon: Icons.palette_outlined,
           color: const Color(0xFF8B65C6),
@@ -175,7 +153,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           onTap: null,
         ),
+
         const SizedBox(height: 24),
+
         const Text(
           'إدارة البيانات',
           style: TextStyle(
@@ -184,6 +164,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         const SizedBox(height: 12),
+
         _settingsTile(
           icon: Icons.storage_outlined,
           color: const Color(0xFF247BA0),
@@ -193,46 +174,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Icons.chevron_left,
             color: Colors.white38,
           ),
-          onTap: () {
-            showDialog<void>(
-              context: context,
-              builder: (context) => AlertDialog(
-                backgroundColor: const Color(0xFF1B1F28),
-                title: const Text('التخزين المحلي'),
-                content: const Text(
-                  'يستخدم التطبيق ذاكرة الهاتف لحفظ الأنميات '
-                  'والتقييمات والذكريات. لا يحتاج حفظها إلى '
-                  'اتصال دائم بالإنترنت.',
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('حسنًا'),
-                  ),
-                ],
-              ),
-            );
-          },
+          onTap: showStorageInfo,
         ),
-        const SizedBox(height: 10),
-        _settingsTile(
-          icon: Icons.delete_forever_outlined,
-          color: const Color(0xFFFF626D),
-          title: 'حذف المكتبة بالكامل',
-          subtitle: 'حذف الأنميات والذكريات المحفوظة',
-          trailing: loading
-              ? const SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(
-                  Icons.chevron_left,
-                  color: Colors.white38,
-                ),
-          onTap: loading ? null : confirmClearLibrary,
-        ),
+
         const SizedBox(height: 24),
+
         const Text(
           'حول التطبيق',
           style: TextStyle(
@@ -241,6 +187,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         const SizedBox(height: 12),
+
         _settingsTile(
           icon: Icons.info_outline,
           color: const Color(0xFFFFC857),
@@ -252,7 +199,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           onTap: showAbout,
         ),
+
         const SizedBox(height: 28),
+
         const Center(
           child: Text(
             'صُنع للأوتاكو، ليحفظ كل ذكرى.',
@@ -298,7 +247,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         title: Text(
           title,
-          style: const TextStyle(fontWeight: FontWeight.bold),
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+          ),
         ),
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 4),
