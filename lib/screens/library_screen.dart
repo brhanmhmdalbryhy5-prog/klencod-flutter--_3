@@ -3,11 +3,11 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'anime_details_screen.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../models/anime.dart';
 import '../services/storage_service.dart';
+import 'anime_details_screen.dart';
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key});
@@ -114,6 +114,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
           content: Text('تعذر اختيار الصورة أو حفظها.'),
         ),
       );
+
       return null;
     }
   }
@@ -151,6 +152,19 @@ class _LibraryScreenState extends State<LibraryScreen> {
         size: 32,
       ),
     );
+  }
+
+  Future<void> openAnimeDetails(Anime anime) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AnimeDetailsScreen(anime: anime),
+      ),
+    );
+
+    if (mounted) {
+      await loadAnimes();
+    }
   }
 
   Future<void> deleteAnime(Anime anime) async {
@@ -198,8 +212,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   Future<void> toggleFavorite(Anime anime) async {
+    final oldValue = anime.favorite;
+
     setState(() {
-      anime.favorite = !anime.favorite;
+      anime.favorite = !oldValue;
     });
 
     final saved = await storage.saveAnimes(animes);
@@ -208,7 +224,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
     if (!saved) {
       setState(() {
-        anime.favorite = !anime.favorite;
+        anime.favorite = oldValue;
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -218,9 +234,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            anime.favorite
-                ? 'أضيف إلى المفضلة'
-                : 'أزيل من المفضلة',
+            anime.favorite ? 'أضيف إلى المفضلة' : 'أزيل من المفضلة',
           ),
         ),
       );
@@ -232,8 +246,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
     final genreController = TextEditingController(text: anime.genre);
     final characterController =
         TextEditingController(text: anime.character);
-    final episodesController =
-        TextEditingController(text: anime.episodes == 0 ? '' : '${anime.episodes}');
+    final episodesController = TextEditingController(
+      text: anime.episodes == 0 ? '' : '${anime.episodes}',
+    );
     final summaryController = TextEditingController(text: anime.summary);
     final memoryController = TextEditingController(text: anime.memory);
 
@@ -259,7 +274,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       children: [
                         GestureDetector(
                           onTap: () async {
-                            final pickedPath = await _pickAndSaveImage();
+                            final pickedPath =
+                                await _pickAndSaveImage();
 
                             if (pickedPath != null) {
                               setDialogState(() {
@@ -395,7 +411,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
                             return IconButton(
                               onPressed: () {
                                 setDialogState(() {
-                                  rating = rating == value ? 0 : value;
+                                  rating =
+                                      rating == value ? 0 : value;
                                 });
                               },
                               icon: Icon(
@@ -429,14 +446,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 ),
                 actions: [
                   TextButton(
-                    onPressed: () => Navigator.pop(dialogContext, false),
+                    onPressed: () =>
+                        Navigator.pop(dialogContext, false),
                     child: const Text('إلغاء'),
                   ),
                   FilledButton(
                     style: FilledButton.styleFrom(
                       backgroundColor: const Color(0xFF741C2B),
                     ),
-                    onPressed: () => Navigator.pop(dialogContext, true),
+                    onPressed: () =>
+                        Navigator.pop(dialogContext, true),
                     child: const Text('حفظ التعديلات'),
                   ),
                 ],
@@ -447,7 +466,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
       );
 
       if (result != true) {
-        // إذا اختيرت صورة جديدة ثم أُلغي التعديل، احذف النسخة الجديدة.
         if (imageChanged &&
             imagePath != null &&
             imagePath != anime.imagePath) {
@@ -490,7 +508,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
         setState(() {});
 
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تم حفظ تعديلات الأنمي')),
+          const SnackBar(
+            content: Text('تم حفظ تعديلات الأنمي'),
+          ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -507,68 +527,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
-  Future<void> showAnimeMenu(Anime anime) async {
-    final action = await showMenu<String>(
-      context: context,
-      position: const RelativeRect.fromLTRB(1000, 100, 0, 0),
-      items: [
-        const PopupMenuItem(
-          value: 'edit',
-          child: Row(
-            children: [
-              Icon(Icons.edit_outlined),
-              SizedBox(width: 10),
-              Text('تعديل بيانات الأنمي'),
-            ],
-          ),
-        ),
-        PopupMenuItem(
-          value: 'favorite',
-          child: Row(
-            children: [
-              Icon(
-                anime.favorite
-                    ? Icons.favorite_border
-                    : Icons.favorite_outline,
-                color: const Color(0xFFFF5364),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                anime.favorite
-                    ? 'إزالة من المفضلة'
-                    : 'إضافة إلى المفضلة',
-              ),
-            ],
-          ),
-        ),
-        const PopupMenuItem(
-          value: 'delete',
-          child: Row(
-            children: [
-              Icon(Icons.delete_outline, color: Color(0xFFFF6B72)),
-              SizedBox(width: 10),
-              Text('حذف الأنمي'),
-            ],
-          ),
-        ),
-      ],
-    );
-
-    if (!mounted) return;
-
-    switch (action) {
-      case 'edit':
-        await editAnime(anime);
-        break;
-      case 'favorite':
-        await toggleFavorite(anime);
-        break;
-      case 'delete':
-        await deleteAnime(anime);
-        break;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final items = filteredAnimes;
@@ -580,7 +538,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
         children: [
           const Text(
             'مكتبة الأنمي',
-            style: TextStyle(fontSize: 27, fontWeight: FontWeight.w900),
+            style: TextStyle(
+              fontSize: 27,
+              fontWeight: FontWeight.w900,
+            ),
           ),
           const SizedBox(height: 6),
           Text(
@@ -688,7 +649,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
               final details = [
                 if (anime.status.isNotEmpty) anime.status,
-                if (anime.episodes > 0) '${anime.episodes} حلقة',
+                if (anime.episodes > 0)
+                  '${anime.episodes} حلقة',
               ].join(' • ');
 
               return Container(
@@ -698,152 +660,157 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   borderRadius: BorderRadius.circular(18),
                   border: Border.all(color: Colors.white10),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _animeImage(anime, color),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                anime.title.trim().isEmpty
-                                    ? 'أنمي بدون اسم'
-                                    : anime.title,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                anime.genre.isEmpty
-                                    ? 'بدون تصنيف'
-                                    : anime.genre,
-                                style: const TextStyle(
-                                  color: Colors.white54,
-                                  fontSize: 12,
-                                ),
-                              ),
-                              if (details.isNotEmpty) ...[
-                                const SizedBox(height: 6),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(18),
+                  onTap: () => openAnimeDetails(anime),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _animeImage(anime, color),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Column(
+                              crossAxisAlignment:
+                                  CrossAxisAlignment.start,
+                              children: [
                                 Text(
-                                  details,
-                                  style: TextStyle(
-                                    color: color,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
+                                  anime.title.trim().isEmpty
+                                      ? 'أنمي بدون اسم'
+                                      : anime.title,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
                                   ),
                                 ),
-                              ],
-                              if (anime.rating > 0) ...[
-                                const SizedBox(height: 5),
-                                Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.star,
-                                      size: 16,
-                                      color: Color(0xFFFFC857),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text('${anime.rating}/5'),
-                                  ],
-                                ),
-                              ],
-                              if (anime.favorite) ...[
-                                const SizedBox(height: 5),
-                                const Row(
-                                  children: [
-                                    Icon(
-                                      Icons.favorite,
-                                      size: 14,
-                                      color: Color(0xFFFF5364),
-                                    ),
-                                    SizedBox(width: 4),
-                                    Text(
-                                      'في المفضلة',
-                                      style: TextStyle(
-                                        color: Color(0xFFFF5364),
-                                        fontSize: 11,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ),
-                      PopupMenuButton<String>(
-                        tooltip: 'خيارات الأنمي',
-                        icon: const Icon(
-                          Icons.more_vert,
-                          color: Colors.white70,
-                        ),
-                        onSelected: (value) async {
-                          switch (value) {
-                            case 'edit':
-                              await editAnime(anime);
-                              break;
-                            case 'favorite':
-                              await toggleFavorite(anime);
-                              break;
-                            case 'delete':
-                              await deleteAnime(anime);
-                              break;
-                          }
-                        },
-                        itemBuilder: (context) => [
-                          const PopupMenuItem(
-                            value: 'edit',
-                            child: Row(
-                              children: [
-                                Icon(Icons.edit_outlined),
-                                SizedBox(width: 10),
-                                Text('تعديل بيانات الأنمي'),
-                              ],
-                            ),
-                          ),
-                          PopupMenuItem(
-                            value: 'favorite',
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.favorite_border,
-                                  color: Color(0xFFFF5364),
-                                ),
-                                const SizedBox(width: 10),
+                                const SizedBox(height: 6),
                                 Text(
-                                  anime.favorite
-                                      ? 'إزالة من المفضلة'
-                                      : 'إضافة إلى المفضلة',
+                                  anime.genre.isEmpty
+                                      ? 'بدون تصنيف'
+                                      : anime.genre,
+                                  style: const TextStyle(
+                                    color: Colors.white54,
+                                    fontSize: 12,
+                                  ),
                                 ),
+                                if (details.isNotEmpty) ...[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    details,
+                                    style: TextStyle(
+                                      color: color,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                                if (anime.rating > 0) ...[
+                                  const SizedBox(height: 5),
+                                  Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.star,
+                                        size: 16,
+                                        color: Color(0xFFFFC857),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text('${anime.rating}/5'),
+                                    ],
+                                  ),
+                                ],
+                                if (anime.favorite) ...[
+                                  const SizedBox(height: 5),
+                                  const Row(
+                                    children: [
+                                      Icon(
+                                        Icons.favorite,
+                                        size: 14,
+                                        color: Color(0xFFFF5364),
+                                      ),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        'في المفضلة',
+                                        style: TextStyle(
+                                          color: Color(0xFFFF5364),
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
                               ],
                             ),
                           ),
-                          const PopupMenuItem(
-                            value: 'delete',
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.delete_outline,
-                                  color: Color(0xFFFF6B72),
-                                ),
-                                SizedBox(width: 10),
-                                Text('حذف الأنمي'),
-                              ],
-                            ),
+                        ),
+                        PopupMenuButton<String>(
+                          tooltip: 'خيارات الأنمي',
+                          icon: const Icon(
+                            Icons.more_vert,
+                            color: Colors.white70,
                           ),
-                        ],
-                      ),
-                    ],
+                          onSelected: (value) async {
+                            switch (value) {
+                              case 'edit':
+                                await editAnime(anime);
+                                break;
+                              case 'favorite':
+                                await toggleFavorite(anime);
+                                break;
+                              case 'delete':
+                                await deleteAnime(anime);
+                                break;
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            const PopupMenuItem(
+                              value: 'edit',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.edit_outlined),
+                                  SizedBox(width: 10),
+                                  Text('تعديل بيانات الأنمي'),
+                                ],
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: 'favorite',
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.favorite_border,
+                                    color: Color(0xFFFF5364),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Text(
+                                    anime.favorite
+                                        ? 'إزالة من المفضلة'
+                                        : 'إضافة إلى المفضلة',
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const PopupMenuItem(
+                              value: 'delete',
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.delete_outline,
+                                    color: Color(0xFFFF6B72),
+                                  ),
+                                  SizedBox(width: 10),
+                                  Text('حذف الأنمي'),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               );
