@@ -17,35 +17,30 @@ class BackupService {
   Future<String> createBackup() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final savedJson = prefs.getString(animeKey) ?? '[]';
-      final decoded = jsonDecode(savedJson);
+      final decoded = jsonDecode(prefs.getString(animeKey) ?? '[]');
 
       if (decoded is! List) {
         return 'تعذر إنشاء النسخة: بيانات الأنميات غير صالحة.';
       }
 
       final animes = decoded.map((item) {
-        return Anime.fromJson(
-          Map<String, dynamic>.from(item as Map),
-        );
+        if (item is! Map) {
+          throw const FormatException('بيانات أنمي غير صالحة.');
+        }
+        return Anime.fromJson(Map<String, dynamic>.from(item));
       }).toList();
 
       final archive = ziplib.Archive();
       final coverAssets = <String, String>{};
       final characterAssets = <String, String>{};
-      final usedAssets = <String, List<int>>{};
+      final addedAssets = <String>{};
 
       void addBytes(String name, List<int> bytes) {
-        if (usedAssets.containsKey(name)) return;
-
-        usedAssets[name] = bytes;
-        archive.addFile(
-          ziplib.ArchiveFile(name, bytes.length, bytes),
-        );
+        if (addedAssets.contains(name)) return;
+        addedAssets.add(name);
+        archive.addFile(ziplib.ArchiveFile(name, bytes.length, bytes));
       }
 
-      // حفظ بيانات الأنميات، مع استبدال مسارات الأغلفة
-      // بمسارات داخل ملف النسخة الاحتياطية.
       final animeJson = <Map<String, dynamic>>[];
 
       for (var i = 0; i < animes.length; i++) {
@@ -54,53 +49,51 @@ class BackupService {
         final path = anime.imagePath;
 
         if (path != null && path.isNotEmpty) {
-          final imageFile = File(path);
+          final file = File(path);
 
-          if (await imageFile.exists()) {
-            final extension = _extension(path);
-            final assetName = 'covers/cover_$i.$extension';
-
-            addBytes(assetName, await imageFile.readAsBytes());
-            coverAssets[anime.id] = assetName;
-            item['imagePath'] = 'backup://$assetName';
+          if (await file.exists()) {
+            final asset = 'covers/cover_$i.${_extension(path)}';
+            addBytes(asset, await file.readAsBytes());
+            coverAssets[anime.id] = asset;
+            item['imagePath'] = 'backup://$asset';
+          } else {
+            item['imagePath'] = null;
           }
         }
 
         animeJson.add(item);
       }
 
-      // حفظ صور الشخصيات المفضلة.
+      // صور الشخصيات المفضلة.
       for (final key in prefs.getKeys()) {
         if (!key.startsWith(characterPrefix)) continue;
 
         final path = prefs.getString(key);
         if (path == null || path.isEmpty) continue;
 
-        final imageFile = File(path);
-        if (!await imageFile.exists()) continue;
+        final file = File(path);
+        if (!await file.exists()) continue;
 
-        final assetName =
+        final asset =
             'characters/${Uri.encodeComponent(key)}.${_extension(path)}';
 
-        addBytes(assetName, await imageFile.readAsBytes());
-        characterAssets[key] = assetName;
+        addBytes(asset, await file.readAsBytes());
+        characterAssets[key] = asset;
       }
 
-      // حفظ صور معرض ذكرياتي.
+      // صور معرض الذكريات.
       final appDirectory = await getApplicationDocumentsDirectory();
       final memoriesDirectory = Directory(
         '${appDirectory.path}/anime_memory_photos',
       );
 
       if (await memoriesDirectory.exists()) {
-        for (final entity in memoriesDirectory.listSync()) {
+        await for (final entity in memoriesDirectory.list()) {
           if (entity is! File) continue;
 
-          final extension = _extension(entity.path);
-          final name =
-              'memories/${Uri.encodeComponent(entity.uri.pathSegments.last)}';
-
-          addBytes(name, await entity.readAsBytes());
+          final name = entity.uri.pathSegments.last;
+          final asset = 'memories/${Uri.encodeComponent(name)}';
+          addBytes(asset, await entity.readAsBytes());
         }
       }
 
@@ -149,7 +142,7 @@ class BackupService {
         return 'تم إلغاء حفظ النسخة الاحتياطية.';
       }
 
-      return 'تم تجهيز النسخة الاحتياطية. تحقق من ظهور الملف في المكان الذي اخترته.';
+      return 'تمت عملية إنشاء النسخة. تحقق من المكان الذي اخترته لحفظ الملف.';
     } catch (e) {
       return 'فشل إنشاء النسخة الاحتياطية: $e';
     }
@@ -169,14 +162,12 @@ class BackupService {
         return 'تم إلغاء الاستعادة.';
       }
 
-      final Uint8List? bytes = selection.files.single.bytes;
-
+      final bytes = selection.files.single.bytes;
       if (bytes == null || bytes.isEmpty) {
         return 'تعذر قراءة الملف. حاول اختيار النسخة مرة أخرى.';
       }
 
       final ziplib.Archive archive;
-
       try {
         archive = ziplib.ZipDecoder().decodeBytes(bytes);
       } catch (_) {
@@ -188,14 +179,19 @@ class BackupService {
       for (final entry in archive) {
         if (!entry.isFile) continue;
 
-        // رفض المسارات غير الآمنة داخل الأرشيف.
-        if (entry.name.startsWith('/') ||
-            entry.name.contains('../') ||
-            entry.name.contains(r'..\')) {
+        final name = entry.name;
+        final normalized = name.replaceAll('\\', '/');
+        final parts = normalized.split('/');
+
+        // رفض المسارات المطلقة وأي محاولة للخروج من مجلد النسخة.
+        if (normalized.startsWith('/') ||
+            normalized.startsWith('~') ||
+            RegExp(r'^[a-zA-Z]:').hasMatch(normalized) ||
+            parts.any((part) => part == '..' || part == '.' || part.isEmpty)) {
           return 'النسخة تحتوي على مسار غير آمن.';
         }
 
-        files[entry.name] = entry.content as List<int>;
+        files[normalized] = List<int>.from(entry.content as List<int>);
       }
 
       if (!files.containsKey('metadata.json') ||
@@ -203,58 +199,64 @@ class BackupService {
         return 'النسخة غير مكتملة أو لا تخص هذا التطبيق.';
       }
 
-      final metadata = jsonDecode(
+      final dynamic metadataDecoded = jsonDecode(
         utf8.decode(files['metadata.json']!),
       );
 
-      if (metadata is! Map ||
-          metadata['format'] != 'anime_memory_backup' ||
-          metadata['version'] != 1) {
+      if (metadataDecoded is! Map ||
+          metadataDecoded['format'] != 'anime_memory_backup' ||
+          metadataDecoded['version'] != 1) {
         return 'صيغة النسخة الاحتياطية غير مدعومة.';
       }
 
-      final rawAnimes = jsonDecode(
+      final dynamic animeDecoded = jsonDecode(
         utf8.decode(files['animes.json']!),
       );
 
-      if (rawAnimes is! List) {
+      if (animeDecoded is! List) {
         return 'بيانات الأنميات داخل النسخة غير صالحة.';
       }
 
-      final animes = rawAnimes.map((item) {
-        return Anime.fromJson(
-          Map<String, dynamic>.from(item as Map),
-        );
+      final animes = animeDecoded.map((item) {
+        if (item is! Map) {
+          throw const FormatException('بيانات أنمي غير صالحة.');
+        }
+        return Anime.fromJson(Map<String, dynamic>.from(item));
       }).toList();
 
-      final coverAssets = Map<String, dynamic>.from(
-        metadata['coverAssets'] as Map? ?? {},
-      );
+      final coverRaw = metadataDecoded['coverAssets'];
+      final characterRaw = metadataDecoded['characterAssets'];
 
-      final characterAssets = Map<String, dynamic>.from(
-        metadata['characterAssets'] as Map? ?? {},
-      );
+      if (coverRaw != null && coverRaw is! Map) {
+        return 'بيانات صور الأغلفة غير صالحة.';
+      }
+      if (characterRaw != null && characterRaw is! Map) {
+        return 'بيانات صور الشخصيات غير صالحة.';
+      }
 
-      // التأكد من وجود كل صورة مرجعية قبل تعديل البيانات الحالية.
+      final coverAssets = Map<String, dynamic>.from(coverRaw ?? {});
+      final characterAssets = Map<String, dynamic>.from(characterRaw ?? {});
+
       for (final asset in coverAssets.values) {
         if (asset is! String || !files.containsKey(asset)) {
           return 'النسخة تفتقد إحدى صور الأغلفة.';
         }
       }
 
-      for (final asset in characterAssets.values) {
-        if (asset is! String || !files.containsKey(asset)) {
-          return 'النسخة تفتقد إحدى صور الشخصيات.';
+      for (final entry in characterAssets.entries) {
+        if (!entry.key.startsWith(characterPrefix) ||
+            entry.value is! String ||
+            !files.containsKey(entry.value)) {
+          return 'بيانات إحدى صور الشخصيات غير صالحة.';
         }
       }
 
-      // تجهيز الصور في مجلد جديد حتى لا نلمس الصور الحالية.
+      // تجهيز الصور في مجلد جديد، دون حذف الصور الحالية.
       final appDirectory = await getApplicationDocumentsDirectory();
       final restoreDirectory = Directory(
         '${appDirectory.path}/anime_memory_restored_'
         '${DateTime.now().millisecondsSinceEpoch}',
       );
-
       await restoreDirectory.create(recursive: true);
 
       final restoredPaths = <String, String>{};
@@ -268,62 +270,55 @@ class BackupService {
         final parts = entry.key.split('/');
         if (parts.length != 2) continue;
 
-        final targetDirectory = Directory(
-          '${restoreDirectory.path}/${parts[0]}',
-        );
+        final folder = parts[0];
+        final filename = parts[1];
 
+        // أسماء الملفات التي أنشأها التطبيق لا تحتوي على فواصل.
+        if (filename.isEmpty ||
+            filename.contains('/') ||
+            filename.contains('\\') ||
+            filename == '.' ||
+            filename == '..') {
+          return 'تحتوي النسخة على اسم صورة غير صالح.';
+        }
+
+        final targetDirectory = Directory(
+          '${restoreDirectory.path}/$folder',
+        );
         await targetDirectory.create(recursive: true);
 
-        final target = File(
-          '${targetDirectory.path}/${parts[1]}',
-        );
-
+        final target = File('${targetDirectory.path}/$filename');
         await target.writeAsBytes(entry.value, flush: true);
         restoredPaths[entry.key] = target.path;
       }
 
-      // تحديث مسارات صور الأغلفة في بيانات الأنميات.
+      // استعادة مسارات الأغلفة.
       for (final anime in animes) {
         final asset = coverAssets[anime.id];
 
         if (asset is String) {
           final path = restoredPaths[asset];
-
           if (path == null) {
             return 'تعذر تجهيز إحدى صور الأغلفة.';
           }
-
           anime.imagePath = path;
         } else {
           anime.imagePath = null;
         }
       }
 
-      // تجهيز صور الذكريات في مجلدها المعروف للتطبيق.
-      final memoriesDirectory = Directory(
-        '${appDirectory.path}/anime_memory_photos',
-      );
+      // تجهيز مسارات الشخصيات قبل تحديث الإعدادات.
+      final newCharacterPaths = <String, String>{};
 
-      await memoriesDirectory.create(recursive: true);
+      for (final entry in characterAssets.entries) {
+        final asset = entry.value as String;
+        final path = restoredPaths[asset];
 
-      for (final entry in files.entries) {
-        if (!entry.key.startsWith('memories/')) continue;
+        if (path == null) {
+          return 'تعذر تجهيز إحدى صور الشخصيات.';
+        }
 
-        final parts = entry.key.split('/');
-        if (parts.length != 2) continue;
-
-        final originalName = Uri.decodeComponent(parts[1]);
-        final safeName = originalName.replaceAll(
-          RegExp(r'[/\\]'),
-          '_',
-        );
-
-        final target = File(
-          '${memoriesDirectory.path}/restored_'
-          '${DateTime.now().microsecondsSinceEpoch}_$safeName',
-        );
-
-        await target.writeAsBytes(entry.value, flush: true);
+        newCharacterPaths[entry.key] = path;
       }
 
       final prefs = await SharedPreferences.getInstance();
@@ -337,48 +332,87 @@ class BackupService {
         }
       }
 
-      // إعداد بيانات الشخصيات المستعادة.
-      final newCharacterPaths = <String, String>{};
+      // نسجل صور الذكريات الجديدة بأسماء فريدة، ولا نحذف الصور القديمة.
+      final memoriesToRestore = <MapEntry<String, List<int>>>[];
 
-      for (final entry in characterAssets.entries) {
-        final key = entry.key;
-        final asset = entry.value as String;
-        final path = restoredPaths[asset];
+      for (final entry in files.entries) {
+        if (!entry.key.startsWith('memories/')) continue;
 
-        if (path == null) {
-          return 'تعذر تجهيز إحدى صور الشخصيات.';
+        final parts = entry.key.split('/');
+        if (parts.length != 2 || parts[1].isEmpty) {
+          return 'اسم إحدى صور الذكريات غير صالح.';
         }
 
-        newCharacterPaths[key] = path;
+        String originalName;
+        try {
+          originalName = Uri.decodeComponent(parts[1]);
+        } catch (_) {
+          return 'اسم إحدى صور الذكريات غير صالح.';
+        }
+
+        final safeName = originalName.replaceAll(RegExp(r'[/\\]'), '_');
+        if (safeName.isEmpty || safeName == '.' || safeName == '..') {
+          return 'اسم إحدى صور الذكريات غير صالح.';
+        }
+
+        memoriesToRestore.add(
+          MapEntry(safeName, entry.value),
+        );
       }
 
-      // حفظ البيانات الجديدة. عند فشل الحفظ نحاول إعادة القديمة.
+      // حفظ صور الذكريات في مجلد المعرض.
+      final memoriesDirectory = Directory(
+        '${appDirectory.path}/anime_memory_photos',
+      );
+      await memoriesDirectory.create(recursive: true);
+
+      final createdMemoryFiles = <File>[];
+
       try {
+        for (final memory in memoriesToRestore) {
+          final target = File(
+            '${memoriesDirectory.path}/restored_'
+            '${DateTime.now().microsecondsSinceEpoch}_'
+            '${createdMemoryFiles.length}_${memory.key}',
+          );
+          await target.writeAsBytes(memory.value, flush: true);
+          createdMemoryFiles.add(target);
+        }
+
         final encodedAnimes = jsonEncode(
           animes.map((anime) => anime.toJson()).toList(),
         );
 
         final saved = await prefs.setString(animeKey, encodedAnimes);
-
         if (!saved) {
-          return 'تعذر حفظ الأنميات المستعادة.';
+          throw Exception('تعذر حفظ بيانات الأنميات.');
         }
 
-        for (final key in prefs.getKeys()) {
+        // استبدال مفاتيح صور الشخصيات بالبيانات الموجودة في النسخة.
+        for (final key in prefs.getKeys().toList()) {
           if (key.startsWith(characterPrefix)) {
             await prefs.remove(key);
           }
         }
 
         for (final entry in newCharacterPaths.entries) {
-          await prefs.setString(entry.key, entry.value);
+          final savedCharacter = await prefs.setString(
+            entry.key,
+            entry.value,
+          );
+          if (!savedCharacter) {
+            throw Exception('تعذر حفظ إحدى صور الشخصيات.');
+          }
         }
       } catch (e) {
+        // إعادة بيانات الأنميات والشخصيات السابقة عند فشل الحفظ.
         if (oldAnimeJson != null) {
           await prefs.setString(animeKey, oldAnimeJson);
+        } else {
+          await prefs.remove(animeKey);
         }
 
-        for (final key in prefs.getKeys()) {
+        for (final key in prefs.getKeys().toList()) {
           if (key.startsWith(characterPrefix)) {
             await prefs.remove(key);
           }
@@ -388,18 +422,25 @@ class BackupService {
           await prefs.setString(entry.key, entry.value);
         }
 
+        for (final file in createdMemoryFiles) {
+          if (await file.exists()) {
+            await file.delete();
+          }
+        }
+
         return 'لم تكتمل الاستعادة، وحاول التطبيق إعادة بياناتك السابقة: $e';
       }
 
-      return 'تمت استعادة بيانات الأنميات وصور الشخصيات. '
-          'أُضيفت صور الذكريات إلى المعرض دون حذف الصور الموجودة مسبقًا.';
+      return 'تمت استعادة الأنميات وصور الشخصيات بنجاح، '
+          'وأُضيفت صور الذكريات دون حذف الصور الموجودة مسبقًا.';
     } catch (e) {
       return 'فشلت الاستعادة: $e';
     }
   }
 
   String _extension(String path) {
-    final name = path.split(Platform.pathSeparator).last;
+    final normalized = path.replaceAll('\\', '/');
+    final name = normalized.split('/').last;
     final dot = name.lastIndexOf('.');
 
     if (dot < 0 || dot == name.length - 1) return 'jpg';
