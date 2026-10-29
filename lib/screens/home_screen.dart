@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../models/anime.dart';
 import '../services/storage_service.dart';
+import 'otaku_oracle_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -132,7 +133,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           } catch (_) {
                             if (!dialogContext.mounted) return;
 
-                            ScaffoldMessenger.of(context).showSnackBar(
+                            ScaffoldMessenger.of(dialogContext)
+                                .showSnackBar(
                               const SnackBar(
                                 content: Text(
                                   'تعذر اختيار الصورة. حاول مرة أخرى.',
@@ -223,7 +225,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 10),
                       TextField(
                         controller: titleController,
-                        autofocus: false,
                         decoration: const InputDecoration(
                           labelText: 'اسم الأنمي (اختياري)',
                           prefixIcon: Icon(Icons.movie_outlined),
@@ -297,26 +298,24 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 8),
                       Wrap(
                         spacing: 5,
-                        children: [
-                          ...List.generate(5, (index) {
-                            final value = index + 1;
+                        children: List.generate(5, (index) {
+                          final value = index + 1;
 
-                            return IconButton(
-                              tooltip: '$value من 5',
-                              onPressed: () {
-                                setDialogState(() {
-                                  rating = rating == value ? 0 : value;
-                                });
-                              },
-                              icon: Icon(
-                                Icons.star,
-                                color: value <= rating
-                                    ? const Color(0xFFFFC857)
-                                    : Colors.white24,
-                              ),
-                            );
-                          }),
-                        ],
+                          return IconButton(
+                            tooltip: '$value من 5',
+                            onPressed: () {
+                              setDialogState(() {
+                                rating = rating == value ? 0 : value;
+                              });
+                            },
+                            icon: Icon(
+                              Icons.star,
+                              color: value <= rating
+                                  ? const Color(0xFFFFC857)
+                                  : Colors.white24,
+                            ),
+                          );
+                        }),
                       ),
                       const SizedBox(height: 12),
                       TextField(
@@ -459,6 +458,92 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _oracleButton() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        gradient: const LinearGradient(
+          colors: [
+            Color(0xFF741C2B),
+            Color(0xFF38203E),
+            Color(0xFF202431),
+          ],
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
+        ),
+        border: Border.all(color: const Color(0xFFB34E68)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF741C2B).withValues(alpha: 0.18),
+            blurRadius: 18,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(20),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const OtakuOracleScreen(),
+              ),
+            );
+          },
+          child: const Padding(
+            padding: EdgeInsets.all(17),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 25,
+                  backgroundColor: Color(0xFF741C2B),
+                  child: Icon(
+                    Icons.psychology_alt,
+                    color: Colors.white,
+                    size: 29,
+                  ),
+                ),
+                SizedBox(width: 13),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'مرآة الأوتاكو',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      SizedBox(height: 5),
+                      Text(
+                        'اكتشف ملامح ذوقك في عالم الأنمي',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.arrow_back_ios_new,
+                  color: Colors.white,
+                  size: 18,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return RefreshIndicator(
@@ -515,7 +600,11 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 25),
+          const SizedBox(height: 20),
+
+          // زر مرآة الأوتاكو الجديد
+          _oracleButton(),
+
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -704,6 +793,11 @@ class _HomeScreenState extends State<HomeScreen> {
               final color =
                   colors[anime.colorIndex.abs() % colors.length];
 
+              final details = [
+                if (anime.status.isNotEmpty) anime.status,
+                if (anime.episodes > 0) '${anime.episodes} حلقة',
+              ].join(' • ');
+
               return Container(
                 margin: const EdgeInsets.only(bottom: 10),
                 decoration: BoxDecoration(
@@ -726,17 +820,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   subtitle: Text(
-                    [
-                      if (anime.status.isNotEmpty) anime.status,
-                      if (anime.episodes > 0)
-                        '${anime.episodes} حلقة',
-                    ].join(' • ').isEmpty
-                        ? 'لم تُضف معلومات بعد'
-                        : [
-                            if (anime.status.isNotEmpty) anime.status,
-                            if (anime.episodes > 0)
-                              '${anime.episodes} حلقة',
-                          ].join(' • '),
+                    details.isEmpty ? 'لم تُضف معلومات بعد' : details,
                     style: const TextStyle(
                       color: Colors.white54,
                       fontSize: 12,
