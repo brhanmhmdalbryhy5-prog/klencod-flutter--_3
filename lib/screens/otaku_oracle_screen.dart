@@ -1,5 +1,8 @@
 
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/anime.dart';
 import '../services/storage_service.dart';
@@ -16,7 +19,10 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
   final TextEditingController searchController = TextEditingController();
 
   List<Anime> animes = [];
+  List<Map<String, dynamic>> catalog = [];
+
   bool loading = true;
+  String catalogMessage = '';
 
   static const Color darkRed = Color(0xFF741C2B);
   static const Color background = Color(0xFF101114);
@@ -25,18 +31,50 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
   @override
   void initState() {
     super.initState();
-    loadAnimes();
+    loadData();
   }
 
-  Future<void> loadAnimes() async {
-    final result = await storage.loadAnimes();
+  Future<void> loadData() async {
+    try {
+      final results = await Future.wait([
+        storage.loadAnimes(),
+        rootBundle.loadString('lib/anime_catalog.json'),
+      ]);
 
-    if (!mounted) return;
+      final saved = results[0] as List<Anime>;
+      final decoded = jsonDecode(results[1] as String);
 
-    setState(() {
-      animes = result;
-      loading = false;
-    });
+      if (decoded is! List) {
+        throw const FormatException('يجب أن تكون قاعدة البيانات قائمة JSON.');
+      }
+
+      final entries = decoded
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+
+      if (!mounted) return;
+
+      setState(() {
+        animes = saved;
+        catalog = entries;
+        catalogMessage = '';
+        loading = false;
+      });
+    } catch (e) {
+      final saved = await storage.loadAnimes();
+
+      if (!mounted) return;
+
+      setState(() {
+        animes = saved;
+        catalog = [];
+        catalogMessage =
+            'تعذرت قراءة قاعدة الأنمي. تحقق من pubspec.yaml '
+            'ومحتوى anime_catalog.json، ثم أعد تشغيل التطبيق.';
+        loading = false;
+      });
+    }
   }
 
   List<Anime> get ratedAnimes =>
@@ -45,10 +83,11 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
   double get averageRating {
     if (ratedAnimes.isEmpty) return 0;
 
-    final total =
-        ratedAnimes.fold<int>(0, (sum, anime) => sum + anime.rating);
-
-    return total / ratedAnimes.length;
+    return ratedAnimes.fold<int>(
+          0,
+          (sum, anime) => sum + anime.rating,
+        ) /
+        ratedAnimes.length;
   }
 
   List<Anime> get favorites =>
@@ -57,16 +96,122 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
   List<Anime> get highRated =>
       ratedAnimes.where((anime) => anime.rating >= 4).toList();
 
-  List<Anime> searchResults(String query) {
-    final value = query.trim().toLowerCase();
+  String normalize(String value) {
+    return value
+        .toLowerCase()
+        .replaceAll('أ', 'ا')
+        .replaceAll('إ', 'ا')
+        .replaceAll('آ', 'ا')
+        .replaceAll('ى', 'ي')
+        .replaceAll('ة', 'ه')
+        .replaceAll(RegExp(r'[\s\-_!.,:;؟?]+'), '');
+  }
 
-    if (value.isEmpty) return [];
+  String catalogTitle(Map<String, dynamic> item) {
+    return (item['title'] ?? '').toString();
+  }
+
+  List<String> catalogAliases(Map<String, dynamic> item) {
+    final value = item['aliases'];
+    if (value is! List) return [];
+
+    return value.map((e) => e.toString()).toList();
+  }
+
+  List<String> catalogGenres(Map<String, dynamic> item) {
+    final value = item['genres'];
+    if (value is! List) return [];
+
+    return value
+        .map((e) => e.toString().trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+  }
+
+  Map<String, dynamic>? findCatalogAnime(String query) {
+    final q = normalize(query);
+    if (q.isEmpty) return null;
+
+    for (final item in catalog) {
+      final names = [
+        catalogTitle(item),
+        ...catalogAliases(item),
+      ];
+
+      for (final name in names) {
+        final normalizedName = normalize(name);
+        if (normalizedName.isNotEmpty && normalizedName == q) {
+          return item;
+        }
+      }
+    }
+
+    for (final item in catalog) {
+      final names = [
+        catalogTitle(item),
+        ...catalogAliases(item),
+      ];
+
+      for (final name in names) {
+        final normalizedName = normalize(name);
+
+        if (normalizedName.length >= 4 &&
+            q.length >= 4 &&
+            (normalizedName.contains(q) || q.contains(normalizedName))) {
+          return item;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  List<Map<String, dynamic>> searchCatalog(String query) {
+    final q = normalize(query);
+    if (q.isEmpty) return [];
+
+    return catalog.where((item) {
+      final names = [
+        catalogTitle(item),
+        ...catalogAliases(item),
+      ];
+
+      return names.any((name) => normalize(name).contains(q));
+    }).take(15).toList();
+  }
+
+  List<Anime> searchLibrary(String query) {
+    final q = normalize(query);
+    if (q.isEmpty) return [];
 
     return animes.where((anime) {
-      return anime.title.toLowerCase().contains(value) ||
-          anime.genre.toLowerCase().contains(value) ||
-          anime.character.toLowerCase().contains(value);
+      return normalize(anime.title).contains(q) ||
+          normalize(anime.genre).contains(q) ||
+          normalize(anime.character).contains(q);
     }).toList();
+  }
+
+  Map<String, int> get genreScores {
+    final scores = <String, int>{};
+
+    for (final anime in ratedAnimes) {
+      final item = findCatalogAnime(anime.title);
+      final genres = anime.genre.trim().isNotEmpty
+          ? anime.genre
+              .split(RegExp(r'[,،/|]'))
+              .map((g) => g.trim())
+              .where((g) => g.isNotEmpty)
+              .toList()
+          : item == null
+              ? <String>[]
+              : catalogGenres(item);
+
+      for (final genre in genres) {
+        scores[genre] = (scores[genre] ?? 0) + anime.rating;
+      }
+    }
+
+    return scores;
   }
 
   @override
@@ -77,7 +222,9 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final results = searchResults(searchController.text);
+    final query = searchController.text.trim();
+    final libraryResults = searchLibrary(query);
+    final databaseResults = searchCatalog(query);
 
     return Scaffold(
       backgroundColor: background,
@@ -93,16 +240,21 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
       body: loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
-              onRefresh: loadAnimes,
+              onRefresh: loadData,
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
                   _buildIntroduction(),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
+                  if (catalogMessage.isNotEmpty)
+                    _messageCard(catalogMessage),
                   _buildSearch(),
-                  if (searchController.text.trim().isNotEmpty) ...[
+                  if (query.isNotEmpty) ...[
                     const SizedBox(height: 12),
-                    _buildSearchResults(results),
+                    _buildSearchResults(
+                      libraryResults,
+                      databaseResults,
+                    ),
                   ],
                   const SizedBox(height: 22),
                   const Text(
@@ -118,12 +270,31 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
                   const SizedBox(height: 22),
                   _buildTasteAnalysis(),
                   const SizedBox(height: 22),
-                  _buildFavoritesSection(),
+                  _buildGenreAnalysis(),
                   const SizedBox(height: 22),
-                  _buildHighlyRatedSection(),
+                  _buildAnimeSection(
+                    title: 'أنمياتك المفضلة',
+                    icon: Icons.favorite,
+                    items: favorites,
+                    emptyMessage: 'لم تضف أنميات إلى المفضلة بعد.',
+                  ),
+                  const SizedBox(height: 22),
+                  _buildAnimeSection(
+                    title: 'الأنميات الأعلى تقييمًا',
+                    icon: Icons.star,
+                    items: highRated,
+                    emptyMessage: 'قيّم أنمياتك لعرض الأعلى تقييمًا.',
+                  ),
                   const SizedBox(height: 24),
+                  Text(
+                    'قاعدة الأنمي المحلية: ${catalog.length} عنوانًا',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white54),
+                  ),
+                  const SizedBox(height: 8),
                   const Text(
-                    'كلما أضفت أنميات وقيّمتها، أصبحت قراءتنا لذوقك أدق.',
+                    'تعمل المرآة محليًا، وتزداد دقة تحليلها كلما أضفت '
+                    'أنميات وقيّمتها.',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.white60, height: 1.6),
                   ),
@@ -159,7 +330,8 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
           ),
           SizedBox(height: 8),
           Text(
-            'حلّل تقييماتك وأنمياتك المفضلة واكتشف الأنواع التي تميل إليها.',
+            'ابحث في قاعدة الأنمي، واكتشف تصنيفاته، وحلّل ذوقك '
+            'من خلال تقييماتك ومفضلاتك.',
             style: TextStyle(color: Colors.white70, height: 1.6),
           ),
         ],
@@ -173,8 +345,8 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
       style: const TextStyle(color: Colors.white),
       onChanged: (_) => setState(() {}),
       decoration: InputDecoration(
-        hintText: 'ابحث في أنميات مكتبتك...',
-        hintStyle: const TextStyle(color: Colors.white54),
+        hintText: 'ابحث باسم الأنمي بالعربية أو الإنجليزية...',
+        hintStyle: const TextStyle(color: Colors.white54, fontSize: 13),
         prefixIcon: const Icon(Icons.search, color: Colors.white70),
         filled: true,
         fillColor: panel,
@@ -182,6 +354,110 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
           borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide.none,
         ),
+      ),
+    );
+  }
+
+  Widget _buildSearchResults(
+    List<Anime> libraryResults,
+    List<Map<String, dynamic>> databaseResults,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: panel,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'نتائج مكتبتك',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          if (libraryResults.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                'لا توجد نتائج في مكتبتك.',
+                style: TextStyle(color: Colors.white54),
+              ),
+            )
+          else
+            ...libraryResults.take(5).map((anime) {
+              final entry = findCatalogAnime(anime.title);
+              final genres = anime.genre.trim().isNotEmpty
+                  ? anime.genre
+                  : entry == null
+                      ? 'لم يُعرف التصنيف في القاعدة'
+                      : catalogGenres(entry).join('، ');
+
+              return ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(
+                  anime.title,
+                  style: const TextStyle(color: Colors.white),
+                ),
+                subtitle: Text(
+                  genres.isEmpty ? 'لم يُحدّد النوع' : genres,
+                  style: const TextStyle(color: Colors.white60),
+                ),
+                trailing: Text(
+                  anime.rating > 0 ? '${anime.rating}★' : '—',
+                  style: const TextStyle(color: Colors.amber),
+                ),
+              );
+            }),
+          const Divider(color: Colors.white12),
+          const Text(
+            'نتائج قاعدة البيانات',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          if (databaseResults.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                'لا توجد نتائج في قاعدة البيانات الحالية.',
+                style: TextStyle(color: Colors.white54),
+              ),
+            )
+          else
+            ...databaseResults.map((item) {
+              final title = catalogTitle(item);
+              final genres = catalogGenres(item);
+
+              return ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(
+                  title,
+                  style: const TextStyle(color: Colors.white),
+                ),
+                subtitle: Text(
+                  genres.isEmpty
+                      ? 'لا توجد تصنيفات مسجلة'
+                      : genres.join('، '),
+                  style: const TextStyle(color: Colors.white60),
+                ),
+                trailing: IconButton(
+                  tooltip: 'البحث في المكتبة بهذا الاسم',
+                  icon: const Icon(
+                    Icons.search,
+                    color: Colors.white70,
+                  ),
+                  onPressed: () {
+                    searchController.text = title;
+                    setState(() {});
+                  },
+                ),
+              );
+            }),
+        ],
       ),
     );
   }
@@ -195,12 +471,24 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
       crossAxisSpacing: 10,
       childAspectRatio: 1.7,
       children: [
-        _statCard('إجمالي الأنميات', '${animes.length}', Icons.movie,
-            const Color(0xFF247BA0)),
-        _statCard('الأنميات المفضلة', '${favorites.length}', Icons.favorite,
-            const Color(0xFFB34E68)),
-        _statCard('أنميات بتقييم مرتفع', '${highRated.length}',
-            Icons.star, const Color(0xFFB87928)),
+        _statCard(
+          'إجمالي الأنميات',
+          '${animes.length}',
+          Icons.movie,
+          const Color(0xFF247BA0),
+        ),
+        _statCard(
+          'الأنميات المفضلة',
+          '${favorites.length}',
+          Icons.favorite,
+          const Color(0xFFB34E68),
+        ),
+        _statCard(
+          'تقييمات مرتفعة',
+          '${highRated.length}',
+          Icons.star,
+          const Color(0xFFB87928),
+        ),
         _statCard(
           'متوسط تقييمك',
           ratedAnimes.isEmpty ? '—' : averageRating.toStringAsFixed(1),
@@ -261,18 +549,58 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
 
     if (animes.isEmpty) {
       message =
-          'لم تبدأ المرآة بتحليل ذوقك بعد. أضف أول أنمي إلى مكتبتك ثم قيّمه لتبدأ رحلتك.';
+          'أضف أنميات إلى مكتبتك وقيّمها حتى تبدأ المرآة بتحليل ذوقك.';
     } else if (ratedAnimes.isEmpty) {
       message =
-          'لديك ${animes.length} أنمي في مكتبتك، لكنك لم تقيّم أيًّا منها بعد. أضف تقييماتك حتى نتمكن من تحليل اختياراتك.';
+          'لديك ${animes.length} أنمي، لكنك لم تقيّم أيًّا منها بعد.';
     } else {
       message =
-          'قيّمت ${ratedAnimes.length} أنمي، ومتوسط تقييمك ${averageRating.toStringAsFixed(1)} من 5. '
-          '${highRated.isNotEmpty ? 'منحت ${highRated.length} أنمي تقييمًا مرتفعًا.' : 'جرّب تقييم الأنميات التي أحببتها.'}';
+          'قيّمت ${ratedAnimes.length} أنمي بمتوسط '
+          '${averageRating.toStringAsFixed(1)} من 5. '
+          'لديك ${highRated.length} أنمي بتقييم 4 أو 5.';
     }
 
+    return _messageCard(
+      message,
+      title: 'قراءة المرآة',
+      icon: Icons.auto_awesome,
+      extra: ratedAnimes.isEmpty
+          ? null
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 14),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: LinearProgressIndicator(
+                    value: averageRating / 5,
+                    minHeight: 9,
+                    backgroundColor: Colors.white12,
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                      Color(0xFFB87928),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'مستوى تقييمك: '
+                  '${((averageRating / 5) * 100).round()}%',
+                  style: const TextStyle(
+                    color: Colors.white54,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildGenreAnalysis() {
+    final scores = genreScores.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: panel,
         borderRadius: BorderRadius.circular(18),
@@ -282,61 +610,67 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
         children: [
           const Row(
             children: [
-              Icon(Icons.auto_awesome, color: Color(0xFFB87928)),
+              Icon(Icons.category, color: Color(0xFFB87928)),
               SizedBox(width: 8),
               Text(
-                'قراءة المرآة',
+                'الأنواع الأقرب إلى ذوقك',
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: 18,
+                  fontSize: 17,
                   fontWeight: FontWeight.bold,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          Text(
-            message,
-            style: const TextStyle(color: Colors.white70, height: 1.8),
-          ),
-          if (ratedAnimes.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: LinearProgressIndicator(
-                value: averageRating / 5,
-                minHeight: 9,
-                backgroundColor: Colors.white12,
-                valueColor:
-                    const AlwaysStoppedAnimation<Color>(Color(0xFFB87928)),
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'مستوى تقييمك العام: ${((averageRating / 5) * 100).round()}%',
-              style: const TextStyle(color: Colors.white54, fontSize: 12),
-            ),
-          ],
+          if (scores.isEmpty)
+            const Text(
+              'لا توجد بيانات كافية بعد. أضف تقييمات لأنميات موجودة '
+              'في القاعدة أو اكتب تصنيفاتها في مكتبتك.',
+              style: TextStyle(color: Colors.white60, height: 1.6),
+            )
+          else
+            ...scores.take(5).map((entry) {
+              final maximum = scores.first.value;
+              final progress = maximum == 0 ? 0.0 : entry.value / maximum;
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            entry.key,
+                            style: const TextStyle(color: Colors.white70),
+                          ),
+                        ),
+                        Text(
+                          '${entry.value}',
+                          style: const TextStyle(color: Colors.white54),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        minHeight: 7,
+                        backgroundColor: Colors.white12,
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          Color(0xFF741C2B),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
         ],
       ),
-    );
-  }
-
-  Widget _buildFavoritesSection() {
-    return _buildAnimeSection(
-      title: 'أنمياتك المفضلة',
-      icon: Icons.favorite,
-      items: favorites,
-      emptyMessage: 'لم تضف أنميات إلى المفضلة بعد.',
-    );
-  }
-
-  Widget _buildHighlyRatedSection() {
-    return _buildAnimeSection(
-      title: 'الأنميات الأعلى تقييمًا',
-      icon: Icons.star,
-      items: highRated,
-      emptyMessage: 'قيّم أنمياتك لتحصل على قائمة الأعلى تقييمًا.',
     );
   }
 
@@ -382,7 +716,7 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
                   (anime) => ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: CircleAvatar(
-                      backgroundColor: const Color(0xFF741C2B),
+                      backgroundColor: darkRed,
                       child: Text(
                         anime.rating > 0 ? '${anime.rating}★' : '★',
                         style: const TextStyle(color: Colors.white),
@@ -393,7 +727,17 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
                       style: const TextStyle(color: Colors.white),
                     ),
                     subtitle: Text(
-                      anime.genre.isEmpty ? 'لم يُحدّد النوع' : anime.genre,
+                      anime.genre.isNotEmpty
+                          ? anime.genre
+                          : (catalogGenres(
+                              findCatalogAnime(anime.title) ??
+                                  <String, dynamic>{},
+                            ).join('، ').isEmpty
+                              ? 'لم يُحدّد النوع'
+                              : catalogGenres(
+                                  findCatalogAnime(anime.title) ??
+                                      <String, dynamic>{},
+                                ).join('، ')),
                       style: const TextStyle(color: Colors.white54),
                     ),
                   ),
@@ -403,36 +747,45 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
     );
   }
 
-  Widget _buildSearchResults(List<Anime> results) {
+  Widget _messageCard(
+    String message, {
+    String? title,
+    IconData icon = Icons.info_outline,
+    Widget? extra,
+  }) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: panel,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
       ),
-      child: results.isEmpty
-          ? const Text(
-              'لا توجد نتائج مطابقة في مكتبتك.',
-              style: TextStyle(color: Colors.white60),
-            )
-          : Column(
-              children: results.take(10).map((anime) {
-                return ListTile(
-                  title: Text(
-                    anime.title,
-                    style: const TextStyle(color: Colors.white),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (title != null) ...[
+            Row(
+              children: [
+                Icon(icon, color: const Color(0xFFB87928)),
+                const SizedBox(width: 8),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
                   ),
-                  subtitle: Text(
-                    anime.genre.isEmpty ? 'لم يُحدّد النوع' : anime.genre,
-                    style: const TextStyle(color: Colors.white54),
-                  ),
-                  trailing: const Icon(
-                    Icons.movie_outlined,
-                    color: Colors.white60,
-                  ),
-                );
-              }).toList(),
+                ),
+              ],
             ),
+            const SizedBox(height: 12),
+          ],
+          Text(
+            message,
+            style: const TextStyle(color: Colors.white70, height: 1.8),
+          ),
+          if (extra != null) extra,
+        ],
+      ),
     );
   }
 }
