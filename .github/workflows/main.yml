@@ -1,53 +1,164 @@
 name: Build Flutter APK
 
 on:
-  workflow_dispatch:
-    inputs:
-      flutter_version:
-        description: 'Flutter version'
-        required: true
-        default: '3.47.2'
+workflow_dispatch:
+inputs:
+flutter_version:
+description: 'Flutter version'
+required: true
+default: '3.47.2'
 
 jobs:
-  build:
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
+build:
+runs-on: ubuntu-24.04
 
-      - name: Setup Gradle Cache
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
+steps:
+  - name: Checkout
+    uses: actions/checkout@v5
 
-      - name: Setup Java 17
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '17'
+  - name: Setup Gradle Cache
+    uses: actions/cache@v5
+    with:
+      path: |
+        ~/.gradle/caches
+        ~/.gradle/wrapper
+      key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+      restore-keys: |
+        ${{ runner.os }}-gradle-
 
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ github.event.inputs.flutter_version }}
-          cache: true
-          channel: stable
+  - name: Setup Java 17
+    uses: actions/setup-java@v5
+    with:
+      distribution: temurin
+      java-version: '17'
 
-      - name: Get dependencies
-        run: flutter pub get
+  - name: Setup Python
+    uses: actions/setup-python@v6
+    with:
+      python-version: '3.x'
 
-      - name: Build APK
-        run: flutter build apk --release
+  - name: Download and prepare 1000 anime
+    run: |
+      python - <<'PY'
+      import json
+      import urllib.request
+      from pathlib import Path
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-release
-          path: build/app/outputs/flutter-apk/app-release.apk
-          if-no-files-found: error
-          retention-days: 7
+      url = (
+          "https://raw.githubusercontent.com/"
+          "manami-project/anime-offline-database/"
+          "2026-27/anime-offline-database-minified.json"
+      )
+
+      request = urllib.request.Request(
+          url,
+          headers={"User-Agent": "AnimeMemory-Android-App"}
+      )
+
+      print("Downloading anime database...")
+      with urllib.request.urlopen(request, timeout=90) as response:
+          source = json.load(response)
+
+      entries = source.get("data", [])
+      if not isinstance(entries, list):
+          raise SystemExit("ERROR: Invalid source database format.")
+
+      result = []
+      seen = set()
+
+      for item in entries:
+          if not isinstance(item, dict):
+              continue
+
+          title = item.get("title")
+          if not isinstance(title, str) or not title.strip():
+              continue
+
+          title = title.strip()
+          key = title.casefold()
+          if key in seen:
+              continue
+          seen.add(key)
+
+          synonyms = item.get("synonyms", [])
+          if not isinstance(synonyms, list):
+              synonyms = []
+
+          aliases = []
+          for value in [title, *synonyms]:
+              if isinstance(value, str) and value.strip():
+                  value = value.strip()
+                  if value.casefold() not in {
+                      x.casefold() for x in aliases
+                  }:
+                      aliases.append(value)
+
+          tags = item.get("tags", [])
+          if not isinstance(tags, list):
+              tags = []
+
+          genres = [
+              tag.strip().title()
+              for tag in tags
+              if isinstance(tag, str) and tag.strip()
+              and tag.strip().casefold() in {
+                  "action", "adventure", "comedy", "drama",
+                  "fantasy", "romance", "science fiction",
+                  "sci-fi", "horror", "mystery", "thriller",
+                  "psychological", "sports", "slice of life",
+                  "supernatural", "mecha", "music", "school",
+                  "historical", "military", "isekai"
+              }
+          ]
+
+          result.append({
+              "title": title,
+              "aliases": aliases,
+              "genres": sorted(set(genres))
+          })
+
+          if len(result) == 1000:
+              break
+
+      if len(result) < 1000:
+          raise SystemExit(
+              f"ERROR: Only {len(result)} valid anime found."
+          )
+
+      output = Path("lib/anime_catalog.json")
+      output.parent.mkdir(parents=True, exist_ok=True)
+      output.write_text(
+          json.dumps(result, ensure_ascii=False, separators=(",", ":")),
+          encoding="utf-8"
+      )
+
+      check = json.loads(output.read_text(encoding="utf-8"))
+      assert len(check) == 1000
+      print(f"SUCCESS: Created catalog with {len(check)} anime.")
+      print(f"Output size: {output.stat().st_size} bytes")
+      PY
+
+  - name: Setup Flutter
+    uses: subosito/flutter-action@v2
+    with:
+      flutter-version: ${{ github.event.inputs.flutter_version }}
+      cache: true
+      channel: stable
+
+  - name: Get dependencies
+    run: flutter pub get
+
+  - name: Check catalog
+    run: |
+      python -c "import json; d=json.load(open('lib/anime_catalog.json', encoding='utf-8')); assert len(d)==1000; print('Catalog verified:', len(d))"
+
+  - name: Build APK
+    run: flutter build apk --release
+
+  - name: Upload APK
+    uses: actions/upload-artifact@v4
+    with:
+      name: app-release
+      path: build/app/outputs/flutter-apk/app-release.apk
+      if-no-files-found: error
+      retention-days: 7
