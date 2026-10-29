@@ -1,0 +1,78 @@
+
+[
+  {
+    "title": "Death Note",
+    "aliases": ["ديث نوت", "مذكرة الموت"],
+    "genres": ["غموض", "نفسي", "إثارة", "خارق للطبيعة"]
+  },
+  {
+    "title": "Attack on Titan",
+    "aliases": ["هجوم العمالقة", "Shingeki no Kyojin"],
+    "genres": ["أكشن", "دراما", "خيال مظلم", "غموض"]
+  },
+  {
+    "title": "Naruto",
+    "aliases": ["ناروتو"],
+    "genres": ["أكشن", "مغامرات", "كوميديا", "نينجا"]
+  },
+  {
+    "title": "One Piece",
+    "aliases": ["ون بيس"],
+    "genres": ["أكشن", "مغامرات", "كوميديا", "خيال"]
+  },
+  {
+    "title": "Demon Slayer",
+    "aliases": ["قاتل الشياطين", "Kimetsu no Yaiba"],
+    "genres": ["أكشن", "خيال مظلم", "تاريخي", "خارق للطبيعة"]
+  },
+  {
+    "title": "Jujutsu Kaisen",
+    "aliases": ["جوجوتسو كايسن"],
+    "genres": ["أكشن", "خارق للطبيعة", "خيال مظلم"]
+  },
+  {
+    "title": "Your Name",
+    "aliases": ["اسمك", "Kimi no Na wa"],
+    "genres": ["رومانسي", "دراما", "خارق للطبيعة"]
+  },
+  {
+    "title": "A Silent Voice",
+    "aliases": ["صوت صامت", "Koe no Katachi"],
+    "genres": ["دراما", "رومانسي", "مدرسي"]
+  },
+  {
+    "title": "Toradora!",
+    "aliases": ["تورادورا"],
+    "genres": ["رومانسي", "كوميديا", "مدرسي"]
+  },
+  {
+    "title": "Kaguya-sama: Love Is War",
+    "aliases": ["كاغويا ساما"],
+    "genres": ["رومانسي", "كوميديا", "مدرسي"]
+  },
+  {
+    "title": "Blue Lock",
+    "aliases": ["بلو لوك"],
+    "genres": ["رياضي", "دراما", "منافسة"]
+  },
+  {
+    "title": "Haikyuu!!",
+    "aliases": ["هايكيو"],
+    "genres": ["رياضي", "كوميديا", "مدرسي"]
+  },
+  {
+    "title": "Steins;Gate",
+    "aliases": ["شتاينز غيت"],
+    "genres": ["خيال علمي", "غموض", "إثارة", "دراما"]
+  },
+  {
+    "title": "Tokyo Ghoul",
+    "aliases": ["طوكيو غول"],
+    "genres": ["أكشن", "رعب", "دراما", "خيال مظلم"]
+  },
+  {
+    "title": "Frieren: Beyond Journey's End",
+    "aliases": ["فرييرن", "Sousou no Frieren"],
+    "genres": ["فانتازيا", "مغامرات", "دراما"]
+  }
+]
