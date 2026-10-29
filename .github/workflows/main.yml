@@ -11,10 +11,9 @@ default: '3.47.2'
 jobs:
 build:
 runs-on: ubuntu-24.04
-
 steps:
-  - name: Checkout
-    uses: actions/checkout@v5
+- name: Checkout
+uses: actions/checkout@v5
 
   - name: Setup Gradle Cache
     uses: actions/cache@v5
@@ -32,85 +31,6 @@ steps:
       distribution: temurin
       java-version: '17'
 
-  - name: Setup Python
-    uses: actions/setup-python@v6
-    with:
-      python-version: '3.x'
-
-  - name: Download and prepare 1000 anime
-    run: |
-      python - <<'PY'
-      import json
-      import urllib.request
-      from pathlib import Path
-
-      url = "https://raw.githubusercontent.com/manami-project/anime-offline-database/master/anime-offline-database-minified.json"
-      request = urllib.request.Request(url, headers={"User-Agent": "AnimeMemory-App"})
-
-      print("Downloading anime database...")
-      with urllib.request.urlopen(request, timeout=90) as response:
-          source = json.load(response)
-
-      entries = source.get("data", [])
-      result = []
-      seen = set()
-
-      for item in entries:
-          if not isinstance(item, dict):
-              continue
-
-          title = item.get("title")
-          if not isinstance(title, str) or not title.strip():
-              continue
-
-          title = title.strip()
-          if title.casefold() in seen:
-              continue
-          seen.add(title.casefold())
-
-          synonyms = item.get("synonyms", [])
-          if not isinstance(synonyms, list):
-              synonyms = []
-
-          aliases = []
-          for value in [title] + synonyms:
-              if isinstance(value, str) and value.strip():
-                  value = value.strip()
-                  if value.casefold() not in {a.casefold() for a in aliases}:
-                      aliases.append(value)
-
-          tags = item.get("tags", [])
-          if not isinstance(tags, list):
-              tags = []
-
-          genres = [
-              tag.strip().title()
-              for tag in tags
-              if isinstance(tag, str) and tag.strip()
-          ]
-
-          result.append({
-              "title": title,
-              "aliases": aliases,
-              "genres": sorted(set(genres))
-          })
-
-          if len(result) == 1000:
-              break
-
-      if len(result) != 1000:
-          raise SystemExit(f"Expected 1000 anime, got {len(result)}")
-
-      output = Path("lib/anime_catalog.json")
-      output.parent.mkdir(parents=True, exist_ok=True)
-      output.write_text(
-          json.dumps(result, ensure_ascii=False, separators=(",", ":")),
-          encoding="utf-8"
-      )
-
-      print("Catalog created:", len(result))
-      PY
-
   - name: Setup Flutter
     uses: subosito/flutter-action@v2
     with:
@@ -120,9 +40,6 @@ steps:
 
   - name: Get dependencies
     run: flutter pub get
-
-  - name: Check catalog
-    run: python -c "import json; d=json.load(open('lib/anime_catalog.json', encoding='utf-8')); assert len(d)==1000; print('Catalog verified:', len(d))"
 
   - name: Build APK
     run: flutter build apk --release
