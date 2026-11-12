@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/backup_service.dart';
-// سنحتاج لاستيراد main.dart للوصول إلى themeNotifier
-import '../main.dart'; 
+import '../main.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -35,8 +34,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() => darkMode = value);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('isDarkMode', value);
-    
-    // تغيير الثيم في التطبيق بالكامل
     themeNotifier.value = value ? ThemeMode.dark : ThemeMode.light;
   }
 
@@ -47,7 +44,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          backgroundColor: Theme.of(context).cardColor,
+          backgroundColor: const Color(0xFF1B1F28),
           title: const Text('استعادة نسخة احتياطية'),
           content: const Text(
             'ستُستبدل قائمة الأنميات الحالية بالأنميات الموجودة '
@@ -94,7 +91,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: Theme.of(context).cardColor,
+        backgroundColor: const Color(0xFF1B1F28),
         title: Text(
           restore ? 'نتيجة الاستعادة' : 'نتيجة النسخ الاحتياطي',
         ),
@@ -134,7 +131,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: Theme.of(context).cardColor,
+        backgroundColor: const Color(0xFF1B1F28),
         title: const Text('التخزين المحلي'),
         content: const Text(
           'يحفظ التطبيق بياناتك محليًا على الهاتف. '
@@ -154,27 +151,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor = isDark ? Colors.white : Colors.black87;
-
     return ListView(
       padding: const EdgeInsets.all(18),
       children: [
-        Text(
+        const Text(
           'الإعدادات',
           style: TextStyle(
             fontSize: 28,
             fontWeight: FontWeight.w900,
-            color: textColor,
           ),
         ),
         const SizedBox(height: 7),
-        Text(
+        const Text(
           'تحكّم في تطبيقك وبياناتك.',
-          style: TextStyle(color: isDark ? Colors.white60 : Colors.black54),
+          style: TextStyle(color: Colors.white60),
         ),
         const SizedBox(height: 24),
-
         Container(
           padding: const EdgeInsets.all(19),
           decoration: BoxDecoration(
@@ -206,7 +198,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       style: TextStyle(
                         fontSize: 21,
                         fontWeight: FontWeight.w900,
-                        color: Colors.white,
                       ),
                     ),
                     SizedBox(height: 5),
@@ -220,19 +211,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
           ),
         ),
-
         const SizedBox(height: 25),
-
-        Text(
+        const Text(
           'التخصيص',
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w800,
-            color: textColor,
           ),
         ),
         const SizedBox(height: 12),
-
         _settingsTile(
           icon: Icons.palette_outlined,
           color: const Color(0xFF8B65C6),
@@ -245,19 +232,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           onTap: null,
         ),
-
         const SizedBox(height: 24),
-
-        Text(
+        const Text(
           'إدارة البيانات',
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w800,
-            color: textColor,
           ),
         ),
         const SizedBox(height: 12),
-
         _settingsTile(
           icon: Icons.backup_outlined,
           color: const Color(0xFF35B77A),
@@ -271,9 +254,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ? null
               : () => runBackupAction(restore: false),
         ),
-
         const SizedBox(height: 10),
-
         _settingsTile(
           icon: Icons.settings_backup_restore,
           color: const Color(0xFFFFC857),
@@ -287,7 +268,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ? null
               : () => runBackupAction(restore: true),
         ),
-
         if (backupBusy) ...[
           const SizedBox(height: 16),
           const Center(child: CircularProgressIndicator()),
@@ -299,9 +279,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
         ],
-
         const SizedBox(height: 10),
-
         _settingsTile(
           icon: Icons.storage_outlined,
           color: const Color(0xFF247BA0),
@@ -313,19 +291,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           onTap: showStorageInfo,
         ),
-
         const SizedBox(height: 24),
-
-        Text(
+        const Text(
           'حول التطبيق',
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w800,
-            color: textColor,
           ),
         ),
         const SizedBox(height: 12),
-
         _settingsTile(
           icon: Icons.info_outline,
           color: const Color(0xFFFFC857),
@@ -337,9 +311,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           onTap: showAbout,
         ),
-
         const SizedBox(height: 28),
-
         const Center(
           child: Text(
             'صُنع للأوتاكو، ليحفظ كل ذكرى.',
@@ -362,15 +334,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required Widget trailing,
     required VoidCallback? onTap,
   }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    
     return Container(
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
+        color: const Color(0xFF1B1F28),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark ? Colors.white10 : Colors.black12,
-        ),
+        border: Border.all(color: Colors.white10),
       ),
       child: ListTile(
         onTap: onTap,
@@ -389,17 +357,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         title: Text(
           title,
-          style: TextStyle(
+          style: const TextStyle(
             fontWeight: FontWeight.bold,
-            color: isDark ? Colors.white : Colors.black87,
           ),
         ),
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 4),
           child: Text(
             subtitle,
-            style: TextStyle(
-              color: isDark ? Colors.white54 : Colors.black54,
+            style: const TextStyle(
+              color: Colors.white54,
               fontSize: 11,
             ),
           ),
