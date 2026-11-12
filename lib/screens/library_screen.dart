@@ -247,13 +247,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
     final String summary = data['summary'];
     final int episodes = data['episodes'];
     final double? globalRating = data['globalRating'];
+    final int? releaseYear = data['releaseYear']; // 🔥
 
-    if (genres.isNotEmpty || summary.isNotEmpty || episodes > 0 || globalRating != null) {
+    if (genres.isNotEmpty || summary.isNotEmpty || episodes > 0 || globalRating != null || releaseYear != null) {
       setState(() {
         if (genres.isNotEmpty) anime.genre = genres.join('، ');
         if (summary.isNotEmpty) anime.summary = summary;
         if (episodes > 0) anime.episodes = episodes;
-        if (globalRating != null) anime.globalRating = globalRating; // 🔥 تحديث التقييم
+        if (globalRating != null) anime.globalRating = globalRating;
+        if (releaseYear != null) anime.releaseYear = releaseYear; // 🔥
       });
       await storage.saveAnimes(animes);
       if (!mounted) return;
@@ -262,7 +264,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
       if (genres.isNotEmpty) msg += 'التصنيفات ';
       if (summary.isNotEmpty) msg += 'والقصة ';
       if (episodes > 0) msg += 'والحلقات ';
-      if (globalRating != null) msg += 'والتقييم العالمي ';
+      if (globalRating != null) msg += 'والتقييم ';
+      if (releaseYear != null) msg += 'والسنة ';
       
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(msg)),
@@ -323,6 +326,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     final episodesController = TextEditingController(text: anime.episodes == 0 ? '' : '${anime.episodes}');
     final summaryController = TextEditingController(text: anime.summary);
     final memoryController = TextEditingController(text: anime.memory);
+    final yearController = TextEditingController(text: anime.releaseYear?.toString() ?? ''); // 🔥
 
     String status = anime.status;
     int rating = anime.rating;
@@ -377,7 +381,14 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         const SizedBox(height: 10),
                         TextField(controller: characterController, decoration: const InputDecoration(labelText: 'الشخصية المفضلة (اختياري)')),
                         const SizedBox(height: 10),
-                        TextField(controller: episodesController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'عدد الحلقات (اختياري)')),
+                        Row(
+                          children: [
+                            Expanded(child: TextField(controller: episodesController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'عدد الحلقات'))),
+                            const SizedBox(width: 10),
+                            // 🔥 حقل سنة النزول
+                            Expanded(child: TextField(controller: yearController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'سنة النزول'))),
+                          ],
+                        ),
                         const SizedBox(height: 10),
                         DropdownButtonFormField<String>(
                           value: ['', 'مكتمل', 'أتابعه', 'مخطط له', 'متوقف'].contains(status) ? status : '',
@@ -445,6 +456,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         ..genre = selectedGenres.join('، ')
         ..character = characterController.text.trim()
         ..episodes = int.tryParse(episodesController.text) ?? 0
+        ..releaseYear = int.tryParse(yearController.text) // 🔥
         ..status = status
         ..rating = rating
         ..summary = summaryController.text.trim()
@@ -469,12 +481,18 @@ class _LibraryScreenState extends State<LibraryScreen> {
       episodesController.dispose();
       summaryController.dispose();
       memoryController.dispose();
+      yearController.dispose();
     }
   }
 
   Widget _buildRowCard(Anime anime) {
     final color = colors[anime.colorIndex.abs() % colors.length];
-    final details = [if (anime.status.isNotEmpty) anime.status, if (anime.episodes > 0) '${anime.episodes} حلقة'].join(' • ');
+    // 🔥 عرض السنة في التفاصيل
+    final details = [
+      if (anime.releaseYear != null) '${anime.releaseYear}', 
+      if (anime.status.isNotEmpty) anime.status, 
+      if (anime.episodes > 0) '${anime.episodes} حلقة'
+    ].join(' • ');
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -507,7 +525,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         const SizedBox(height: 6),
                         Text(details, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.bold)),
                       ],
-                      // 🔥 عرض التقييم العالمي والتقييم الشخصي
                       Row(
                         children: [
                           if (anime.rating > 0) ...[
@@ -577,7 +594,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   Text(anime.genre.isEmpty ? 'بدون تصنيف' : anime.genre, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white54, fontSize: 11)),
                   Row(
                     children: [
+                      if (anime.releaseYear != null) ...[
+                        const SizedBox(height: 4),
+                        Text('${anime.releaseYear}', style: const TextStyle(fontSize: 11, color: Colors.white54)),
+                      ],
                       if (anime.rating > 0) ...[
+                        const SizedBox(width: 8),
                         const SizedBox(height: 4),
                         const Icon(Icons.star, size: 14, color: Color(0xFFFFC857)),
                         const SizedBox(width: 3),
