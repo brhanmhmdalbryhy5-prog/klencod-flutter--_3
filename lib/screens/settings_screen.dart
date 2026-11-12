@@ -83,6 +83,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  // 🔥 دالة التحديث التلقائي مع رسالة مفصلة
   Future<void> _autoUpdateGenres() async {
     if (isUpdatingGenres) return;
 
@@ -110,24 +111,66 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     setState(() => isUpdatingGenres = true);
 
+    // تشغيل عملية التحديث
     final result = await apiService.autoUpdateLibraryGenres();
 
     if (!mounted) return;
     setState(() => isUpdatingGenres = false);
+
+    // 🔥 رسالة النتيجة المفصلة
+    final updated = result['updated'] ?? 0;
+    final failed = result['failed'] ?? 0;
+    
+    String message;
+    if (updated == 0 && failed == 0) {
+      message = 'كل الأنميات لديها تصنيفات بالفعل! لا حاجة للتحديث.';
+    } else {
+      message = 'تم تحديث $updated أنمي بنجاح.\n'
+          'فشل تحديث $failed أنمي.\n\n'
+          'ملاحظة: فشل التحديث غالباً بسبب أن اسم الأنمي مكتوب بالعربية. يرجى تعديل الأسماء إلى الإنجليزية أو إضافة التصنيف يدوياً.';
+    }
 
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: const Color(0xFF1B1F28),
         title: const Text('نتيجة التحديث'),
-        content: Text(
-          'تم تحديث ${result['updated']} أنمي بنجاح.\n'
-          'فشل تحديث ${result['failed']} أنمي (لم يتم العثور على تصنيفات).',
-        ),
+        content: Text(message),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('حسنًا')),
         ],
       ),
+    );
+  }
+
+  // 🔥 دالة مسح جميع التصنيفات
+  Future<void> _clearAllGenres() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF1B1F28),
+        title: const Text('مسح جميع التصنيفات'),
+        content: const Text(
+          'سيتم مسح التصنيفات من جميع الأنميات في مكتبتك. هل أنت متأكد؟',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFFF5A65)),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('مسح الكل'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    final count = await apiService.clearAllGenres();
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('تم مسح التصنيفات من $count أنمي.')),
     );
   }
 
@@ -256,6 +299,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
               : const Icon(Icons.chevron_left, color: Colors.white38),
           onTap: isUpdatingGenres ? null : _autoUpdateGenres,
+        ),
+        const SizedBox(height: 10),
+        _settingsTile(
+          icon: Icons.delete_sweep_outlined,
+          color: const Color(0xFFFF5A65),
+          title: 'مسح جميع التصنيفات',
+          subtitle: 'حذف التصنيفات من جميع الأنميات (لا يمكن التراجع)',
+          trailing: const Icon(Icons.chevron_left, color: Colors.white38),
+          onTap: _clearAllGenres,
         ),
         const SizedBox(height: 24),
         const Text('إدارة البيانات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
