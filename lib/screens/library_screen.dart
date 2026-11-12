@@ -224,7 +224,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
-  // 🔥 تم تعديل الدالة لتجلب التصنيف والقصة
+  // 🔥 تم تعديل الدالة لتجلب التصنيف والقصة وعدد الحلقات
   Future<void> _fetchDataManually(Anime anime) async {
     if (anime.title.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -246,11 +246,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
     final List<String> genres = data['genres'];
     final String summary = data['summary'];
+    final int episodes = data['episodes'];
 
-    if (genres.isNotEmpty || summary.isNotEmpty) {
+    if (genres.isNotEmpty || summary.isNotEmpty || episodes > 0) {
       setState(() {
         if (genres.isNotEmpty) anime.genre = genres.join('، ');
         if (summary.isNotEmpty) anime.summary = summary;
+        if (episodes > 0) anime.episodes = episodes; // 🔥 تحديث الحلقات
       });
       await storage.saveAnimes(animes);
       if (!mounted) return;
@@ -258,6 +260,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       String msg = 'تم جلب ';
       if (genres.isNotEmpty) msg += 'التصنيفات ';
       if (summary.isNotEmpty) msg += 'والقصة ';
+      if (episodes > 0) msg += 'وعدد الحلقات ';
       
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(msg)),
@@ -580,12 +583,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
           case 'edit': await editAnime(anime); break;
           case 'favorite': await toggleFavorite(anime); break;
           case 'delete': await deleteAnime(anime); break;
-          case 'fetch_data': await _fetchDataManually(anime); break; // 🔥 اسم الزر الجديد
+          case 'fetch_data': await _fetchDataManually(anime); break; // 🔥 اسم الزر
         }
       },
       itemBuilder: (context) => [
         const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit_outlined), SizedBox(width: 10), Text('تعديل بيانات الأنمي')])),
-        const PopupMenuItem(value: 'fetch_data', child: Row(children: [Icon(Icons.cloud_download_outlined, color: Colors.cyan), SizedBox(width: 10), Text('جلب التصنيف والقصة')])), // 🔥 النص الجديد
+        const PopupMenuItem(value: 'fetch_data', child: Row(children: [Icon(Icons.cloud_download_outlined, color: Colors.cyan), SizedBox(width: 10), Text('جلب التصنيف والقصة')])), // 🔥 النص
         PopupMenuItem(value: 'favorite', child: Row(children: [const Icon(Icons.favorite_border, color: Color(0xFFFF5364)), const SizedBox(width: 10), Text(anime.favorite ? 'إزالة من المفضلة' : 'إضافة إلى المفضلة')])),
         const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete_outline, color: Color(0xFFFF6B72)), SizedBox(width: 10), Text('حذف الأنمي')])),
       ],
