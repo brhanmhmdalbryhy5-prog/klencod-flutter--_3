@@ -6,29 +6,48 @@ import 'storage_service.dart';
 class AnimeApiService {
   final StorageService _storage = StorageService();
 
-  // البحث عن أنمي بالاسم وإرجاع قائمة التصنيفات
+  // البحث عن أنمي بالاسم في AniList وإرجاع قائمة التصنيفات
   Future<List<String>> fetchGenres(String animeTitle) async {
     if (animeTitle.trim().isEmpty) return [];
 
     try {
-      final query = Uri.encodeComponent(animeTitle.trim());
-      final url = Uri.parse('https://api.jikan.moe/v4/anime?q=$query&limit=1');
+      // AniList يستخدم GraphQL (طلب POST)
+      const String url = 'https://graphql.anilist.co';
       
-      final response = await http.get(url);
+      // استعلام GraphQL للبحث عن الأنمي وجلب التصنيفات
+      final String query = '''
+        query (\$search: String) {
+          Page(perPage: 1) {
+            media(search: \$search, type: ANIME) {
+              genres
+            }
+          }
+        }
+      ''';
+
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'query': query,
+          'variables': {'search': animeTitle.trim()},
+        }),
+      ).timeout(const Duration(seconds: 10)); // وقت انتظار 10 ثوانٍ
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        if (data['data'] != null && data['data'].isNotEmpty) {
-          final anime = data['data'][0];
-          final genres = anime['genres'] as List?;
-          
+        final mediaList = data['data']?['Page']?['media'] as List?;
+        
+        if (mediaList != null && mediaList.isNotEmpty) {
+          final genres = mediaList[0]['genres'] as List?;
           if (genres != null) {
-            return genres.map((g) => _translateGenre(g['name'])).toList();
+            return genres.map((g) => _translateGenre(g.toString())).toList();
           }
         }
       }
       return [];
     } catch (e) {
+      // في حال حدوث خطأ (Timeout، انقطاع إنترنت، إلخ) نرجع قائمة فارغة
       return [];
     }
   }
@@ -42,10 +61,8 @@ class AnimeApiService {
     for (int i = 0; i < animes.length; i++) {
       final anime = animes[i];
       
-      // إذا كان الأنمي يحتوي بالفعل على تصنيف، نتخطاه
       if (anime.genre.trim().isNotEmpty) continue;
 
-      // جلب التصنيفات من الإنترنت
       final genres = await fetchGenres(anime.title);
 
       if (genres.isNotEmpty) {
@@ -55,16 +72,34 @@ class AnimeApiService {
         failedCount++;
       }
 
-      // تأخير بسيط جداً (500 مللي ثانية) بين كل طلب لتجنب حظر الـ API
+      // تأخير بسيط بين الطلبات
       await Future.delayed(const Duration(milliseconds: 500));
     }
 
-    // حفظ التغييرات
     if (updatedCount > 0) {
       await _storage.saveAnimes(animes);
     }
 
     return {'updated': updatedCount, 'failed': failedCount};
+  }
+
+  // دالة لمسح جميع التصنيفات
+  Future<int> clearAllGenres() async {
+    final animes = await _storage.loadAnimes();
+    int clearedCount = 0;
+
+    for (var anime in animes) {
+      if (anime.genre.trim().isNotEmpty) {
+        anime.genre = '';
+        clearedCount++;
+      }
+    }
+
+    if (clearedCount > 0) {
+      await _storage.saveAnimes(animes);
+    }
+
+    return clearedCount;
   }
 
   // ترجمة التصنيفات إلى العربية
