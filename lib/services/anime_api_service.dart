@@ -7,13 +7,13 @@ class AnimeApiService {
   final StorageService _storage = StorageService();
 
   Future<Map<String, dynamic>> fetchAnimeData(String animeTitle) async {
-    if (animeTitle.trim().isEmpty) return {'genres': <String>[], 'summary': '', 'episodes': 0, 'globalRating': null};
+    if (animeTitle.trim().isEmpty) return {'genres': <String>[], 'summary': '', 'episodes': 0, 'globalRating': null, 'releaseYear': null};
 
     for (int attempt = 1; attempt <= 3; attempt++) {
       try {
         const String url = 'https://graphql.anilist.co';
 
-        // 🔥 إضافة averageScore هنا
+        // 🔥 إضافة startDate هنا
         final String query = '''
           query (\$search: String) {
             Page(perPage: 1) {
@@ -22,6 +22,7 @@ class AnimeApiService {
                 description
                 episodes
                 averageScore
+                startDate { year }
               }
             }
           }
@@ -52,10 +53,11 @@ class AnimeApiService {
                 .toList();
 
             final int episodes = (media['episodes'] as int?) ?? 0;
-            
-            // 🔥 استخراج التقييم العالمي (من 100) وتحويله إلى 10
             final int? averageScore = media['averageScore'] as int?;
             final double? globalRating = averageScore != null ? averageScore / 10.0 : null;
+            
+            // 🔥 استخراج سنة النزول
+            final int? releaseYear = media['startDate']?['year'] as int?;
 
             String summary = '';
             if (!hasAdultContent) {
@@ -70,16 +72,17 @@ class AnimeApiService {
               'genres': translatedGenres, 
               'summary': summary, 
               'episodes': episodes,
-              'globalRating': globalRating, // 🔥 إرجاع التقييم
+              'globalRating': globalRating,
+              'releaseYear': releaseYear, // 🔥 إرجاع السنة
             };
           }
-          return {'genres': <String>[], 'summary': '', 'episodes': 0, 'globalRating': null};
+          return {'genres': <String>[], 'summary': '', 'episodes': 0, 'globalRating': null, 'releaseYear': null};
         }
       } catch (e) {
         if (attempt < 3) await Future.delayed(const Duration(seconds: 1));
       }
     }
-    return {'genres': <String>[], 'summary': '', 'episodes': 0, 'globalRating': null};
+    return {'genres': <String>[], 'summary': '', 'episodes': 0, 'globalRating': null, 'releaseYear': null};
   }
 
   Future<String> _translateToArabic(String text) async {
@@ -113,7 +116,8 @@ class AnimeApiService {
     for (int i = 0; i < animes.length; i++) {
       final anime = animes[i];
       
-      if (anime.genre.trim().isNotEmpty && anime.summary.trim().isNotEmpty && anime.episodes > 0 && anime.globalRating != null) continue;
+      // إذا كان الأنمي يحتوي على كل شيء، نتخطاه
+      if (anime.genre.trim().isNotEmpty && anime.summary.trim().isNotEmpty && anime.episodes > 0 && anime.globalRating != null && anime.releaseYear != null) continue;
 
       final data = await fetchAnimeData(anime.title);
       bool changed = false;
@@ -130,9 +134,13 @@ class AnimeApiService {
         anime.episodes = data['episodes'];
         changed = true;
       }
-      // 🔥 تحديث التقييم العالمي
       if (anime.globalRating == null && data['globalRating'] != null) {
         anime.globalRating = data['globalRating'];
+        changed = true;
+      }
+      // 🔥 تحديث السنة
+      if (anime.releaseYear == null && data['releaseYear'] != null) {
+        anime.releaseYear = data['releaseYear'];
         changed = true;
       }
 
