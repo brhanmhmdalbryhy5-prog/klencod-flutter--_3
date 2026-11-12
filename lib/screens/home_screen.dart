@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import '../main.dart';
 import '../models/anime.dart';
 import '../services/storage_service.dart';
+import '../services/anime_api_service.dart'; // استيراد خدمة الـ API
 import 'otaku_oracle_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -18,10 +19,12 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final StorageService storage = StorageService();
+  final AnimeApiService apiService = AnimeApiService(); // تعريف الخدمة
   final ImagePicker imagePicker = ImagePicker();
 
   List<Anime> animes = [];
   bool loading = true;
+  bool isAutoFetching = false; // لمنع تكرار العملية
 
   final List<Color> colors = const [
     Color(0xFF741C2B), Color(0xFF247BA0), Color(0xFF7651A8),
@@ -40,7 +43,14 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    loadData();
+    _initialLoad();
+  }
+
+  // دالة التحميل الأولي (تجلب البيانات ثم تبدأ التحديث التلقائي)
+  Future<void> _initialLoad() async {
+    await loadData();
+    // بعد تحميل البيانات، نبدأ البحث في الخلفية عن التصنيفات الناقصة
+    _autoFetchMissingGenres();
   }
 
   Future<void> loadData() async {
@@ -50,6 +60,40 @@ class _HomeScreenState extends State<HomeScreen> {
       animes = result;
       loading = false;
     });
+  }
+
+  // 🔥 الميزة الجديدة: التحديث التلقائي في الخلفية
+  Future<void> _autoFetchMissingGenres() async {
+    if (isAutoFetching) return;
+    
+    // البحث عن أنميات لا تحتوي على تصنيف
+    final missingGenres = animes.where((a) => a.genre.trim().isEmpty).toList();
+    if (missingGenres.isEmpty) return;
+
+    setState(() => isAutoFetching = true);
+    bool hasChanges = false;
+
+    for (var anime in missingGenres) {
+      // جلب التصنيف
+      final genres = await apiService.fetchGenres(anime.title);
+      
+      if (genres.isNotEmpty) {
+        anime.genre = genres.join('، ');
+        hasChanges = true;
+      }
+      
+      // تأخير بسيط لتجنب حظر الـ API
+      await Future.delayed(const Duration(milliseconds: 800));
+    }
+
+    if (hasChanges) {
+      await storage.saveAnimes(animes);
+      if (mounted) {
+        setState(() {}); // تحديث الواجهة لإظهار التصنيفات الجديدة
+      }
+    }
+
+    if (mounted) setState(() => isAutoFetching = false);
   }
 
   int get completed => animes.where((a) => a.status == 'مكتمل').length;
@@ -303,6 +347,11 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(saved ? 'تم حفظ الأنمي في مكتبتك' : 'تعذر حفظ البيانات.')));
+      
+      // إذا كان التصنيف فارغاً، نحاول جلبها فوراً في الخلفية
+      if (result.genre.isEmpty) {
+        _autoFetchMissingGenres();
+      }
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تعذر حفظ الصورة أو البيانات.')));
@@ -376,7 +425,11 @@ class _HomeScreenState extends State<HomeScreen> {
     final primaryColor = primaryColorNotifier.value;
 
     return RefreshIndicator(
-      onRefresh: loadData,
+      // عند السحب للتحديث، نقوم بتحميل البيانات وتشغيل البحث التلقائي أيضاً
+      onRefresh: () async {
+        await loadData();
+        await _autoFetchMissingGenres();
+      },
       child: ListView(
         padding: const EdgeInsets.fromLTRB(18, 16, 18, 28),
         children: [
@@ -531,6 +584,19 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               );
             }),
+          if (isAutoFetching) ...[
+            const SizedBox(height: 10),
+            const Center(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2)),
+                  SizedBox(width: 8),
+                  Text('جارٍ جلب التصنيفات الناقصة في الخلفية...', style: TextStyle(color: Colors.white54, fontSize: 11)),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
