@@ -1,4 +1,3 @@
-
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -30,6 +29,16 @@ class _HomeScreenState extends State<HomeScreen> {
     Color(0xFFB87928),
     Color(0xFF27866F),
     Color(0xFFB34E68),
+  ];
+
+  // قائمة التصنيفات الشاملة (نفس الموجودة في المكتبة)
+  final List<String> allGenres = const [
+    'أكشن', 'مغامرة', 'كوميدي', 'دراما', 'فانتازيا', 'رعب',
+    'إيتشي', 'ميكا', 'غموض', 'رومانسي', 'خيال علمي', 'شريحة من الحياة',
+    'رياضة', 'إثارة', 'حريم', 'مدرسي', 'شونين', 'سينين',
+    'جوسي', 'شوجو', 'قوى خارقة', 'تاريخي', 'موسيقي', 'نفسي',
+    'فامباير', 'سحر', 'حربي', 'فضاء', 'بوليسي', 'عائلي',
+    'ألعاب', 'فنون قتالية', 'ساموراي', 'شياطين', 'إيسيكاي',
   ];
 
   @override
@@ -88,10 +97,67 @@ class _HomeScreenState extends State<HomeScreen> {
     return savedFile.path;
   }
 
+  // نافذة اختيار التصنيفات المتعددة
+  Future<List<String>?> _showGenrePicker(List<String> currentGenres) async {
+    final selected = Set<String>.from(currentGenres);
+
+    return showDialog<List<String>>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF1B1F28),
+              title: const Text('اختر التصنيفات'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: allGenres.length,
+                  itemBuilder: (context, index) {
+                    final genre = allGenres[index];
+                    final isSelected = selected.contains(genre);
+                    return CheckboxListTile(
+                      title: Text(genre),
+                      value: isSelected,
+                      activeColor: const Color(0xFF741C2B),
+                      checkColor: Colors.white,
+                      onChanged: (value) {
+                        setDialogState(() {
+                          if (value == true) {
+                            selected.add(genre);
+                          } else {
+                            selected.remove(genre);
+                          }
+                        });
+                      },
+                    );
+                  },
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('إلغاء'),
+                ),
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF741C2B),
+                  ),
+                  onPressed: () => Navigator.pop(dialogContext, selected.toList()),
+                  child: const Text('تأكيد'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   Future<void> addAnime() async {
     final titleController = TextEditingController();
     final episodesController = TextEditingController();
-    final genreController = TextEditingController();
     final characterController = TextEditingController();
     final summaryController = TextEditingController();
     final memoryController = TextEditingController();
@@ -99,6 +165,7 @@ class _HomeScreenState extends State<HomeScreen> {
     String status = '';
     int rating = 0;
     XFile? selectedImage;
+    List<String> selectedGenres = [];
 
     final result = await showDialog<Anime>(
       context: context,
@@ -231,11 +298,32 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      TextField(
-                        controller: genreController,
-                        decoration: const InputDecoration(
-                          labelText: 'التصنيف (اختياري)',
-                          prefixIcon: Icon(Icons.category_outlined),
+                      // زر التصنيفات المتعددة
+                      InkWell(
+                        onTap: () async {
+                          final newGenres = await _showGenrePicker(selectedGenres);
+                          if (newGenres != null) {
+                            setDialogState(() {
+                              selectedGenres = newGenres;
+                            });
+                          }
+                        },
+                        child: InputDecorator(
+                          decoration: const InputDecoration(
+                            labelText: 'التصنيفات (اختياري)',
+                            prefixIcon: Icon(Icons.category_outlined),
+                            suffixIcon: Icon(Icons.arrow_drop_down),
+                          ),
+                          child: Text(
+                            selectedGenres.isEmpty
+                                ? 'لم يتم اختيار تصنيف'
+                                : selectedGenres.join('، '),
+                            style: TextStyle(
+                              color: selectedGenres.isEmpty
+                                  ? Colors.white38
+                                  : Colors.white,
+                            ),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -296,23 +384,43 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Text('تقييمك (اختياري)'),
                       ),
                       const SizedBox(height: 8),
+                      // أزرار التقييم المضيئة
                       Wrap(
-                        spacing: 5,
+                        spacing: 4,
                         children: List.generate(5, (index) {
                           final value = index + 1;
-
-                          return IconButton(
-                            tooltip: '$value من 5',
-                            onPressed: () {
+                          final isSelected = value <= rating;
+                          return GestureDetector(
+                            onTap: () {
                               setDialogState(() {
                                 rating = rating == value ? 0 : value;
                               });
                             },
-                            icon: Icon(
-                              Icons.star,
-                              color: value <= rating
-                                  ? const Color(0xFFFFC857)
-                                  : Colors.white24,
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: isSelected
+                                    ? const Color(0xFFFFC857).withValues(alpha: 0.2)
+                                    : Colors.transparent,
+                                boxShadow: isSelected
+                                    ? [
+                                        BoxShadow(
+                                          color: const Color(0xFFFFC857).withValues(alpha: 0.5),
+                                          blurRadius: 10,
+                                          spreadRadius: 2,
+                                        ),
+                                      ]
+                                    : [],
+                              ),
+                              child: Icon(
+                                Icons.star,
+                                color: isSelected
+                                    ? const Color(0xFFFFC857)
+                                    : Colors.white24,
+                                size: 30,
+                              ),
                             ),
                           );
                         }),
@@ -356,7 +464,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           .microsecondsSinceEpoch
                           .toString(),
                       title: titleController.text.trim(),
-                      genre: genreController.text.trim(),
+                      genre: selectedGenres.join('، '), // دمج التصنيفات
                       character: characterController.text.trim(),
                       summary: summaryController.text.trim(),
                       memory: memoryController.text.trim(),
@@ -381,7 +489,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
     titleController.dispose();
     episodesController.dispose();
-    genreController.dispose();
     characterController.dispose();
     summaryController.dispose();
     memoryController.dispose();
@@ -475,8 +582,9 @@ class _HomeScreenState extends State<HomeScreen> {
         border: Border.all(color: const Color(0xFFB34E68)),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF741C2B).withValues(alpha: 0.18),
-            blurRadius: 18,
+            color: const Color(0xFF741C2B).withValues(alpha: 0.3),
+            blurRadius: 20,
+            spreadRadius: 2,
             offset: const Offset(0, 5),
           ),
         ],
