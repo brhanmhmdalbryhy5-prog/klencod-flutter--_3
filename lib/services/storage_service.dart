@@ -1,4 +1,3 @@
-
 import 'dart:convert';
 import 'dart:io';
 
@@ -8,6 +7,7 @@ import '../models/anime.dart';
 
 class StorageService {
   static const String _storageKey = 'anime_memory_list';
+  static const String _ratingSystemKey = 'rating_system_v2'; // مفتاح لمعرفة أن الترقية تمت
 
   Future<List<Anime>> loadAnimes() async {
     final prefs = await SharedPreferences.getInstance();
@@ -20,13 +20,30 @@ class StorageService {
     try {
       final List<dynamic> decodedData = jsonDecode(savedData);
 
-      return decodedData
+      List<Anime> animes = decodedData
           .map(
             (item) => Anime.fromJson(
               Map<String, dynamic>.from(item as Map),
             ),
           )
           .toList();
+
+      // 🔥 الترقية التلقائية من 5 نجوم إلى 10 نجوم
+      final bool isUpgraded = prefs.getBool(_ratingSystemKey) ?? false;
+      if (!isUpgraded) {
+        for (var anime in animes) {
+          if (anime.rating > 0 && anime.rating <= 5) {
+            // ضرب التقييم في 2 (5 تصبح 10، 4 تصبح 8، إلخ)
+            anime.rating = anime.rating * 2;
+          }
+        }
+        // حفظ التعديلات الجديدة في الخلفية
+        await saveAnimes(animes);
+        // تسجيل أن الترقية تمت بنجاح حتى لا تتكرر
+        await prefs.setBool(_ratingSystemKey, true);
+      }
+
+      return animes;
     } catch (_) {
       return [];
     }
@@ -42,7 +59,6 @@ class StorageService {
     return prefs.setString(_storageKey, encodedData);
   }
 
-  /// حذف أنمي واحد مع محاولة حذف صورته المحلية.
   Future<bool> deleteAnime(
     List<Anime> animes,
     String animeId,
@@ -65,19 +81,15 @@ class StorageService {
     if (saved && imagePath != null && imagePath.isNotEmpty) {
       try {
         final file = File(imagePath);
-
         if (await file.exists()) {
           await file.delete();
         }
-      } catch (_) {
-        // يظل حذف الأنمي محفوظًا حتى لو تعذر حذف الصورة.
-      }
+      } catch (_) {}
     }
 
     return saved;
   }
 
-  /// التحقق من وجود صورة محفوظة للأنمي.
   Future<bool> imageExists(Anime anime) async {
     final String? imagePath = anime.imagePath;
 
