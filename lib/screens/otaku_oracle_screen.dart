@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../main.dart';
 import '../models/anime.dart';
 import '../services/storage_service.dart';
 
@@ -23,7 +24,6 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
   bool loading = true;
   String catalogMessage = '';
 
-  static const Color darkRed = Color(0xFF741C2B);
   static const Color background = Color(0xFF111318);
   static const Color panel = Color(0xFF1B1F28);
 
@@ -47,10 +47,7 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
         throw const FormatException('يجب أن تكون قاعدة البيانات قائمة JSON.');
       }
 
-      final entries = decoded
-          .whereType<Map>()
-          .map((item) => Map<String, dynamic>.from(item))
-          .toList();
+      final entries = decoded.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
 
       if (!mounted) return;
 
@@ -62,9 +59,7 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
       });
     } catch (e) {
       final saved = await storage.loadAnimes();
-
       if (!mounted) return;
-
       setState(() {
         animes = saved;
         catalog = [];
@@ -76,24 +71,15 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
     }
   }
 
-  List<Anime> get ratedAnimes =>
-      animes.where((anime) => anime.rating > 0).toList();
+  List<Anime> get ratedAnimes => animes.where((anime) => anime.rating > 0).toList();
 
   double get averageRating {
     if (ratedAnimes.isEmpty) return 0;
-
-    return ratedAnimes.fold<int>(
-          0,
-          (sum, anime) => sum + anime.rating,
-        ) /
-        ratedAnimes.length;
+    return ratedAnimes.fold<int>(0, (sum, anime) => sum + anime.rating) / ratedAnimes.length;
   }
 
-  List<Anime> get favorites =>
-      animes.where((anime) => anime.favorite).toList();
-
-  List<Anime> get highRated =>
-      ratedAnimes.where((anime) => anime.rating >= 4).toList();
+  List<Anime> get favorites => animes.where((anime) => anime.favorite).toList();
+  List<Anime> get highRated => ratedAnimes.where((anime) => anime.rating >= 4).toList();
 
   String normalize(String value) {
     return value
@@ -106,25 +92,18 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
         .replaceAll(RegExp(r'[\s\-_!.,:;؟?]+'), '');
   }
 
-  String catalogTitle(Map<String, dynamic> item) {
-    return (item['title'] ?? '').toString();
-  }
+  String catalogTitle(Map<String, dynamic> item) => (item['title'] ?? '').toString();
 
   List<String> catalogAliases(Map<String, dynamic> item) {
     final value = item['aliases'];
     if (value is! List) return [];
-
     return value.map((e) => e.toString()).toList();
   }
 
   List<String> catalogGenres(Map<String, dynamic> item) {
     final value = item['genres'];
     if (value is! List) return [];
-
-    return value
-        .map((e) => e.toString().trim())
-        .where((e) => e.isNotEmpty)
-        .toList();
+    return value.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
   }
 
   Map<String, dynamic>? findCatalogAnime(String query) {
@@ -132,49 +111,30 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
     if (q.isEmpty) return null;
 
     for (final item in catalog) {
-      final names = [
-        catalogTitle(item),
-        ...catalogAliases(item),
-      ];
-
+      final names = [catalogTitle(item), ...catalogAliases(item)];
       for (final name in names) {
         final normalizedName = normalize(name);
-        if (normalizedName.isNotEmpty && normalizedName == q) {
-          return item;
-        }
+        if (normalizedName.isNotEmpty && normalizedName == q) return item;
       }
     }
 
     for (final item in catalog) {
-      final names = [
-        catalogTitle(item),
-        ...catalogAliases(item),
-      ];
-
+      final names = [catalogTitle(item), ...catalogAliases(item)];
       for (final name in names) {
         final normalizedName = normalize(name);
-
-        if (normalizedName.length >= 4 &&
-            q.length >= 4 &&
-            (normalizedName.contains(q) || q.contains(normalizedName))) {
+        if (normalizedName.length >= 4 && q.length >= 4 && (normalizedName.contains(q) || q.contains(normalizedName))) {
           return item;
         }
       }
     }
-
     return null;
   }
 
   List<Map<String, dynamic>> searchCatalog(String query) {
     final q = normalize(query);
     if (q.isEmpty) return [];
-
     return catalog.where((item) {
-      final names = [
-        catalogTitle(item),
-        ...catalogAliases(item),
-      ];
-
+      final names = [catalogTitle(item), ...catalogAliases(item)];
       return names.any((name) => normalize(name).contains(q));
     }).take(15).toList();
   }
@@ -182,7 +142,6 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
   List<Anime> searchLibrary(String query) {
     final q = normalize(query);
     if (q.isEmpty) return [];
-
     return animes.where((anime) {
       return normalize(anime.title).contains(q) ||
           normalize(anime.genre).contains(q) ||
@@ -192,24 +151,17 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
 
   Map<String, int> get genreScores {
     final scores = <String, int>{};
-
     for (final anime in ratedAnimes) {
       final item = findCatalogAnime(anime.title);
       final genres = anime.genre.trim().isNotEmpty
-          ? anime.genre
-              .split(RegExp(r'[,،/|]'))
-              .map((g) => g.trim())
-              .where((g) => g.isNotEmpty)
-              .toList()
+          ? anime.genre.split(RegExp(r'[,،/|]')).map((g) => g.trim()).where((g) => g.isNotEmpty).toList()
           : item == null
               ? <String>[]
               : catalogGenres(item);
-
       for (final genre in genres) {
         scores[genre] = (scores[genre] ?? 0) + anime.rating;
       }
     }
-
     return scores;
   }
 
@@ -221,6 +173,7 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final primaryColor = primaryColorNotifier.value;
     final query = searchController.text.trim();
     final libraryResults = searchLibrary(query);
     final databaseResults = searchCatalog(query);
@@ -228,12 +181,9 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
     return Scaffold(
       backgroundColor: background,
       appBar: AppBar(
-        backgroundColor: darkRed,
+        backgroundColor: primaryColor,
         foregroundColor: Colors.white,
-        title: const Text(
-          'مرآة الأوتاكو',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
+        title: const Text('مرآة الأوتاكو', style: TextStyle(fontWeight: FontWeight.bold)),
         centerTitle: true,
         actions: [
           IconButton(
@@ -255,24 +205,16 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
                 children: [
                   _buildIntroduction(),
                   const SizedBox(height: 16),
-                  if (catalogMessage.isNotEmpty)
-                    _messageCard(catalogMessage),
+                  if (catalogMessage.isNotEmpty) _messageCard(catalogMessage),
                   _buildSearch(),
                   if (query.isNotEmpty) ...[
                     const SizedBox(height: 12),
-                    _buildSearchResults(
-                      libraryResults,
-                      databaseResults,
-                    ),
+                    _buildSearchResults(libraryResults, databaseResults),
                   ],
                   const SizedBox(height: 22),
                   const Text(
                     'ملامح ذوقك في الأنمي',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 12),
                   _buildStatistics(),
@@ -302,8 +244,7 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'تعمل المرآة محليًا، وتزداد دقة تحليلها كلما أضفت '
-                    'أنميات وقيّمتها.',
+                    'تعمل المرآة محليًا، وتزداد دقة تحليلها كلما أضفت أنميات وقيّمتها.',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.white60, height: 1.6),
                   ),
@@ -314,20 +255,22 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
   }
 
   Widget _buildIntroduction() {
+    final primaryColor = primaryColorNotifier.value;
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF741C2B), Color(0xFF38203E)],
+        gradient: LinearGradient(
+          colors: [primaryColor, primaryColor.withOpacity(0.4)],
           begin: Alignment.topRight,
           end: Alignment.bottomLeft,
         ),
+        border: Border.all(color: primaryColor.withOpacity(0.5), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: darkRed.withOpacity(0.3),
-            blurRadius: 15,
-            offset: const Offset(0, 5),
+            color: primaryColor.withOpacity(0.4),
+            blurRadius: 20,
+            spreadRadius: 3,
           ),
         ],
       ),
@@ -338,16 +281,11 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
           SizedBox(height: 12),
           Text(
             'ماذا تكشف اختياراتك عنك؟',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 21,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.bold),
           ),
           SizedBox(height: 8),
           Text(
-            'ابحث في قاعدة الأنمي، واكتشف تصنيفاته، وحلّل ذوقك '
-            'من خلال تقييماتك ومفضلاتك.',
+            'ابحث في قاعدة الأنمي، واكتشف تصنيفاته، وحلّل ذوقك من خلال تقييماتك ومفضلاتك.',
             style: TextStyle(color: Colors.white70, height: 1.6),
           ),
         ],
@@ -356,6 +294,7 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
   }
 
   Widget _buildSearch() {
+    final primaryColor = primaryColorNotifier.value;
     return TextField(
       controller: searchController,
       style: const TextStyle(color: Colors.white),
@@ -372,39 +311,28 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: darkRed, width: 2),
+          borderSide: BorderSide(color: primaryColor, width: 2),
         ),
       ),
     );
   }
 
-  Widget _buildSearchResults(
-    List<Anime> libraryResults,
-    List<Map<String, dynamic>> databaseResults,
-  ) {
+  Widget _buildSearchResults(List<Anime> libraryResults, List<Map<String, dynamic>> databaseResults) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: panel,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white10),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'نتائج مكتبتك',
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+          const Text('نتائج مكتبتك', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           if (libraryResults.isEmpty)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 8),
-              child: Text(
-                'لا توجد نتائج في مكتبتك.',
-                style: TextStyle(color: Colors.white54),
-              ),
+              child: Text('لا توجد نتائج في مكتبتك.', style: TextStyle(color: Colors.white54)),
             )
           else
             ...libraryResults.take(5).map((anime) {
@@ -414,13 +342,9 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
                   : entry == null
                       ? 'لم يُعرف التصنيف في القاعدة'
                       : catalogGenres(entry).join('، ');
-
               return ListTile(
                 contentPadding: EdgeInsets.zero,
-                title: Text(
-                  anime.title,
-                  style: const TextStyle(color: Colors.white),
-                ),
+                title: Text(anime.title, style: const TextStyle(color: Colors.white)),
                 subtitle: Text(
                   genres.isEmpty ? 'لم يُحدّد النوع' : genres,
                   style: const TextStyle(color: Colors.white60),
@@ -432,44 +356,26 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
               );
             }),
           const Divider(color: Colors.white12),
-          const Text(
-            'نتائج قاعدة البيانات',
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+          const Text('نتائج قاعدة البيانات', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           if (databaseResults.isEmpty)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 8),
-              child: Text(
-                'لا توجد نتائج في قاعدة البيانات الحالية.',
-                style: TextStyle(color: Colors.white54),
-              ),
+              child: Text('لا توجد نتائج في قاعدة البيانات الحالية.', style: TextStyle(color: Colors.white54)),
             )
           else
             ...databaseResults.map((item) {
               final title = catalogTitle(item);
               final genres = catalogGenres(item);
-
               return ListTile(
                 contentPadding: EdgeInsets.zero,
-                title: Text(
-                  title,
-                  style: const TextStyle(color: Colors.white),
-                ),
+                title: Text(title, style: const TextStyle(color: Colors.white)),
                 subtitle: Text(
-                  genres.isEmpty
-                      ? 'لا توجد تصنيفات مسجلة'
-                      : genres.join('، '),
+                  genres.isEmpty ? 'لا توجد تصنيفات مسجلة' : genres.join('، '),
                   style: const TextStyle(color: Colors.white60),
                 ),
                 trailing: IconButton(
                   tooltip: 'البحث في المكتبة بهذا الاسم',
-                  icon: const Icon(
-                    Icons.search,
-                    color: Colors.white70,
-                  ),
+                  icon: const Icon(Icons.search, color: Colors.white70),
                   onPressed: () {
                     searchController.text = title;
                     setState(() {});
@@ -491,51 +397,27 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
       crossAxisSpacing: 10,
       childAspectRatio: 1.7,
       children: [
-        _statCard(
-          'إجمالي الأنميات',
-          '${animes.length}',
-          Icons.movie,
-          const Color(0xFF247BA0),
-        ),
-        _statCard(
-          'الأنميات المفضلة',
-          '${favorites.length}',
-          Icons.favorite,
-          const Color(0xFFB34E68),
-        ),
-        _statCard(
-          'تقييمات مرتفعة',
-          '${highRated.length}',
-          Icons.star,
-          const Color(0xFFB87928),
-        ),
-        _statCard(
-          'متوسط تقييمك',
-          ratedAnimes.isEmpty ? '—' : averageRating.toStringAsFixed(1),
-          Icons.insights,
-          const Color(0xFF27866F),
-        ),
+        _statCard('إجمالي الأنميات', '${animes.length}', Icons.movie, const Color(0xFF247BA0)),
+        _statCard('الأنميات المفضلة', '${favorites.length}', Icons.favorite, const Color(0xFFB34E68)),
+        _statCard('تقييمات مرتفعة', '${highRated.length}', Icons.star, const Color(0xFFB87928)),
+        _statCard('متوسط تقييمك', ratedAnimes.isEmpty ? '—' : averageRating.toStringAsFixed(1), Icons.insights, const Color(0xFF27866F)),
       ],
     );
   }
 
-  Widget _statCard(
-    String title,
-    String value,
-    IconData icon,
-    Color color,
-  ) {
+  Widget _statCard(String title, String value, IconData icon, Color color) {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: panel,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: color.withOpacity(0.45)),
+        border: Border.all(color: color.withOpacity(0.5), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: color.withOpacity(0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
+            color: color.withOpacity(0.35),
+            blurRadius: 15,
+            spreadRadius: 2,
+            offset: const Offset(0, 0),
           ),
         ],
       ),
@@ -550,18 +432,11 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
               children: [
                 Text(
                   value,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
                 ),
                 Text(
                   title,
-                  style: const TextStyle(
-                    color: Colors.white60,
-                    fontSize: 11,
-                  ),
+                  style: const TextStyle(color: Colors.white60, fontSize: 11),
                 ),
               ],
             ),
@@ -573,17 +448,12 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
 
   Widget _buildTasteAnalysis() {
     String message;
-
     if (animes.isEmpty) {
-      message =
-          'أضف أنميات إلى مكتبتك وقيّمها حتى تبدأ المرآة بتحليل ذوقك.';
+      message = 'أضف أنميات إلى مكتبتك وقيّمها حتى تبدأ المرآة بتحليل ذوقك.';
     } else if (ratedAnimes.isEmpty) {
-      message =
-          'لديك ${animes.length} أنمي، لكنك لم تقيّم أيًّا منها بعد.';
+      message = 'لديك ${animes.length} أنمي، لكنك لم تقيّم أيًّا منها بعد.';
     } else {
-      message =
-          'قيّمت ${ratedAnimes.length} أنمي بمتوسط '
-          '${averageRating.toStringAsFixed(1)} من 5. '
+      message = 'قيّمت ${ratedAnimes.length} أنمي بمتوسط ${averageRating.toStringAsFixed(1)} من 5. '
           'لديك ${highRated.length} أنمي بتقييم 4 أو 5.';
     }
 
@@ -603,19 +473,13 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
                     value: averageRating / 5,
                     minHeight: 9,
                     backgroundColor: Colors.white12,
-                    valueColor: const AlwaysStoppedAnimation<Color>(
-                      Color(0xFFB87928),
-                    ),
+                    valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFB87928)),
                   ),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'مستوى تقييمك: '
-                  '${((averageRating / 5) * 100).round()}%',
-                  style: const TextStyle(
-                    color: Colors.white54,
-                    fontSize: 12,
-                  ),
+                  'مستوى تقييمك: ${((averageRating / 5) * 100).round()}%',
+                  style: const TextStyle(color: Colors.white54, fontSize: 12),
                 ),
               ],
             ),
@@ -623,14 +487,15 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
   }
 
   Widget _buildGenreAnalysis() {
-    final scores = genreScores.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
+    final primaryColor = primaryColorNotifier.value;
+    final scores = genreScores.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: panel,
         borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white10),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -641,26 +506,20 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
               SizedBox(width: 8),
               Text(
                 'الأنواع الأقرب إلى ذوقك',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 17,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold),
               ),
             ],
           ),
           const SizedBox(height: 12),
           if (scores.isEmpty)
             const Text(
-              'لا توجد بيانات كافية بعد. أضف تقييمات لأنميات موجودة '
-              'في القاعدة أو اكتب تصنيفاتها في مكتبتك.',
+              'لا توجد بيانات كافية بعد. أضف تقييمات لأنميات موجودة في القاعدة أو اكتب تصنيفاتها في مكتبتك.',
               style: TextStyle(color: Colors.white60, height: 1.6),
             )
           else
             ...scores.take(5).map((entry) {
               final maximum = scores.first.value;
               final progress = maximum == 0 ? 0.0 : entry.value / maximum;
-
               return Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Column(
@@ -668,16 +527,8 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
                   children: [
                     Row(
                       children: [
-                        Expanded(
-                          child: Text(
-                            entry.key,
-                            style: const TextStyle(color: Colors.white70),
-                          ),
-                        ),
-                        Text(
-                          '${entry.value}',
-                          style: const TextStyle(color: Colors.white54),
-                        ),
+                        Expanded(child: Text(entry.key, style: const TextStyle(color: Colors.white70))),
+                        Text('${entry.value}', style: const TextStyle(color: Colors.white54)),
                       ],
                     ),
                     const SizedBox(height: 6),
@@ -687,9 +538,7 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
                         value: progress,
                         minHeight: 7,
                         backgroundColor: Colors.white12,
-                        valueColor: const AlwaysStoppedAnimation<Color>(
-                          Color(0xFF741C2B),
-                        ),
+                        valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
                       ),
                     ),
                   ],
@@ -707,11 +556,13 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
     required List<Anime> items,
     required String emptyMessage,
   }) {
+    final primaryColor = primaryColorNotifier.value;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: panel,
         borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white10),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -723,48 +574,32 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
               Expanded(
                 child: Text(
                   title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 17,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 12),
           if (items.isEmpty)
-            Text(
-              emptyMessage,
-              style: const TextStyle(color: Colors.white54, height: 1.6),
-            )
+            Text(emptyMessage, style: const TextStyle(color: Colors.white54, height: 1.6))
           else
             ...items.take(5).map(
                   (anime) => ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: CircleAvatar(
-                      backgroundColor: darkRed,
+                      backgroundColor: primaryColor,
                       child: Text(
                         anime.rating > 0 ? '${anime.rating}★' : '★',
                         style: const TextStyle(color: Colors.white),
                       ),
                     ),
-                    title: Text(
-                      anime.title,
-                      style: const TextStyle(color: Colors.white),
-                    ),
+                    title: Text(anime.title, style: const TextStyle(color: Colors.white)),
                     subtitle: Text(
                       anime.genre.isNotEmpty
                           ? anime.genre
-                          : (catalogGenres(
-                              findCatalogAnime(anime.title) ??
-                                  <String, dynamic>{},
-                            ).join('، ').isEmpty
+                          : (catalogGenres(findCatalogAnime(anime.title) ?? <String, dynamic>{}).join('، ').isEmpty
                               ? 'لم يُحدّد النوع'
-                              : catalogGenres(
-                                  findCatalogAnime(anime.title) ??
-                                      <String, dynamic>{},
-                                ).join('، ')),
+                              : catalogGenres(findCatalogAnime(anime.title) ?? <String, dynamic>{}).join('، ')),
                       style: const TextStyle(color: Colors.white54),
                     ),
                   ),
@@ -797,20 +632,13 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
                 const SizedBox(width: 8),
                 Text(
                   title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                 ),
               ],
             ),
             const SizedBox(height: 12),
           ],
-          Text(
-            message,
-            style: const TextStyle(color: Colors.white70, height: 1.8),
-          ),
+          Text(message, style: const TextStyle(color: Colors.white70, height: 1.8)),
           if (extra != null) extra,
         ],
       ),
