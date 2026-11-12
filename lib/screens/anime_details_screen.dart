@@ -148,13 +148,15 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     final String summary = data['summary'];
     final int episodes = data['episodes'];
     final double? globalRating = data['globalRating'];
+    final int? releaseYear = data['releaseYear']; // 🔥
 
-    if (genres.isNotEmpty || summary.isNotEmpty || episodes > 0 || globalRating != null) {
+    if (genres.isNotEmpty || summary.isNotEmpty || episodes > 0 || globalRating != null || releaseYear != null) {
       setState(() {
         if (genres.isNotEmpty) widget.anime.genre = genres.join('، ');
         if (summary.isNotEmpty) widget.anime.summary = summary;
         if (episodes > 0) widget.anime.episodes = episodes;
         if (globalRating != null) widget.anime.globalRating = globalRating;
+        if (releaseYear != null) widget.anime.releaseYear = releaseYear; // 🔥
       });
       final allAnimes = await storage.loadAnimes();
       final index = allAnimes.indexWhere((a) => a.id == widget.anime.id);
@@ -168,7 +170,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
       if (genres.isNotEmpty) msg += 'التصنيفات ';
       if (summary.isNotEmpty) msg += 'والقصة ';
       if (episodes > 0) msg += 'والحلقات ';
-      if (globalRating != null) msg += 'والتقييم العالمي ';
+      if (globalRating != null) msg += 'والتقييم ';
+      if (releaseYear != null) msg += 'والسنة ';
       
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     } else {
@@ -297,6 +300,14 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                   avatar: const Icon(Icons.bookmark_outline, size: 18),
                   label: Text(anime.status),
                 ),
+              // 🔥 عرض السنة هنا
+              if (anime.releaseYear != null)
+                Chip(
+                  avatar: const Icon(Icons.calendar_today, size: 16),
+                  label: Text('${anime.releaseYear}'),
+                  backgroundColor: primaryColor.withOpacity(0.2),
+                  side: BorderSide(color: primaryColor.withOpacity(0.5)),
+                ),
               ...genres.map((genre) => Chip(
                     avatar: const Icon(Icons.category_outlined, size: 18),
                     label: Text(genre),
@@ -315,7 +326,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
               ),
             ],
           ),
-          // 🔥 عرض التقييم العالمي
           if (anime.globalRating != null) ...[
             const SizedBox(height: 12),
             Row(
