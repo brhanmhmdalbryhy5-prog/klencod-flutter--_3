@@ -83,7 +83,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  // 🔥 دالة التحديث التلقائي مع رسالة مفصلة (تم تعديل اسم الدالة هنا)
   Future<void> _autoUpdateGenres() async {
     if (isUpdatingGenres) return;
 
@@ -93,7 +92,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         backgroundColor: const Color(0xFF1B1F28),
         title: const Text('تحديث البيانات تلقائياً'),
         content: const Text(
-          'سيقوم التطبيق بالبحث في الإنترنت عن تصنيفات وقصص الأنميات التي لا تحتوي عليها.\n\n'
+          'سيقوم التطبيق بالبحث في الإنترنت عن تصنيفات، قصص، حلقات، وتقييمات الأنميات التي لا تحتوي عليها.\n\n'
           'قد تستغرق العملية بعض الوقت حسب عدد الأنميات. هل تريد المتابعة؟',
         ),
         actions: [
@@ -111,7 +110,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     setState(() => isUpdatingGenres = true);
 
-    // 🔥 استدعاء الدالة بالاسم الجديد
     final result = await apiService.autoUpdateLibraryData();
 
     if (!mounted) return;
@@ -122,11 +120,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     
     String message;
     if (updated == 0 && failed == 0) {
-      message = 'كل الأنميات لديها تصنيفات وقصص بالفعل! لا حاجة للتحديث.';
+      message = 'كل الأنميات لديها بيانات بالفعل! لا حاجة للتحديث.';
     } else {
       message = 'تم تحديث $updated أنمي بنجاح.\n'
           'فشل تحديث $failed أنمي.\n\n'
-          'ملاحظة: فشل التحديث غالباً بسبب أن اسم الأنمي مكتوب بالعربية. يرجى تعديل الأسماء إلى الإنجليزية أو إضافة البيانات يدوياً.';
+          'ملاحظة: فشل التحديث غالباً بسبب أن اسم الأنمي مكتوب بالعربية. يرجى تعديل الأسماء إلى الإنجليزية.';
     }
 
     await showDialog<void>(
@@ -142,7 +140,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // 🔥 دالة مسح جميع التصنيفات
   Future<void> _clearAllGenres() async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -292,8 +289,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _settingsTile(
           icon: Icons.sync_alt,
           color: const Color(0xFF3A91B5),
-          title: 'تحديث التصنيفات والقصة',
-          subtitle: 'جلب البيانات من الإنترنت للأنميات الناقصة',
+          title: 'تحديث البيانات تلقائياً',
+          subtitle: 'جلب التصنيفات، القصص، الحلقات، والتقييمات من الإنترنت',
           trailing: isUpdatingGenres
               ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
               : const Icon(Icons.chevron_left, color: Colors.white38),
