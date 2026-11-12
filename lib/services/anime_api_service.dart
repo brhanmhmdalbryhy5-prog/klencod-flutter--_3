@@ -44,18 +44,18 @@ class AnimeApiService {
             // 1. استخراج التصنيفات الأصلية (بالإنجليزية)
             final List<String> rawGenres = (media['genres'] as List?)?.map((e) => e.toString()).toList() ?? [];
             
-            // 2. فحص هل يوجد Romance أو Ecchi (لبحث القصة)
-            bool hasRomanceOrEcchi = rawGenres.any((g) => g == 'Romance' || g == 'Ecchi');
+            // 🔥 2. الفلتر الجديد: نبحث فقط عن Ecchi أو Hentai
+            bool hasAdultContent = rawGenres.any((g) => g == 'Ecchi' || g == 'Hentai');
 
-            // 3. فلترة التصنيفات (حذف Ecchi وترجمة الباقي)
+            // 3. فلترة التصنيفات: نحذف Ecchi و Hentai ونترك الباقي (بما فيه Romance)
             List<String> translatedGenres = rawGenres
-                .where((g) => g != 'Ecchi') // حذف تصنيف Ecchi
+                .where((g) => g != 'Ecchi' && g != 'Hentai') 
                 .map((g) => _translateGenre(g))
                 .toList();
 
-            // 4. معالجة القصة (إذا كان فيه رومانسي أو Ecchi، لا نجلب القصة)
+            // 4. معالجة القصة: إذا كان فيه Ecchi أو Hentai فقط لا نجلب القصة
             String summary = '';
-            if (!hasRomanceOrEcchi) {
+            if (!hasAdultContent) { // سيجلب القصة حتى لو كان رومانسي
               summary = media['description']?.toString() ?? '';
               // تنظيف النص من أكواد HTML
               summary = summary.replaceAll(RegExp(r'<[^>]*>'), ''); 
