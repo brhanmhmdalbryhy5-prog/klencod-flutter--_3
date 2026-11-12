@@ -6,54 +6,74 @@ import 'storage_service.dart';
 class AnimeApiService {
   final StorageService _storage = StorageService();
 
-  // البحث عن أنمي بالاسم في AniList وإرجاع قائمة التصنيفات
-  Future<List<String>> fetchGenres(String animeTitle) async {
-    if (animeTitle.trim().isEmpty) return [];
+  // البحث عن أنمي بالاسم في AniList وجلب التصنيفات والقصة (مع الفلاتر)
+  Future<Map<String, dynamic>> fetchAnimeData(String animeTitle) async {
+    if (animeTitle.trim().isEmpty) return {'genres': <String>[], 'summary': ''};
 
-    try {
-      // AniList يستخدم GraphQL (طلب POST)
-      const String url = 'https://graphql.anilist.co';
-      
-      // استعلام GraphQL للبحث عن الأنمي وجلب التصنيفات
-      final String query = '''
-        query (\$search: String) {
-          Page(perPage: 1) {
-            media(search: \$search, type: ANIME) {
-              genres
+    for (int attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const String url = 'https://graphql.anilist.co';
+        
+        final String query = '''
+          query (\$search: String) {
+            Page(perPage: 1) {
+              media(search: \$search, type: ANIME) {
+                genres
+                description
+              }
             }
           }
-        }
-      ''';
+        ''';
 
-      final response = await http.post(
-        Uri.parse(url),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'query': query,
-          'variables': {'search': animeTitle.trim()},
-        }),
-      ).timeout(const Duration(seconds: 10)); // وقت انتظار 10 ثوانٍ
+        final response = await http.post(
+          Uri.parse(url),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'query': query,
+            'variables': {'search': animeTitle.trim()},
+          }),
+        ).timeout(const Duration(seconds: 10));
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final mediaList = data['data']?['Page']?['media'] as List?;
-        
-        if (mediaList != null && mediaList.isNotEmpty) {
-          final genres = mediaList[0]['genres'] as List?;
-          if (genres != null) {
-            return genres.map((g) => _translateGenre(g.toString())).toList();
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          final mediaList = data['data']?['Page']?['media'] as List?;
+          
+          if (mediaList != null && mediaList.isNotEmpty) {
+            final media = mediaList[0];
+            
+            // 1. استخراج التصنيفات الأصلية (بالإنجليزية)
+            final List<String> rawGenres = (media['genres'] as List?)?.map((e) => e.toString()).toList() ?? [];
+            
+            // 2. فحص هل يوجد Romance أو Ecchi (لبحث القصة)
+            bool hasRomanceOrEcchi = rawGenres.any((g) => g == 'Romance' || g == 'Ecchi');
+
+            // 3. فلترة التصنيفات (حذف Ecchi وترجمة الباقي)
+            List<String> translatedGenres = rawGenres
+                .where((g) => g != 'Ecchi') // حذف تصنيف Ecchi
+                .map((g) => _translateGenre(g))
+                .toList();
+
+            // 4. معالجة القصة (إذا كان فيه رومانسي أو Ecchi، لا نجلب القصة)
+            String summary = '';
+            if (!hasRomanceOrEcchi) {
+              summary = media['description']?.toString() ?? '';
+              // تنظيف النص من أكواد HTML
+              summary = summary.replaceAll(RegExp(r'<[^>]*>'), ''); 
+            }
+
+            return {'genres': translatedGenres, 'summary': summary};
           }
+          return {'genres': <String>[], 'summary': ''};
         }
+      } catch (e) {
+        if (attempt < 3) await Future.delayed(const Duration(seconds: 1));
       }
-      return [];
-    } catch (e) {
-      // في حال حدوث خطأ (Timeout، انقطاع إنترنت، إلخ) نرجع قائمة فارغة
-      return [];
     }
+    return {'genres': <String>[], 'summary': ''};
   }
 
-  // دالة لتحديث جميع الأنميات التي لا تحتوي على تصنيف
-  Future<Map<String, int>> autoUpdateLibraryGenres() async {
+  // دالة لتحديث جميع الأنميات التي لا تحتوي على تصنيف أو قصة
+  Future<Map<String, int>> autoUpdateLibraryData() async {
     final animes = await _storage.loadAnimes();
     int updatedCount = 0;
     int failedCount = 0;
@@ -61,18 +81,28 @@ class AnimeApiService {
     for (int i = 0; i < animes.length; i++) {
       final anime = animes[i];
       
-      if (anime.genre.trim().isNotEmpty) continue;
+      if (anime.genre.trim().isNotEmpty && anime.summary.trim().isNotEmpty) continue;
 
-      final genres = await fetchGenres(anime.title);
+      final data = await fetchAnimeData(anime.title);
+      final List<String> genres = data['genres'];
+      final String summary = data['summary'];
 
-      if (genres.isNotEmpty) {
+      bool changed = false;
+      if (anime.genre.trim().isEmpty && genres.isNotEmpty) {
         anime.genre = genres.join('، ');
+        changed = true;
+      }
+      if (anime.summary.trim().isEmpty && summary.isNotEmpty) {
+        anime.summary = summary;
+        changed = true;
+      }
+
+      if (changed) {
         updatedCount++;
       } else {
         failedCount++;
       }
 
-      // تأخير بسيط بين الطلبات
       await Future.delayed(const Duration(milliseconds: 500));
     }
 
@@ -102,7 +132,6 @@ class AnimeApiService {
     return clearedCount;
   }
 
-  // ترجمة التصنيفات إلى العربية
   String _translateGenre(String englishGenre) {
     final map = {
       'Action': 'أكشن', 'Adventure': 'مغامرة', 'Comedy': 'كوميدي',
