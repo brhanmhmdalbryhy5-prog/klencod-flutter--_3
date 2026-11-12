@@ -24,7 +24,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
   static const String _sortKey = 'anime_library_sort';
   static const String _viewKey = 'anime_library_view';
 
-  // قائمة التصنيفات الشاملة
   final List<String> allGenres = const [
     'أكشن', 'مغامرة', 'كوميدي', 'دراما', 'فانتازيا', 'رعب',
     'إيتشي', 'ميكا', 'غموض', 'رومانسي', 'خيال علمي', 'شريحة من الحياة',
@@ -217,7 +216,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       width: compact ? double.infinity : 76,
       height: compact ? 160 : 96,
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.2),
+        color: color.withOpacity(0.2),
         borderRadius: BorderRadius.circular(13),
       ),
       child: Icon(
@@ -329,7 +328,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
-  // نافذة اختيار التصنيفات المتعددة
   Future<List<String>?> _showGenrePicker(List<String> currentGenres) async {
     final selected = Set<String>.from(currentGenres);
 
@@ -401,7 +399,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     String? imagePath = anime.imagePath;
     bool imageChanged = false;
     
-    // تحويل حقل التصنيف النصي إلى قائمة
     List<String> selectedGenres = anime.genre
         .split('،')
         .map((e) => e.trim())
@@ -482,7 +479,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
                           ),
                         ),
                         const SizedBox(height: 10),
-                        // زر التصنيفات المتعددة
                         InkWell(
                           onTap: () async {
                             final newGenres = await _showGenrePicker(selectedGenres);
@@ -557,7 +553,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
                           alignment: Alignment.centerRight,
                           child: Text('التقييم (اختياري)'),
                         ),
-                        // أزرار التقييم المضيئة
                         Wrap(
                           spacing: 4,
                           children: List.generate(5, (index) {
@@ -575,12 +570,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
                                   color: isSelected
-                                      ? const Color(0xFFFFC857).withValues(alpha: 0.2)
+                                      ? const Color(0xFFFFC857).withOpacity(0.2)
                                       : Colors.transparent,
                                   boxShadow: isSelected
                                       ? [
                                           BoxShadow(
-                                            color: const Color(0xFFFFC857).withValues(alpha: 0.5),
+                                            color: const Color(0xFFFFC857).withOpacity(0.5),
                                             blurRadius: 10,
                                             spreadRadius: 2,
                                           ),
@@ -651,7 +646,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
       anime
         ..title = titleController.text.trim()
-        ..genre = selectedGenres.join('، ') // دمج التصنيفات بفاصلة عربية
+        ..genre = selectedGenres.join('، ')
         ..character = characterController.text.trim()
         ..episodes = int.tryParse(episodesController.text) ?? 0
         ..status = status
