@@ -8,7 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../main.dart';
 import '../models/anime.dart';
 import '../services/storage_service.dart';
-import '../services/anime_api_service.dart'; // استيراد الخدمة
+import '../services/anime_api_service.dart';
 import 'anime_details_screen.dart';
 
 class LibraryScreen extends StatefulWidget {
@@ -20,7 +20,7 @@ class LibraryScreen extends StatefulWidget {
 
 class _LibraryScreenState extends State<LibraryScreen> {
   final StorageService storage = StorageService();
-  final AnimeApiService apiService = AnimeApiService(); // تعريف الخدمة
+  final AnimeApiService apiService = AnimeApiService();
   final TextEditingController searchController = TextEditingController();
   final ImagePicker imagePicker = ImagePicker();
 
@@ -37,7 +37,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
   ];
 
   List<Anime> animes = [];
-  String selectedStatus = 'الكل';
+  String selectedStatus = 'الكل'; // القيمة الافتراضية
   String searchText = '';
   String sortMode = 'newest';
   bool gridView = false;
@@ -92,11 +92,25 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
+  // 🔥 دالة الفلترة المعدلة
   List<Anime> get filteredAnimes {
     final query = searchText.trim().toLowerCase();
     final result = animes.where((anime) {
       final matchesSearch = anime.title.toLowerCase().contains(query) || anime.genre.toLowerCase().contains(query) || anime.character.toLowerCase().contains(query);
-      final matchesStatus = selectedStatus == 'الكل' || (selectedStatus == 'المفضلة' ? anime.favorite : anime.status == selectedStatus);
+      
+      bool matchesStatus = false;
+      if (selectedStatus == 'الكل') {
+        matchesStatus = true;
+      } else if (selectedStatus == 'المفضلة') {
+        matchesStatus = anime.favorite;
+      } else if (selectedStatus == 'جُلب تلقائياً') {
+        // إذا كان التصنيف موجوداً، ويحتوي على فاصلة، ولا يحتوي على مسافة بعد الفاصلة
+        // (لأن البحث التلقائي يدمجها بـ '، ' أو '،')
+        matchesStatus = anime.genre.isNotEmpty && !anime.genre.contains('، ');
+      } else {
+        matchesStatus = anime.status == selectedStatus;
+      }
+
       return matchesSearch && matchesStatus;
     }).toList();
 
@@ -209,7 +223,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
-  // 🔥 الميزة الجديدة: جلب التصنيف يدوياً
   Future<void> _fetchGenresManually(Anime anime) async {
     if (anime.title.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -218,7 +231,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
       return;
     }
 
-    // عرض مؤشر تحميل
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -228,11 +240,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
     final genres = await apiService.fetchGenres(anime.title);
 
     if (!mounted) return;
-    Navigator.pop(context); // إغلاق مؤشر التحميل
+    Navigator.pop(context);
 
     if (genres.isNotEmpty) {
       setState(() {
-        anime.genre = genres.join('، ');
+        anime.genre = genres.join('، '); // دمج بمسافة للتمييز (اختياري)
       });
       await storage.saveAnimes(animes);
       if (!mounted) return;
@@ -557,12 +569,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
           case 'edit': await editAnime(anime); break;
           case 'favorite': await toggleFavorite(anime); break;
           case 'delete': await deleteAnime(anime); break;
-          case 'fetch_genres': await _fetchGenresManually(anime); break; // 🔥 خيار جلب التصنيف
+          case 'fetch_genres': await _fetchGenresManually(anime); break;
         }
       },
       itemBuilder: (context) => [
         const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit_outlined), SizedBox(width: 10), Text('تعديل بيانات الأنمي')])),
-        const PopupMenuItem(value: 'fetch_genres', child: Row(children: [Icon(Icons.cloud_download_outlined, color: Colors.cyan), SizedBox(width: 10), Text('جلب التصنيف من الإنترنت')])), // 🔥 العنصر الجديد
+        const PopupMenuItem(value: 'fetch_genres', child: Row(children: [Icon(Icons.cloud_download_outlined, color: Colors.cyan), SizedBox(width: 10), Text('جلب التصنيف من الإنترنت')])),
         PopupMenuItem(value: 'favorite', child: Row(children: [const Icon(Icons.favorite_border, color: Color(0xFFFF5364)), const SizedBox(width: 10), Text(anime.favorite ? 'إزالة من المفضلة' : 'إضافة إلى المفضلة')])),
         const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete_outline, color: Color(0xFFFF6B72)), SizedBox(width: 10), Text('حذف الأنمي')])),
       ],
@@ -631,7 +643,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
             height: 42,
             child: ListView(
               scrollDirection: Axis.horizontal,
-              children: ['الكل', 'مكتمل', 'أتابعه', 'مخطط له', 'متوقف', 'المفضلة'].map((status) {
+              children: [
+                'الكل', 'مكتمل', 'أتابعه', 'مخطط له', 'متوقف', 'المفضلة', 'جُلب تلقائياً' // 🔥 تمت إضافة الفلتر الجديد
+              ].map((status) {
                 final selected = selectedStatus == status;
                 return Padding(
                   padding: const EdgeInsets.only(left: 8),
