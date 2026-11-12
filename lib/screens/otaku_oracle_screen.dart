@@ -1,4 +1,3 @@
-
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -25,8 +24,8 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
   String catalogMessage = '';
 
   static const Color darkRed = Color(0xFF741C2B);
-  static const Color background = Color(0xFF101114);
-  static const Color panel = Color(0xFF1B1D22);
+  static const Color background = Color(0xFF111318); // توحيد اللون
+  static const Color panel = Color(0xFF1B1F28); // توحيد اللون
 
   @override
   void initState() {
@@ -236,6 +235,16 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         centerTitle: true,
+        actions: [
+          IconButton(
+            tooltip: 'تحديث التحليل',
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              setState(() => loading = true);
+              loadData();
+            },
+          ),
+        ],
       ),
       body: loading
           ? const Center(child: CircularProgressIndicator())
@@ -314,6 +323,13 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
           begin: Alignment.topRight,
           end: Alignment.bottomLeft,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: darkRed.withValues(alpha: 0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+          ),
+        ],
       ),
       child: const Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -353,6 +369,10 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: darkRed, width: 2),
         ),
       ),
     );
@@ -511,6 +531,13 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
         color: panel,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: color.withValues(alpha: 0.45)),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: Row(
         children: [
@@ -758,6 +785,7 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
       decoration: BoxDecoration(
         color: panel,
         borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white10),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
