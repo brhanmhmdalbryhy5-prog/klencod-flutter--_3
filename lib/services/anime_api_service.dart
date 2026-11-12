@@ -1,7 +1,11 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../models/anime.dart';
+import 'storage_service.dart';
 
 class AnimeApiService {
+  final StorageService _storage = StorageService();
+
   // البحث عن أنمي بالاسم وإرجاع قائمة التصنيفات
   Future<List<String>> fetchGenres(String animeTitle) async {
     if (animeTitle.trim().isEmpty) return [];
@@ -19,54 +23,65 @@ class AnimeApiService {
           final genres = anime['genres'] as List?;
           
           if (genres != null) {
-            // تحويل التصنيفات الإنجليزية إلى عربية (أو نتركها إنجليزية)
             return genres.map((g) => _translateGenre(g['name'])).toList();
           }
         }
       }
       return [];
     } catch (e) {
-      // في حال فشل الاتصال، نرجع قائمة فارغة
       return [];
     }
   }
 
-  // دالة بسيطة لترجمة التصنيفات الشائعة إلى العربية
+  // دالة لتحديث جميع الأنميات التي لا تحتوي على تصنيف
+  Future<Map<String, int>> autoUpdateLibraryGenres() async {
+    final animes = await _storage.loadAnimes();
+    int updatedCount = 0;
+    int failedCount = 0;
+
+    for (int i = 0; i < animes.length; i++) {
+      final anime = animes[i];
+      
+      // إذا كان الأنمي يحتوي بالفعل على تصنيف، نتخطاه
+      if (anime.genre.trim().isNotEmpty) continue;
+
+      // جلب التصنيفات من الإنترنت
+      final genres = await fetchGenres(anime.title);
+
+      if (genres.isNotEmpty) {
+        anime.genre = genres.join('، ');
+        updatedCount++;
+      } else {
+        failedCount++;
+      }
+
+      // تأخير بسيط جداً (500 مللي ثانية) بين كل طلب لتجنب حظر الـ API
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
+
+    // حفظ التغييرات
+    if (updatedCount > 0) {
+      await _storage.saveAnimes(animes);
+    }
+
+    return {'updated': updatedCount, 'failed': failedCount};
+  }
+
+  // ترجمة التصنيفات إلى العربية
   String _translateGenre(String englishGenre) {
     final map = {
-      'Action': 'أكشن',
-      'Adventure': 'مغامرة',
-      'Comedy': 'كوميدي',
-      'Drama': 'دراما',
-      'Fantasy': 'فانتازيا',
-      'Horror': 'رعب',
-      'Mystery': 'غموض',
-      'Romance': 'رومانسي',
-      'Sci-Fi': 'خيال علمي',
-      'Slice of Life': 'شريحة من الحياة',
-      'Sports': 'رياضة',
-      'Supernatural': 'قوى خارقة',
-      'Thriller': 'إثارة',
-      'Mecha': 'ميكا',
-      'Music': 'موسيقي',
-      'Psychological': 'نفسي',
-      'School': 'مدرسي',
-      'Shounen': 'شونين',
-      'Seinen': 'سينين',
-      'Shoujo': 'شوجو',
-      'Josei': 'جوسي',
-      'Isekai': 'إيسيكاي',
-      'Historical': 'تاريخي',
-      'Military': 'حربي',
-      'Space': 'فضاء',
-      'Police': 'بوليسي',
-      'Game': 'ألعاب',
-      'Martial Arts': 'فنون قتالية',
-      'Samurai': 'ساموراي',
-      'Demons': 'شياطين',
-      'Vampire': 'فامباير',
-      'Magic': 'سحر',
+      'Action': 'أكشن', 'Adventure': 'مغامرة', 'Comedy': 'كوميدي',
+      'Drama': 'دراما', 'Fantasy': 'فانتازيا', 'Horror': 'رعب',
+      'Mystery': 'غموض', 'Romance': 'رومانسي', 'Sci-Fi': 'خيال علمي',
+      'Slice of Life': 'شريحة من الحياة', 'Sports': 'رياضة',
+      'Supernatural': 'قوى خارقة', 'Thriller': 'إثارة', 'Mecha': 'ميكا',
+      'Music': 'موسيقي', 'Psychological': 'نفسي', 'School': 'مدرسي',
+      'Shounen': 'شونين', 'Seinen': 'سينين', 'Shoujo': 'شوجو',
+      'Josei': 'جوسي', 'Isekai': 'إيسيكاي', 'Historical': 'تاريخي',
+      'Military': 'حربي', 'Space': 'فضاء', 'Police': 'بوليسي',
+      'Game': 'ألعاب', 'Martial Arts': 'فنون قتالية', 'Samurai': 'ساموراي',
+      'Demons': 'شياطين', 'Vampire': 'فامباير', 'Magic': 'سحر',
     };
-    return map[englishGenre] ?? englishGenre; // إذا لم نجد ترجمة، نرجع الاسم الإنجليزي
+    return map[englishGenre] ?? englishGenre;
   }
 }
