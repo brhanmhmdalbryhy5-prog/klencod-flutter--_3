@@ -7,8 +7,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../main.dart';
 import '../models/anime.dart';
-import '../services/anime_api_service.dart'; // استيراد الخدمة
-import '../services/storage_service.dart'; // نحتاجه للحفظ
+import '../services/anime_api_service.dart';
+import '../services/storage_service.dart';
 
 class AnimeDetailsScreen extends StatefulWidget {
   final Anime anime;
@@ -27,8 +27,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
   static const Color panel = Color(0xFF1B1F28);
 
   final ImagePicker _picker = ImagePicker();
-  final AnimeApiService apiService = AnimeApiService(); // تعريف الخدمة
-  final StorageService storage = StorageService(); // تعريف التخزين
+  final AnimeApiService apiService = AnimeApiService();
+  final StorageService storage = StorageService();
 
   String? _characterImagePath;
   bool _loading = true;
@@ -125,8 +125,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     );
   }
 
-  // 🔥 الميزة الجديدة: جلب التصنيف يدوياً من شاشة التفاصيل
-  Future<void> _fetchGenresManually() async {
+  // 🔥 تم تعديل الدالة لتجلب التصنيف والقصة
+  Future<void> _fetchDataManually() async {
     if (widget.anime.title.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('الأنمي لا يملك اسماً، لا يمكن البحث عنه.')),
@@ -140,16 +140,19 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
       builder: (_) => const Center(child: CircularProgressIndicator()),
     );
 
-    final genres = await apiService.fetchGenres(widget.anime.title);
+    final data = await apiService.fetchAnimeData(widget.anime.title);
 
     if (!mounted) return;
     Navigator.pop(context);
 
-    if (genres.isNotEmpty) {
+    final List<String> genres = data['genres'];
+    final String summary = data['summary'];
+
+    if (genres.isNotEmpty || summary.isNotEmpty) {
       setState(() {
-        widget.anime.genre = genres.join('، ');
+        if (genres.isNotEmpty) widget.anime.genre = genres.join('، ');
+        if (summary.isNotEmpty) widget.anime.summary = summary;
       });
-      // نحتاج لجلب القائمة كاملة وتحديث هذا الأنمي فيها
       final allAnimes = await storage.loadAnimes();
       final index = allAnimes.indexWhere((a) => a.id == widget.anime.id);
       if (index != -1) {
@@ -158,12 +161,13 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
       }
       
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('تم جلب التصنيف: ${genres.join('، ')}')),
-      );
+      String msg = 'تم جلب ';
+      if (genres.isNotEmpty) msg += 'التصنيفات ';
+      if (summary.isNotEmpty) msg += 'والقصة ';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('لم يتم العثور على تصنيف. تأكد من كتابة الاسم بالإنجليزية.')),
+        const SnackBar(content: Text('لم يتم العثور على بيانات. تأكد من كتابة الاسم بالإنجليزية.')),
       );
     }
   }
@@ -280,7 +284,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
             alignment: WrapAlignment.center,
             spacing: 8,
             runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center, // لضبط محاذاة الزر مع الـ Chips
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               if (anime.status.isNotEmpty)
                 Chip(
@@ -298,10 +302,9 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                   avatar: const Icon(Icons.live_tv_outlined, size: 18),
                   label: Text('${anime.episodes} حلقة'),
                 ),
-              // 🔥 زر جلب التصنيف اليدوي
               IconButton(
-                tooltip: 'جلب التصنيف من الإنترنت',
-                onPressed: _fetchGenresManually,
+                tooltip: 'جلب التصنيف والقصة من الإنترنت',
+                onPressed: _fetchDataManually,
                 icon: const Icon(Icons.cloud_download_outlined, color: Colors.cyan),
               ),
             ],
@@ -314,7 +317,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                 const Icon(Icons.star, color: Color(0xFFFFC857)),
                 const SizedBox(width: 5),
                 Text(
-                  '${anime.rating} / 5',
+                  '${anime.rating} / 10',
                   style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
               ],
