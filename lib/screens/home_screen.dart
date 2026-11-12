@@ -63,7 +63,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _autoFetchMissingData() async {
     if (isAutoFetching) return;
     
-    final missingData = animes.where((a) => a.genre.trim().isEmpty || a.summary.trim().isEmpty || a.episodes == 0 || a.globalRating == null).toList();
+    final missingData = animes.where((a) => a.genre.trim().isEmpty || a.summary.trim().isEmpty || a.episodes == 0 || a.globalRating == null || a.releaseYear == null).toList();
     if (missingData.isEmpty) return;
 
     setState(() => isAutoFetching = true);
@@ -86,6 +86,11 @@ class _HomeScreenState extends State<HomeScreen> {
       }
       if (data['globalRating'] != null && anime.globalRating == null) {
         anime.globalRating = data['globalRating'];
+        hasChanges = true;
+      }
+      // 🔥 تحديث السنة
+      if (data['releaseYear'] != null && anime.releaseYear == null) {
+        anime.releaseYear = data['releaseYear'];
         hasChanges = true;
       }
       
@@ -169,6 +174,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> addAnime() async {
     final titleController = TextEditingController();
     final episodesController = TextEditingController();
+    final yearController = TextEditingController(); // 🔥
     final characterController = TextEditingController();
     final summaryController = TextEditingController();
     final memoryController = TextEditingController();
@@ -259,7 +265,14 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 12),
                       TextField(controller: characterController, decoration: const InputDecoration(labelText: 'الشخصية المفضلة (اختياري)', prefixIcon: Icon(Icons.person_outline))),
                       const SizedBox(height: 12),
-                      TextField(controller: episodesController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'عدد الحلقات (اختياري)', prefixIcon: Icon(Icons.play_circle_outline))),
+                      Row(
+                        children: [
+                          Expanded(child: TextField(controller: episodesController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'عدد الحلقات (اختياري)', prefixIcon: Icon(Icons.play_circle_outline)))),
+                          const SizedBox(width: 10),
+                          // 🔥 حقل السنة
+                          Expanded(child: TextField(controller: yearController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'سنة النزول', prefixIcon: Icon(Icons.calendar_today)))),
+                        ],
+                      ),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
                         value: status,
@@ -320,6 +333,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       summary: summaryController.text.trim(),
                       memory: memoryController.text.trim(),
                       episodes: int.tryParse(episodesController.text) ?? 0,
+                      releaseYear: int.tryParse(yearController.text), // 🔥
                       status: status,
                       rating: rating,
                       colorIndex: animes.length % colors.length,
@@ -338,6 +352,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     titleController.dispose();
     episodesController.dispose();
+    yearController.dispose();
     characterController.dispose();
     summaryController.dispose();
     memoryController.dispose();
@@ -352,7 +367,7 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(saved ? 'تم حفظ الأنمي في مكتبتك' : 'تعذر حفظ البيانات.')));
       
-      if (result.genre.isEmpty || result.summary.isEmpty || result.globalRating == null) {
+      if (result.genre.isEmpty || result.summary.isEmpty || result.globalRating == null || result.releaseYear == null) {
         _autoFetchMissingData();
       }
     } catch (_) {
@@ -566,7 +581,13 @@ class _HomeScreenState extends State<HomeScreen> {
           else
             ...animes.reversed.take(5).map((anime) {
               final color = colors[anime.colorIndex.abs() % colors.length];
-              final details = [if (anime.status.isNotEmpty) anime.status, if (anime.episodes > 0) '${anime.episodes} حلقة'].join(' • ');
+              // 🔥 إضافة السنة في تفاصيل القائمة
+              final details = [
+                if (anime.releaseYear != null) '${anime.releaseYear}', 
+                if (anime.status.isNotEmpty) anime.status, 
+                if (anime.episodes > 0) '${anime.episodes} حلقة'
+              ].join(' • ');
+              
               return Container(
                 margin: const EdgeInsets.only(bottom: 10),
                 decoration: BoxDecoration(
