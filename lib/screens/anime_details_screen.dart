@@ -125,7 +125,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     );
   }
 
-  // 🔥 تم تعديل الدالة لتجلب التصنيف والقصة
+  // 🔥 تم تعديل الدالة لتجلب التصنيف والقصة وعدد الحلقات
   Future<void> _fetchDataManually() async {
     if (widget.anime.title.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -147,11 +147,13 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
 
     final List<String> genres = data['genres'];
     final String summary = data['summary'];
+    final int episodes = data['episodes'];
 
-    if (genres.isNotEmpty || summary.isNotEmpty) {
+    if (genres.isNotEmpty || summary.isNotEmpty || episodes > 0) {
       setState(() {
         if (genres.isNotEmpty) widget.anime.genre = genres.join('، ');
         if (summary.isNotEmpty) widget.anime.summary = summary;
+        if (episodes > 0) widget.anime.episodes = episodes; // 🔥 تحديث الحلقات
       });
       final allAnimes = await storage.loadAnimes();
       final index = allAnimes.indexWhere((a) => a.id == widget.anime.id);
@@ -164,6 +166,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
       String msg = 'تم جلب ';
       if (genres.isNotEmpty) msg += 'التصنيفات ';
       if (summary.isNotEmpty) msg += 'والقصة ';
+      if (episodes > 0) msg += 'وعدد الحلقات ';
+      
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -303,7 +307,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                   label: Text('${anime.episodes} حلقة'),
                 ),
               IconButton(
-                tooltip: 'جلب التصنيف والقصة من الإنترنت',
+                tooltip: 'جلب التصنيف والقصة والحلقات',
                 onPressed: _fetchDataManually,
                 icon: const Icon(Icons.cloud_download_outlined, color: Colors.cyan),
               ),
