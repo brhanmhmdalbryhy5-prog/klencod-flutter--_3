@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../main.dart';
 import '../models/anime.dart';
 import '../services/storage_service.dart';
+import '../services/anime_api_service.dart'; // استيراد الخدمة
 import 'anime_details_screen.dart';
 
 class LibraryScreen extends StatefulWidget {
@@ -19,6 +20,7 @@ class LibraryScreen extends StatefulWidget {
 
 class _LibraryScreenState extends State<LibraryScreen> {
   final StorageService storage = StorageService();
+  final AnimeApiService apiService = AnimeApiService(); // تعريف الخدمة
   final TextEditingController searchController = TextEditingController();
   final ImagePicker imagePicker = ImagePicker();
 
@@ -204,6 +206,43 @@ class _LibraryScreenState extends State<LibraryScreen> {
     } else {
       setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(anime.favorite ? 'أضيف إلى المفضلة' : 'أزيل من المفضلة')));
+    }
+  }
+
+  // 🔥 الميزة الجديدة: جلب التصنيف يدوياً
+  Future<void> _fetchGenresManually(Anime anime) async {
+    if (anime.title.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('الأنمي لا يملك اسماً، لا يمكن البحث عنه.')),
+      );
+      return;
+    }
+
+    // عرض مؤشر تحميل
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    final genres = await apiService.fetchGenres(anime.title);
+
+    if (!mounted) return;
+    Navigator.pop(context); // إغلاق مؤشر التحميل
+
+    if (genres.isNotEmpty) {
+      setState(() {
+        anime.genre = genres.join('، ');
+      });
+      await storage.saveAnimes(animes);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تم جلب التصنيف: ${genres.join('، ')}')),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لم يتم العثور على تصنيف. تأكد من كتابة الاسم بالإنجليزية.')),
+      );
     }
   }
 
@@ -518,10 +557,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
           case 'edit': await editAnime(anime); break;
           case 'favorite': await toggleFavorite(anime); break;
           case 'delete': await deleteAnime(anime); break;
+          case 'fetch_genres': await _fetchGenresManually(anime); break; // 🔥 خيار جلب التصنيف
         }
       },
       itemBuilder: (context) => [
         const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit_outlined), SizedBox(width: 10), Text('تعديل بيانات الأنمي')])),
+        const PopupMenuItem(value: 'fetch_genres', child: Row(children: [Icon(Icons.cloud_download_outlined, color: Colors.cyan), SizedBox(width: 10), Text('جلب التصنيف من الإنترنت')])), // 🔥 العنصر الجديد
         PopupMenuItem(value: 'favorite', child: Row(children: [const Icon(Icons.favorite_border, color: Color(0xFFFF5364)), const SizedBox(width: 10), Text(anime.favorite ? 'إزالة من المفضلة' : 'إضافة إلى المفضلة')])),
         const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete_outline, color: Color(0xFFFF6B72)), SizedBox(width: 10), Text('حذف الأنمي')])),
       ],
