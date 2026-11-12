@@ -6,14 +6,14 @@ import 'storage_service.dart';
 class AnimeApiService {
   final StorageService _storage = StorageService();
 
-  // البحث عن أنمي بالاسم في AniList وجلب التصنيفات والقصة (مع الفلاتر)
+  // البحث عن أنمي بالاسم في AniList وجلب التصنيفات والقصة (مع الفلاتر والترجمة)
   Future<Map<String, dynamic>> fetchAnimeData(String animeTitle) async {
     if (animeTitle.trim().isEmpty) return {'genres': <String>[], 'summary': ''};
 
     for (int attempt = 1; attempt <= 3; attempt++) {
       try {
         const String url = 'https://graphql.anilist.co';
-        
+
         final String query = '''
           query (\$search: String) {
             Page(perPage: 1) {
@@ -37,28 +37,32 @@ class AnimeApiService {
         if (response.statusCode == 200) {
           final data = jsonDecode(response.body);
           final mediaList = data['data']?['Page']?['media'] as List?;
-          
+
           if (mediaList != null && mediaList.isNotEmpty) {
             final media = mediaList[0];
-            
-            // 1. استخراج التصنيفات الأصلية (بالإنجليزية)
+
+            // 1. استخراج التصنيفات
             final List<String> rawGenres = (media['genres'] as List?)?.map((e) => e.toString()).toList() ?? [];
-            
-            // 🔥 2. الفلتر الجديد: نبحث فقط عن Ecchi أو Hentai
+
+            // 2. فلتر المحتوى الإباحي
             bool hasAdultContent = rawGenres.any((g) => g == 'Ecchi' || g == 'Hentai');
 
-            // 3. فلترة التصنيفات: نحذف Ecchi و Hentai ونترك الباقي (بما فيه Romance)
             List<String> translatedGenres = rawGenres
-                .where((g) => g != 'Ecchi' && g != 'Hentai') 
+                .where((g) => g != 'Ecchi' && g != 'Hentai')
                 .map((g) => _translateGenre(g))
                 .toList();
 
-            // 4. معالجة القصة: إذا كان فيه Ecchi أو Hentai فقط لا نجلب القصة
+            // 3. معالجة القصة
             String summary = '';
-            if (!hasAdultContent) { // سيجلب القصة حتى لو كان رومانسي
+            if (!hasAdultContent) {
               summary = media['description']?.toString() ?? '';
               // تنظيف النص من أكواد HTML
-              summary = summary.replaceAll(RegExp(r'<[^>]*>'), ''); 
+              summary = summary.replaceAll(RegExp(r'<[^>]*>'), '');
+              
+              // 🔥 ترجمة القصة إلى العربية
+              if (summary.isNotEmpty) {
+                summary = await _translateToArabic(summary);
+              }
             }
 
             return {'genres': translatedGenres, 'summary': summary};
@@ -70,6 +74,36 @@ class AnimeApiService {
       }
     }
     return {'genres': <String>[], 'summary': ''};
+  }
+
+  // 🔥 دالة الترجمة المجانية (Google Translate غير الرسمي)
+  Future<String> _translateToArabic(String text) async {
+    if (text.trim().isEmpty) return '';
+    
+    try {
+      // تقسيم النص إذا كان طويلاً جداً (لتجنب مشاكل الرابط)
+      final encodedText = Uri.encodeComponent(text);
+      final url = Uri.parse('https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=ar&dt=t&q=$encodedText');
+      
+      final response = await http.get(url).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        // استخراج النص المترجم من الرد المعقد
+        if (data is List && data.isNotEmpty && data[0] is List) {
+          String translatedText = '';
+          for (var sentence in data[0]) {
+             if (sentence is List && sentence.isNotEmpty) {
+               translatedText += sentence[0];
+             }
+          }
+          return translatedText.trim();
+        }
+      }
+    } catch (e) {
+      // في حال فشلت الترجمة (مثلاً انقطع الإنترنت)، نرجع النص الإنجليزي
+    }
+    return text; 
   }
 
   // دالة لتحديث جميع الأنميات التي لا تحتوي على تصنيف أو قصة
@@ -103,7 +137,8 @@ class AnimeApiService {
         failedCount++;
       }
 
-      await Future.delayed(const Duration(milliseconds: 500));
+      // زيادة وقت الانتظار قليلاً لأن الترجمة تأخذ وقتاً إضافياً
+      await Future.delayed(const Duration(milliseconds: 1000));
     }
 
     if (updatedCount > 0) {
