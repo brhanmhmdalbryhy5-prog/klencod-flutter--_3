@@ -1,4 +1,3 @@
-
 class Anime {
   String id;
   String title;
@@ -12,9 +11,10 @@ class Anime {
   bool favorite;
   int colorIndex;
   String date;
-
-  // مسار صورة الأنمي المحفوظة محليًا، وهو اختياري.
   String? imagePath;
+  
+  // 🔥 الحقل الجديد للتقييم العالمي (AniList)
+  double? globalRating; 
 
   Anime({
     required this.id,
@@ -30,6 +30,7 @@ class Anime {
     this.colorIndex = 0,
     this.date = '',
     this.imagePath,
+    this.globalRating,
   });
 
   Map<String, dynamic> toJson() {
@@ -47,6 +48,7 @@ class Anime {
       'colorIndex': colorIndex,
       'date': date,
       'imagePath': imagePath,
+      'globalRating': globalRating,
     };
   }
 
@@ -65,6 +67,7 @@ class Anime {
       colorIndex: (json['colorIndex'] as num?)?.toInt() ?? 0,
       date: json['date'] as String? ?? '',
       imagePath: json['imagePath'] as String?,
+      globalRating: (json['globalRating'] as num?)?.toDouble(),
     );
   }
 }
