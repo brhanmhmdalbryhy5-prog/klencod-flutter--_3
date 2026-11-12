@@ -6,79 +6,92 @@ import 'screens/library_screen.dart';
 import 'screens/memories_screen.dart';
 import 'screens/settings_screen.dart';
 
+// المتغيرات العامة للتحكم في الثيم واللون
 final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.dark);
+final ValueNotifier<Color> primaryColorNotifier = ValueNotifier(const Color(0xFF741C2B));
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final prefs = await SharedPreferences.getInstance();
+  
+  // تحميل الوضع الداكن/الفاتح
   final isDark = prefs.getBool('isDarkMode') ?? true;
   themeNotifier.value = isDark ? ThemeMode.dark : ThemeMode.light;
+
+  // تحميل اللون المحفوظ
+  final savedColorValue = prefs.getInt('primaryColorValue') ?? 0xFF741C2B;
+  primaryColorNotifier.value = Color(savedColorValue);
+
   runApp(const AnimeMemoryApp());
 }
 
 class AnimeMemoryApp extends StatelessWidget {
   const AnimeMemoryApp({super.key});
-  static const Color darkRed = Color(0xFF741C2B);
+
   static const Color background = Color(0xFF111318);
   static const Color panel = Color(0xFF1B1F28);
   static const Color border = Color(0xFF303541);
   static const Color textColor = Color(0xFFF4F5F8);
-  static const Color glowColor = Color(0xFFFF4D6D); // لون التوهج الواضح
 
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: themeNotifier,
       builder: (context, currentMode, _) {
-        return MaterialApp(
-          debugShowCheckedModeBanner: false,
-          title: 'ذاكرة الأوتاكو',
-          themeMode: currentMode,
-          theme: ThemeData(
-            useMaterial3: true,
-            brightness: Brightness.light,
-            scaffoldBackgroundColor: const Color(0xFFF4F5F8),
-            colorScheme: const ColorScheme.light(
-              primary: darkRed,
-              secondary: Color(0xFF3A91B5),
-              surface: Colors.white,
-              error: Color(0xFFFF5A65),
-            ),
-          ),
-          darkTheme: ThemeData(
-            useMaterial3: true,
-            brightness: Brightness.dark,
-            scaffoldBackgroundColor: background,
-            colorScheme: const ColorScheme.dark(
-              primary: darkRed,
-              secondary: Color(0xFF3A91B5),
-              surface: panel,
-              error: Color(0xFFFF5A65),
-            ),
-            // توهج الأزرار العامة
-            filledButtonTheme: FilledButtonThemeData(
-              style: FilledButton.styleFrom(
-                backgroundColor: darkRed,
-                foregroundColor: Colors.white,
-                elevation: 12,
-                shadowColor: glowColor.withOpacity(0.8),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  side: const BorderSide(color: glowColor, width: 1),
+        return ValueListenableBuilder<Color>(
+          valueListenable: primaryColorNotifier,
+          builder: (context, primaryColor, __) {
+            return MaterialApp(
+              debugShowCheckedModeBanner: false,
+              title: 'ذاكرة الأوتاكو',
+              themeMode: currentMode,
+              // الثيم الفاتح
+              theme: ThemeData(
+                useMaterial3: true,
+                brightness: Brightness.light,
+                scaffoldBackgroundColor: const Color(0xFFF4F5F8),
+                colorScheme: ColorScheme.light(
+                  primary: primaryColor,
+                  secondary: primaryColor.withOpacity(0.7),
+                  surface: Colors.white,
+                  error: const Color(0xFFFF5A65),
                 ),
               ),
-            ),
-            // توهج شريط التنقل
-            navigationBarTheme: NavigationBarThemeData(
-              backgroundColor: panel,
-              indicatorColor: darkRed,
-              elevation: 15,
-              shadowColor: glowColor.withOpacity(0.6),
-              labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-              height: 72,
-            ),
-          ),
-          home: const MainNavigation(),
+              // الثيم الداكن
+              darkTheme: ThemeData(
+                useMaterial3: true,
+                brightness: Brightness.dark,
+                scaffoldBackgroundColor: background,
+                colorScheme: ColorScheme.dark(
+                  primary: primaryColor,
+                  secondary: primaryColor.withOpacity(0.7),
+                  surface: panel,
+                  error: const Color(0xFFFF5A65),
+                ),
+                filledButtonTheme: FilledButtonThemeData(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: primaryColor,
+                    foregroundColor: Colors.white,
+                    elevation: 12,
+                    shadowColor: primaryColor.withOpacity(0.8),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      side: BorderSide(color: primaryColor.withOpacity(0.6), width: 1),
+                    ),
+                  ),
+                ),
+                navigationBarTheme: NavigationBarThemeData(
+                  backgroundColor: panel,
+                  indicatorColor: primaryColor,
+                  elevation: 15,
+                  shadowColor: primaryColor.withOpacity(0.6),
+                  labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+                  height: 72,
+                ),
+              ),
+              home: const MainNavigation(),
+            );
+          },
         );
       },
     );
@@ -87,12 +100,14 @@ class AnimeMemoryApp extends StatelessWidget {
 
 class MainNavigation extends StatefulWidget {
   const MainNavigation({super.key});
+
   @override
   State<MainNavigation> createState() => _MainNavigationState();
 }
 
 class _MainNavigationState extends State<MainNavigation> {
   int selectedIndex = 0;
+
   final List<Widget> screens = const [
     HomeScreen(),
     LibraryScreen(),
