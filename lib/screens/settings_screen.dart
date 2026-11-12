@@ -1,6 +1,8 @@
-
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/backup_service.dart';
+// سنحتاج لاستيراد main.dart للوصول إلى themeNotifier
+import '../main.dart'; 
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -15,6 +17,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   final BackupService backupService = BackupService();
 
+  @override
+  void initState() {
+    super.initState();
+    _loadThemePreference();
+  }
+
+  Future<void> _loadThemePreference() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      darkMode = prefs.getBool('isDarkMode') ?? true;
+    });
+  }
+
+  Future<void> _toggleTheme(bool value) async {
+    setState(() => darkMode = value);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('isDarkMode', value);
+    
+    // تغيير الثيم في التطبيق بالكامل
+    themeNotifier.value = value ? ThemeMode.dark : ThemeMode.light;
+  }
+
   Future<void> runBackupAction({required bool restore}) async {
     if (backupBusy) return;
 
@@ -22,7 +47,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          backgroundColor: const Color(0xFF1B1F28),
+          backgroundColor: Theme.of(context).cardColor,
           title: const Text('استعادة نسخة احتياطية'),
           content: const Text(
             'ستُستبدل قائمة الأنميات الحالية بالأنميات الموجودة '
@@ -69,7 +94,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: const Color(0xFF1B1F28),
+        backgroundColor: Theme.of(context).cardColor,
         title: Text(
           restore ? 'نتيجة الاستعادة' : 'نتيجة النسخ الاحتياطي',
         ),
@@ -109,7 +134,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: const Color(0xFF1B1F28),
+        backgroundColor: Theme.of(context).cardColor,
         title: const Text('التخزين المحلي'),
         content: const Text(
           'يحفظ التطبيق بياناتك محليًا على الهاتف. '
@@ -129,20 +154,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : Colors.black87;
+
     return ListView(
       padding: const EdgeInsets.all(18),
       children: [
-        const Text(
+        Text(
           'الإعدادات',
           style: TextStyle(
             fontSize: 28,
             fontWeight: FontWeight.w900,
+            color: textColor,
           ),
         ),
         const SizedBox(height: 7),
-        const Text(
+        Text(
           'تحكّم في تطبيقك وبياناتك.',
-          style: TextStyle(color: Colors.white60),
+          style: TextStyle(color: isDark ? Colors.white60 : Colors.black54),
         ),
         const SizedBox(height: 24),
 
@@ -177,6 +206,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       style: TextStyle(
                         fontSize: 21,
                         fontWeight: FontWeight.w900,
+                        color: Colors.white,
                       ),
                     ),
                     SizedBox(height: 5),
@@ -193,11 +223,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
         const SizedBox(height: 25),
 
-        const Text(
+        Text(
           'التخصيص',
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w800,
+            color: textColor,
           ),
         ),
         const SizedBox(height: 12),
@@ -206,29 +237,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
           icon: Icons.palette_outlined,
           color: const Color(0xFF8B65C6),
           title: 'المظهر',
-          subtitle: 'الوضع الداكن والأسلوب القوي',
+          subtitle: darkMode ? 'الوضع الداكن' : 'الوضع الفاتح',
           trailing: Switch(
             value: darkMode,
             activeColor: const Color(0xFF741C2B),
-            onChanged: (value) {
-              setState(() => darkMode = value);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('المظهر ثابت في هذا الإصدار.'),
-                ),
-              );
-            },
+            onChanged: _toggleTheme,
           ),
           onTap: null,
         ),
 
         const SizedBox(height: 24),
 
-        const Text(
+        Text(
           'إدارة البيانات',
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w800,
+            color: textColor,
           ),
         ),
         const SizedBox(height: 12),
@@ -291,11 +316,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
         const SizedBox(height: 24),
 
-        const Text(
+        Text(
           'حول التطبيق',
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w800,
+            color: textColor,
           ),
         ),
         const SizedBox(height: 12),
@@ -336,11 +362,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required Widget trailing,
     required VoidCallback? onTap,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF1B1F28),
+        color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white10),
+        border: Border.all(
+          color: isDark ? Colors.white10 : Colors.black12,
+        ),
       ),
       child: ListTile(
         onTap: onTap,
@@ -359,16 +389,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         title: Text(
           title,
-          style: const TextStyle(
+          style: TextStyle(
             fontWeight: FontWeight.bold,
+            color: isDark ? Colors.white : Colors.black87,
           ),
         ),
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 4),
           child: Text(
             subtitle,
-            style: const TextStyle(
-              color: Colors.white54,
+            style: TextStyle(
+              color: isDark ? Colors.white54 : Colors.black54,
               fontSize: 11,
             ),
           ),
