@@ -31,7 +31,6 @@ class _HomeScreenState extends State<HomeScreen> {
     Color(0xFFB34E68),
   ];
 
-  // قائمة التصنيفات الشاملة (نفس الموجودة في المكتبة)
   final List<String> allGenres = const [
     'أكشن', 'مغامرة', 'كوميدي', 'دراما', 'فانتازيا', 'رعب',
     'إيتشي', 'ميكا', 'غموض', 'رومانسي', 'خيال علمي', 'شريحة من الحياة',
@@ -97,7 +96,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return savedFile.path;
   }
 
-  // نافذة اختيار التصنيفات المتعددة
   Future<List<String>?> _showGenrePicker(List<String> currentGenres) async {
     final selected = Set<String>.from(currentGenres);
 
@@ -298,7 +296,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      // زر التصنيفات المتعددة
                       InkWell(
                         onTap: () async {
                           final newGenres = await _showGenrePicker(selectedGenres);
@@ -384,7 +381,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Text('تقييمك (اختياري)'),
                       ),
                       const SizedBox(height: 8),
-                      // أزرار التقييم المضيئة
                       Wrap(
                         spacing: 4,
                         children: List.generate(5, (index) {
@@ -402,12 +398,12 @@ class _HomeScreenState extends State<HomeScreen> {
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 color: isSelected
-                                    ? const Color(0xFFFFC857).withValues(alpha: 0.2)
+                                    ? const Color(0xFFFFC857).withOpacity(0.2)
                                     : Colors.transparent,
                                 boxShadow: isSelected
                                     ? [
                                         BoxShadow(
-                                          color: const Color(0xFFFFC857).withValues(alpha: 0.5),
+                                          color: const Color(0xFFFFC857).withOpacity(0.5),
                                           blurRadius: 10,
                                           spreadRadius: 2,
                                         ),
@@ -464,7 +460,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           .microsecondsSinceEpoch
                           .toString(),
                       title: titleController.text.trim(),
-                      genre: selectedGenres.join('، '), // دمج التصنيفات
+                      genre: selectedGenres.join('، '),
                       character: characterController.text.trim(),
                       summary: summaryController.text.trim(),
                       memory: memoryController.text.trim(),
@@ -558,7 +554,7 @@ class _HomeScreenState extends State<HomeScreen> {
       width: 50,
       height: 50,
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.2),
+        color: color.withOpacity(0.2),
         borderRadius: BorderRadius.circular(13),
       ),
       child: Icon(Icons.movie_outlined, color: color),
@@ -582,7 +578,7 @@ class _HomeScreenState extends State<HomeScreen> {
         border: Border.all(color: const Color(0xFFB34E68)),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF741C2B).withValues(alpha: 0.3),
+            color: const Color(0xFF741C2B).withOpacity(0.3),
             blurRadius: 20,
             spreadRadius: 2,
             offset: const Offset(0, 5),
@@ -709,10 +705,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
           const SizedBox(height: 20),
-
-          // زر مرآة الأوتاكو الجديد
           _oracleButton(),
-
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
