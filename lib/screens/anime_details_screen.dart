@@ -261,7 +261,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     return Container(
       width: 110,
       height: 140,
-      color: accent.withValues(alpha: 0.25),
+      color: accent.withOpacity(0.25),
       child: const Icon(
         Icons.person_outline,
         size: 48,
@@ -277,7 +277,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
         ? 'أنمي بدون اسم'
         : anime.title;
 
-    // تقسيم التصنيفات إلى قائمة لعرضها كـ Chips منفصلة
     final genres = anime.genre
         .split('،')
         .map((e) => e.trim())
@@ -318,12 +317,11 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                   avatar: const Icon(Icons.bookmark_outline, size: 18),
                   label: Text(anime.status),
                 ),
-              // عرض كل تصنيف كـ Chip منفصل
               ...genres.map((genre) => Chip(
                     avatar: const Icon(Icons.category_outlined, size: 18),
                     label: Text(genre),
-                    backgroundColor: accent.withValues(alpha: 0.2),
-                    side: BorderSide(color: accent.withValues(alpha: 0.5)),
+                    backgroundColor: accent.withOpacity(0.2),
+                    side: BorderSide(color: accent.withOpacity(0.5)),
                   )),
               if (anime.episodes > 0)
                 Chip(
