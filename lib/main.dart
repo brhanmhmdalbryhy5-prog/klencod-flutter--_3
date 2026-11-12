@@ -6,27 +6,24 @@ import 'screens/library_screen.dart';
 import 'screens/memories_screen.dart';
 import 'screens/settings_screen.dart';
 
-// المتغير العام للتحكم في الثيم
 final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.dark);
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
   final prefs = await SharedPreferences.getInstance();
   final isDark = prefs.getBool('isDarkMode') ?? true;
   themeNotifier.value = isDark ? ThemeMode.dark : ThemeMode.light;
-
   runApp(const AnimeMemoryApp());
 }
 
 class AnimeMemoryApp extends StatelessWidget {
   const AnimeMemoryApp({super.key});
-
   static const Color darkRed = Color(0xFF741C2B);
   static const Color background = Color(0xFF111318);
   static const Color panel = Color(0xFF1B1F28);
   static const Color border = Color(0xFF303541);
   static const Color textColor = Color(0xFFF4F5F8);
+  static const Color glowColor = Color(0xFFFF4D6D); // لون التوهج الواضح
 
   @override
   Widget build(BuildContext context) {
@@ -37,7 +34,6 @@ class AnimeMemoryApp extends StatelessWidget {
           debugShowCheckedModeBanner: false,
           title: 'ذاكرة الأوتاكو',
           themeMode: currentMode,
-          // الثيم الفاتح
           theme: ThemeData(
             useMaterial3: true,
             brightness: Brightness.light,
@@ -48,32 +44,7 @@ class AnimeMemoryApp extends StatelessWidget {
               surface: Colors.white,
               error: Color(0xFFFF5A65),
             ),
-            appBarTheme: const AppBarTheme(
-              backgroundColor: Colors.white,
-              foregroundColor: Colors.black87,
-              centerTitle: false,
-              elevation: 0,
-            ),
-            cardTheme: CardTheme( // تم التعديل
-              color: Colors.white,
-              elevation: 0,
-              margin: EdgeInsets.zero,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(18),
-                side: const BorderSide(color: Color(0xFFE0E0E0)),
-              ),
-            ),
-            dividerColor: const Color(0xFFE0E0E0),
-            iconTheme: const IconThemeData(color: Colors.black54),
-            navigationBarTheme: const NavigationBarThemeData(
-              backgroundColor: Colors.white,
-              indicatorColor: darkRed,
-              labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-              elevation: 0,
-              height: 72,
-            ),
           ),
-          // الثيم الداكن
           darkTheme: ThemeData(
             useMaterial3: true,
             brightness: Brightness.dark,
@@ -84,28 +55,26 @@ class AnimeMemoryApp extends StatelessWidget {
               surface: panel,
               error: Color(0xFFFF5A65),
             ),
-            appBarTheme: const AppBarTheme(
-              backgroundColor: background,
-              foregroundColor: textColor,
-              centerTitle: false,
-              elevation: 0,
-            ),
-            cardTheme: CardTheme( // تم التعديل
-              color: panel,
-              elevation: 0,
-              margin: EdgeInsets.zero,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(18),
-                side: const BorderSide(color: border),
+            // توهج الأزرار العامة
+            filledButtonTheme: FilledButtonThemeData(
+              style: FilledButton.styleFrom(
+                backgroundColor: darkRed,
+                foregroundColor: Colors.white,
+                elevation: 12,
+                shadowColor: glowColor.withOpacity(0.8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  side: const BorderSide(color: glowColor, width: 1),
+                ),
               ),
             ),
-            dividerColor: border,
-            iconTheme: const IconThemeData(color: Colors.white70),
-            navigationBarTheme: const NavigationBarThemeData(
+            // توهج شريط التنقل
+            navigationBarTheme: NavigationBarThemeData(
               backgroundColor: panel,
               indicatorColor: darkRed,
+              elevation: 15,
+              shadowColor: glowColor.withOpacity(0.6),
               labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-              elevation: 0,
               height: 72,
             ),
           ),
@@ -118,14 +87,12 @@ class AnimeMemoryApp extends StatelessWidget {
 
 class MainNavigation extends StatefulWidget {
   const MainNavigation({super.key});
-
   @override
   State<MainNavigation> createState() => _MainNavigationState();
 }
 
 class _MainNavigationState extends State<MainNavigation> {
   int selectedIndex = 0;
-
   final List<Widget> screens = const [
     HomeScreen(),
     LibraryScreen(),
@@ -138,40 +105,15 @@ class _MainNavigationState extends State<MainNavigation> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        body: SafeArea(
-          child: IndexedStack(
-            index: selectedIndex,
-            children: screens,
-          ),
-        ),
+        body: SafeArea(child: IndexedStack(index: selectedIndex, children: screens)),
         bottomNavigationBar: NavigationBar(
           selectedIndex: selectedIndex,
-          onDestinationSelected: (index) {
-            setState(() {
-              selectedIndex = index;
-            });
-          },
+          onDestinationSelected: (index) => setState(() => selectedIndex = index),
           destinations: const [
-            NavigationDestination(
-              icon: Icon(Icons.dashboard_outlined),
-              selectedIcon: Icon(Icons.dashboard),
-              label: 'الرئيسية',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.movie_creation_outlined),
-              selectedIcon: Icon(Icons.movie_creation),
-              label: 'المكتبة',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.auto_awesome_outlined),
-              selectedIcon: Icon(Icons.auto_awesome),
-              label: 'ذكرياتي',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.settings_outlined),
-              selectedIcon: Icon(Icons.settings),
-              label: 'الإعدادات',
-            ),
+            NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'الرئيسية'),
+            NavigationDestination(icon: Icon(Icons.movie_creation_outlined), selectedIcon: Icon(Icons.movie_creation), label: 'المكتبة'),
+            NavigationDestination(icon: Icon(Icons.auto_awesome_outlined), selectedIcon: Icon(Icons.auto_awesome), label: 'ذكرياتي'),
+            NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings), label: 'الإعدادات'),
           ],
         ),
       ),
