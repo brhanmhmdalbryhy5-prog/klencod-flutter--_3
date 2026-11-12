@@ -1,4 +1,3 @@
-
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -278,6 +277,13 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
         ? 'أنمي بدون اسم'
         : anime.title;
 
+    // تقسيم التصنيفات إلى قائمة لعرضها كـ Chips منفصلة
+    final genres = anime.genre
+        .split('،')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+
     return Scaffold(
       backgroundColor: background,
       appBar: AppBar(
@@ -312,11 +318,13 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                   avatar: const Icon(Icons.bookmark_outline, size: 18),
                   label: Text(anime.status),
                 ),
-              if (anime.genre.isNotEmpty)
-                Chip(
-                  avatar: const Icon(Icons.category_outlined, size: 18),
-                  label: Text(anime.genre),
-                ),
+              // عرض كل تصنيف كـ Chip منفصل
+              ...genres.map((genre) => Chip(
+                    avatar: const Icon(Icons.category_outlined, size: 18),
+                    label: Text(genre),
+                    backgroundColor: accent.withValues(alpha: 0.2),
+                    side: BorderSide(color: accent.withValues(alpha: 0.5)),
+                  )),
               if (anime.episodes > 0)
                 Chip(
                   avatar: const Icon(Icons.live_tv_outlined, size: 18),
