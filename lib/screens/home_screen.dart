@@ -48,7 +48,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _initialLoad() async {
     await loadData();
-    _autoFetchMissingGenres();
+    _autoFetchMissingData();
   }
 
   Future<void> loadData() async {
@@ -60,20 +60,25 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  Future<void> _autoFetchMissingGenres() async {
+  Future<void> _autoFetchMissingData() async {
     if (isAutoFetching) return;
     
-    final missingGenres = animes.where((a) => a.genre.trim().isEmpty).toList();
-    if (missingGenres.isEmpty) return;
+    // نبحث عن أنميات لا تحتوي على تصنيف أو قصة
+    final missingData = animes.where((a) => a.genre.trim().isEmpty || a.summary.trim().isEmpty).toList();
+    if (missingData.isEmpty) return;
 
     setState(() => isAutoFetching = true);
     bool hasChanges = false;
 
-    for (var anime in missingGenres) {
-      final genres = await apiService.fetchGenres(anime.title);
+    for (var anime in missingData) {
+      final data = await apiService.fetchAnimeData(anime.title);
       
-      if (genres.isNotEmpty) {
-        anime.genre = genres.join('، ');
+      if (data['genres'].isNotEmpty && anime.genre.trim().isEmpty) {
+        anime.genre = data['genres'].join('، ');
+        hasChanges = true;
+      }
+      if (data['summary'].isNotEmpty && anime.summary.trim().isEmpty) {
+        anime.summary = data['summary'];
         hasChanges = true;
       }
       
@@ -82,9 +87,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (hasChanges) {
       await storage.saveAnimes(animes);
-      if (mounted) {
-        setState(() {});
-      }
+      if (mounted) setState(() {});
     }
 
     if (mounted) setState(() => isAutoFetching = false);
@@ -269,7 +272,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 16),
                       const Align(alignment: Alignment.centerRight, child: Text('تقييمك (اختياري - من 10)')),
                       const SizedBox(height: 8),
-                      // 🔥 تعديل النجوم إلى 10
                       Wrap(
                         spacing: 0,
                         children: List.generate(10, (index) {
@@ -343,8 +345,8 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(saved ? 'تم حفظ الأنمي في مكتبتك' : 'تعذر حفظ البيانات.')));
       
-      if (result.genre.isEmpty) {
-        _autoFetchMissingGenres();
+      if (result.genre.isEmpty || result.summary.isEmpty) {
+        _autoFetchMissingData();
       }
     } catch (_) {
       if (!mounted) return;
@@ -421,7 +423,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return RefreshIndicator(
       onRefresh: () async {
         await loadData();
-        await _autoFetchMissingGenres();
+        await _autoFetchMissingData();
       },
       child: ListView(
         padding: const EdgeInsets.fromLTRB(18, 16, 18, 28),
@@ -585,7 +587,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2)),
                   SizedBox(width: 8),
-                  Text('جارٍ جلب التصنيفات الناقصة في الخلفية...', style: TextStyle(color: Colors.white54, fontSize: 11)),
+                  Text('جارٍ جلب البيانات الناقصة في الخلفية...', style: TextStyle(color: Colors.white54, fontSize: 11)),
                 ],
               ),
             ),
