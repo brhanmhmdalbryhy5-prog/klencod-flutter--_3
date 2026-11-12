@@ -63,8 +63,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _autoFetchMissingData() async {
     if (isAutoFetching) return;
     
-    // نبحث عن أنميات لا تحتوي على تصنيف أو قصة
-    final missingData = animes.where((a) => a.genre.trim().isEmpty || a.summary.trim().isEmpty).toList();
+    final missingData = animes.where((a) => a.genre.trim().isEmpty || a.summary.trim().isEmpty || a.episodes == 0 || a.globalRating == null).toList();
     if (missingData.isEmpty) return;
 
     setState(() => isAutoFetching = true);
@@ -79,6 +78,14 @@ class _HomeScreenState extends State<HomeScreen> {
       }
       if (data['summary'].isNotEmpty && anime.summary.trim().isEmpty) {
         anime.summary = data['summary'];
+        hasChanges = true;
+      }
+      if (data['episodes'] > 0 && anime.episodes == 0) {
+        anime.episodes = data['episodes'];
+        hasChanges = true;
+      }
+      if (data['globalRating'] != null && anime.globalRating == null) {
+        anime.globalRating = data['globalRating'];
         hasChanges = true;
       }
       
@@ -345,7 +352,7 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(saved ? 'تم حفظ الأنمي في مكتبتك' : 'تعذر حفظ البيانات.')));
       
-      if (result.genre.isEmpty || result.summary.isEmpty) {
+      if (result.genre.isEmpty || result.summary.isEmpty || result.globalRating == null) {
         _autoFetchMissingData();
       }
     } catch (_) {
@@ -573,9 +580,20 @@ class _HomeScreenState extends State<HomeScreen> {
                   leading: _animeImage(anime, color),
                   title: Text(anime.title.trim().isEmpty ? 'أنمي بدون اسم' : anime.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold)),
                   subtitle: Text(details.isEmpty ? 'لم تُضف معلومات بعد' : details, style: const TextStyle(color: Colors.white54, fontSize: 12)),
-                  trailing: anime.rating > 0
-                      ? Row(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.star_rounded, size: 18, color: Color(0xFFFFC857)), Text('${anime.rating}/10')])
-                      : const Icon(Icons.chevron_left, color: Colors.white38),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (anime.rating > 0) ...[
+                        const Icon(Icons.star_rounded, size: 16, color: Color(0xFFFFC857)),
+                        Text('${anime.rating}/10', style: const TextStyle(fontSize: 12)),
+                      ],
+                      if (anime.globalRating != null) ...[
+                        const SizedBox(width: 8),
+                        const Icon(Icons.public, size: 14, color: Colors.cyan),
+                        Text(anime.globalRating!.toStringAsFixed(1), style: const TextStyle(fontSize: 12, color: Colors.cyan)),
+                      ],
+                    ],
+                  ),
                 ),
               );
             }),
