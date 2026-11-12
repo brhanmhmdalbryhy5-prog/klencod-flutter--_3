@@ -6,15 +6,14 @@ import 'storage_service.dart';
 class AnimeApiService {
   final StorageService _storage = StorageService();
 
-  // البحث عن أنمي بالاسم في AniList وجلب التصنيفات والقصة وعدد الحلقات
   Future<Map<String, dynamic>> fetchAnimeData(String animeTitle) async {
-    if (animeTitle.trim().isEmpty) return {'genres': <String>[], 'summary': '', 'episodes': 0};
+    if (animeTitle.trim().isEmpty) return {'genres': <String>[], 'summary': '', 'episodes': 0, 'globalRating': null};
 
     for (int attempt = 1; attempt <= 3; attempt++) {
       try {
         const String url = 'https://graphql.anilist.co';
 
-        // 🔥 إضافة حقل episodes هنا
+        // 🔥 إضافة averageScore هنا
         final String query = '''
           query (\$search: String) {
             Page(perPage: 1) {
@@ -22,6 +21,7 @@ class AnimeApiService {
                 genres
                 description
                 episodes
+                averageScore
               }
             }
           }
@@ -43,7 +43,6 @@ class AnimeApiService {
           if (mediaList != null && mediaList.isNotEmpty) {
             final media = mediaList[0];
 
-            // 1. التصنيفات
             final List<String> rawGenres = (media['genres'] as List?)?.map((e) => e.toString()).toList() ?? [];
             bool hasAdultContent = rawGenres.any((g) => g == 'Ecchi' || g == 'Hentai');
 
@@ -52,32 +51,37 @@ class AnimeApiService {
                 .map((g) => _translateGenre(g))
                 .toList();
 
-            // 2. عدد الحلقات (إذا لم تكن متوفرة، نرجع 0)
             final int episodes = (media['episodes'] as int?) ?? 0;
+            
+            // 🔥 استخراج التقييم العالمي (من 100) وتحويله إلى 10
+            final int? averageScore = media['averageScore'] as int?;
+            final double? globalRating = averageScore != null ? averageScore / 10.0 : null;
 
-            // 3. القصة والترجمة
             String summary = '';
             if (!hasAdultContent) {
               summary = media['description']?.toString() ?? '';
               summary = summary.replaceAll(RegExp(r'<[^>]*>'), '');
-              
               if (summary.isNotEmpty) {
                 summary = await _translateToArabic(summary);
               }
             }
 
-            return {'genres': translatedGenres, 'summary': summary, 'episodes': episodes};
+            return {
+              'genres': translatedGenres, 
+              'summary': summary, 
+              'episodes': episodes,
+              'globalRating': globalRating, // 🔥 إرجاع التقييم
+            };
           }
-          return {'genres': <String>[], 'summary': '', 'episodes': 0};
+          return {'genres': <String>[], 'summary': '', 'episodes': 0, 'globalRating': null};
         }
       } catch (e) {
         if (attempt < 3) await Future.delayed(const Duration(seconds: 1));
       }
     }
-    return {'genres': <String>[], 'summary': '', 'episodes': 0};
+    return {'genres': <String>[], 'summary': '', 'episodes': 0, 'globalRating': null};
   }
 
-  // دالة الترجمة
   Future<String> _translateToArabic(String text) async {
     if (text.trim().isEmpty) return '';
     try {
@@ -101,7 +105,6 @@ class AnimeApiService {
     return text; 
   }
 
-  // دالة تحديث المكتبة بالكامل
   Future<Map<String, int>> autoUpdateLibraryData() async {
     final animes = await _storage.loadAnimes();
     int updatedCount = 0;
@@ -110,8 +113,7 @@ class AnimeApiService {
     for (int i = 0; i < animes.length; i++) {
       final anime = animes[i];
       
-      // إذا كان الأنمي يحتوي على كل شيء، نتخطاه
-      if (anime.genre.trim().isNotEmpty && anime.summary.trim().isNotEmpty && anime.episodes > 0) continue;
+      if (anime.genre.trim().isNotEmpty && anime.summary.trim().isNotEmpty && anime.episodes > 0 && anime.globalRating != null) continue;
 
       final data = await fetchAnimeData(anime.title);
       bool changed = false;
@@ -124,9 +126,13 @@ class AnimeApiService {
         anime.summary = data['summary'];
         changed = true;
       }
-      // 🔥 تحديث عدد الحلقات إذا كان صفر
       if (anime.episodes == 0 && data['episodes'] > 0) {
         anime.episodes = data['episodes'];
+        changed = true;
+      }
+      // 🔥 تحديث التقييم العالمي
+      if (anime.globalRating == null && data['globalRating'] != null) {
+        anime.globalRating = data['globalRating'];
         changed = true;
       }
 
@@ -146,7 +152,6 @@ class AnimeApiService {
     return {'updated': updatedCount, 'failed': failedCount};
   }
 
-  // دالة مسح التصنيفات
   Future<int> clearAllGenres() async {
     final animes = await _storage.loadAnimes();
     int clearedCount = 0;
