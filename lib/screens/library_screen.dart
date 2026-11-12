@@ -1,4 +1,3 @@
-
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -24,6 +23,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   static const String _sortKey = 'anime_library_sort';
   static const String _viewKey = 'anime_library_view';
+
+  // قائمة التصنيفات الشاملة
+  final List<String> allGenres = const [
+    'أكشن', 'مغامرة', 'كوميدي', 'دراما', 'فانتازيا', 'رعب',
+    'إيتشي', 'ميكا', 'غموض', 'رومانسي', 'خيال علمي', 'شريحة من الحياة',
+    'رياضة', 'إثارة', 'حريم', 'مدرسي', 'شونين', 'سينين',
+    'جوسي', 'شوجو', 'قوى خارقة', 'تاريخي', 'موسيقي', 'نفسي',
+    'فامباير', 'سحر', 'حربي', 'فضاء', 'بوليسي', 'عائلي',
+    'ألعاب', 'فنون قتالية', 'ساموراي', 'شياطين', 'إيسيكاي',
+  ];
 
   List<Anime> animes = [];
   String selectedStatus = 'الكل';
@@ -144,9 +153,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     return result;
   }
 
-  // تاريخ الإضافة غير موجود في نموذج Anime الحالي؛
-  // لذلك يستخدم ترتيب القائمة الأصلي عند تساوي التاريخ الافتراضي.
-  // سنعتمد ترتيب القائمة المحفوظة كبديل آمن دون تغيير نموذج البيانات.
   DateTime _dateOf(Anime anime) {
     final index = animes.indexWhere((item) => item.id == anime.id);
     return DateTime.fromMillisecondsSinceEpoch(index < 0 ? 0 : index);
@@ -323,9 +329,66 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
+  // نافذة اختيار التصنيفات المتعددة
+  Future<List<String>?> _showGenrePicker(List<String> currentGenres) async {
+    final selected = Set<String>.from(currentGenres);
+
+    return showDialog<List<String>>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF1B1F28),
+              title: const Text('اختر التصنيفات'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: allGenres.length,
+                  itemBuilder: (context, index) {
+                    final genre = allGenres[index];
+                    final isSelected = selected.contains(genre);
+                    return CheckboxListTile(
+                      title: Text(genre),
+                      value: isSelected,
+                      activeColor: const Color(0xFF741C2B),
+                      checkColor: Colors.white,
+                      onChanged: (value) {
+                        setDialogState(() {
+                          if (value == true) {
+                            selected.add(genre);
+                          } else {
+                            selected.remove(genre);
+                          }
+                        });
+                      },
+                    );
+                  },
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('إلغاء'),
+                ),
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF741C2B),
+                  ),
+                  onPressed: () => Navigator.pop(dialogContext, selected.toList()),
+                  child: const Text('تأكيد'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   Future<void> editAnime(Anime anime) async {
     final titleController = TextEditingController(text: anime.title);
-    final genreController = TextEditingController(text: anime.genre);
     final characterController = TextEditingController(text: anime.character);
     final episodesController = TextEditingController(
       text: anime.episodes == 0 ? '' : '${anime.episodes}',
@@ -337,6 +400,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
     int rating = anime.rating;
     String? imagePath = anime.imagePath;
     bool imageChanged = false;
+    
+    // تحويل حقل التصنيف النصي إلى قائمة
+    List<String> selectedGenres = anime.genre
+        .split('،')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
 
     try {
       final result = await showDialog<bool>(
@@ -412,10 +482,31 @@ class _LibraryScreenState extends State<LibraryScreen> {
                           ),
                         ),
                         const SizedBox(height: 10),
-                        TextField(
-                          controller: genreController,
-                          decoration: const InputDecoration(
-                            labelText: 'التصنيف (اختياري)',
+                        // زر التصنيفات المتعددة
+                        InkWell(
+                          onTap: () async {
+                            final newGenres = await _showGenrePicker(selectedGenres);
+                            if (newGenres != null) {
+                              setDialogState(() {
+                                selectedGenres = newGenres;
+                              });
+                            }
+                          },
+                          child: InputDecorator(
+                            decoration: const InputDecoration(
+                              labelText: 'التصنيفات (اختياري)',
+                              suffixIcon: Icon(Icons.arrow_drop_down),
+                            ),
+                            child: Text(
+                              selectedGenres.isEmpty
+                                  ? 'لم يتم اختيار تصنيف'
+                                  : selectedGenres.join('، '),
+                              style: TextStyle(
+                                color: selectedGenres.isEmpty
+                                    ? Colors.white38
+                                    : Colors.white,
+                              ),
+                            ),
                           ),
                         ),
                         const SizedBox(height: 10),
@@ -466,21 +557,43 @@ class _LibraryScreenState extends State<LibraryScreen> {
                           alignment: Alignment.centerRight,
                           child: Text('التقييم (اختياري)'),
                         ),
+                        // أزرار التقييم المضيئة
                         Wrap(
-                          spacing: 2,
+                          spacing: 4,
                           children: List.generate(5, (index) {
                             final value = index + 1;
-                            return IconButton(
-                              onPressed: () {
+                            final isSelected = value <= rating;
+                            return GestureDetector(
+                              onTap: () {
                                 setDialogState(() {
                                   rating = rating == value ? 0 : value;
                                 });
                               },
-                              icon: Icon(
-                                Icons.star,
-                                color: value <= rating
-                                    ? const Color(0xFFFFC857)
-                                    : Colors.white24,
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: isSelected
+                                      ? const Color(0xFFFFC857).withValues(alpha: 0.2)
+                                      : Colors.transparent,
+                                  boxShadow: isSelected
+                                      ? [
+                                          BoxShadow(
+                                            color: const Color(0xFFFFC857).withValues(alpha: 0.5),
+                                            blurRadius: 10,
+                                            spreadRadius: 2,
+                                          ),
+                                        ]
+                                      : [],
+                                ),
+                                child: Icon(
+                                  Icons.star,
+                                  color: isSelected
+                                      ? const Color(0xFFFFC857)
+                                      : Colors.white24,
+                                  size: 30,
+                                ),
                               ),
                             );
                           }),
@@ -538,7 +651,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
       anime
         ..title = titleController.text.trim()
-        ..genre = genreController.text.trim()
+        ..genre = selectedGenres.join('، ') // دمج التصنيفات بفاصلة عربية
         ..character = characterController.text.trim()
         ..episodes = int.tryParse(episodesController.text) ?? 0
         ..status = status
@@ -572,7 +685,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
       }
     } finally {
       titleController.dispose();
-      genreController.dispose();
       characterController.dispose();
       episodesController.dispose();
       summaryController.dispose();
