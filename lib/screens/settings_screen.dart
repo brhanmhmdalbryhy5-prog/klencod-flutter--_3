@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../main.dart';
 import '../services/backup_service.dart';
 import '../services/theme_service.dart';
+import '../services/anime_api_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -14,8 +15,10 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool darkMode = true;
   bool backupBusy = false;
+  bool isUpdatingGenres = false;
 
   final BackupService backupService = BackupService();
+  final AnimeApiService apiService = AnimeApiService();
 
   @override
   void initState() {
@@ -78,6 +81,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await prefs.setInt('primaryColorValue', selectedColor.value);
       primaryColorNotifier.value = selectedColor;
     }
+  }
+
+  Future<void> _autoUpdateGenres() async {
+    if (isUpdatingGenres) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF1B1F28),
+        title: const Text('تحديث التصنيفات تلقائياً'),
+        content: const Text(
+          'سيقوم التطبيق بالبحث في الإنترنت عن تصنيفات الأنميات التي لا تحتوي على تصنيف.\n\n'
+          'قد تستغرق العملية بعض الوقت حسب عدد الأنميات. هل تريد المتابعة؟',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: primaryColorNotifier.value),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('متابعة'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    setState(() => isUpdatingGenres = true);
+
+    final result = await apiService.autoUpdateLibraryGenres();
+
+    if (!mounted) return;
+    setState(() => isUpdatingGenres = false);
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF1B1F28),
+        title: const Text('نتيجة التحديث'),
+        content: Text(
+          'تم تحديث ${result['updated']} أنمي بنجاح.\n'
+          'فشل تحديث ${result['failed']} أنمي (لم يتم العثور على تصنيفات).',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('حسنًا')),
+        ],
+      ),
+    );
   }
 
   Future<void> runBackupAction({required bool restore}) async {
@@ -194,6 +245,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
           subtitle: 'تغيير اللون الأساسي للتطبيق (18 لوناً)',
           trailing: const Icon(Icons.chevron_left, color: Colors.white38),
           onTap: _showColorPicker,
+        ),
+        const SizedBox(height: 10),
+        _settingsTile(
+          icon: Icons.sync_alt,
+          color: const Color(0xFF3A91B5),
+          title: 'تحديث التصنيفات تلقائياً',
+          subtitle: 'جلب التصنيفات من الإنترنت للأنميات التي لا تحتوي عليها',
+          trailing: isUpdatingGenres
+              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.chevron_left, color: Colors.white38),
+          onTap: isUpdatingGenres ? null : _autoUpdateGenres,
         ),
         const SizedBox(height: 24),
         const Text('إدارة البيانات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
