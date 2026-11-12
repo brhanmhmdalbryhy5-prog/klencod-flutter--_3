@@ -224,7 +224,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
-  // 🔥 تم تعديل الدالة لتجلب التصنيف والقصة وعدد الحلقات
   Future<void> _fetchDataManually(Anime anime) async {
     if (anime.title.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -247,12 +246,14 @@ class _LibraryScreenState extends State<LibraryScreen> {
     final List<String> genres = data['genres'];
     final String summary = data['summary'];
     final int episodes = data['episodes'];
+    final double? globalRating = data['globalRating'];
 
-    if (genres.isNotEmpty || summary.isNotEmpty || episodes > 0) {
+    if (genres.isNotEmpty || summary.isNotEmpty || episodes > 0 || globalRating != null) {
       setState(() {
         if (genres.isNotEmpty) anime.genre = genres.join('، ');
         if (summary.isNotEmpty) anime.summary = summary;
-        if (episodes > 0) anime.episodes = episodes; // 🔥 تحديث الحلقات
+        if (episodes > 0) anime.episodes = episodes;
+        if (globalRating != null) anime.globalRating = globalRating; // 🔥 تحديث التقييم
       });
       await storage.saveAnimes(animes);
       if (!mounted) return;
@@ -260,7 +261,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
       String msg = 'تم جلب ';
       if (genres.isNotEmpty) msg += 'التصنيفات ';
       if (summary.isNotEmpty) msg += 'والقصة ';
-      if (episodes > 0) msg += 'وعدد الحلقات ';
+      if (episodes > 0) msg += 'والحلقات ';
+      if (globalRating != null) msg += 'والتقييم العالمي ';
       
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(msg)),
@@ -505,10 +507,24 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         const SizedBox(height: 6),
                         Text(details, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.bold)),
                       ],
-                      if (anime.rating > 0) ...[
-                        const SizedBox(height: 5),
-                        Row(children: [const Icon(Icons.star, size: 16, color: Color(0xFFFFC857)), const SizedBox(width: 4), Text('${anime.rating}/10')]),
-                      ],
+                      // 🔥 عرض التقييم العالمي والتقييم الشخصي
+                      Row(
+                        children: [
+                          if (anime.rating > 0) ...[
+                            const SizedBox(height: 5),
+                            const Icon(Icons.star, size: 16, color: Color(0xFFFFC857)),
+                            const SizedBox(width: 4),
+                            Text('${anime.rating}/10', style: const TextStyle(fontSize: 12)),
+                          ],
+                          if (anime.globalRating != null) ...[
+                            const SizedBox(width: 10),
+                            const SizedBox(height: 5),
+                            const Icon(Icons.public, size: 14, color: Colors.cyan),
+                            const SizedBox(width: 4),
+                            Text('${anime.globalRating!.toStringAsFixed(1)}', style: const TextStyle(fontSize: 12, color: Colors.cyan)),
+                          ],
+                        ],
+                      ),
                       if (anime.favorite) ...[
                         const SizedBox(height: 5),
                         const Row(children: [Icon(Icons.favorite, size: 14, color: Color(0xFFFF5364)), SizedBox(width: 4), Text('في المفضلة', style: TextStyle(color: Color(0xFFFF5364), fontSize: 11))]),
@@ -559,10 +575,23 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   Text(anime.title.trim().isEmpty ? 'أنمي بدون اسم' : anime.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
                   const SizedBox(height: 4),
                   Text(anime.genre.isEmpty ? 'بدون تصنيف' : anime.genre, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white54, fontSize: 11)),
-                  if (anime.rating > 0) ...[
-                    const SizedBox(height: 4),
-                    Row(children: [const Icon(Icons.star, size: 14, color: Color(0xFFFFC857)), const SizedBox(width: 3), Text('${anime.rating}/10', style: const TextStyle(fontSize: 11))]),
-                  ],
+                  Row(
+                    children: [
+                      if (anime.rating > 0) ...[
+                        const SizedBox(height: 4),
+                        const Icon(Icons.star, size: 14, color: Color(0xFFFFC857)),
+                        const SizedBox(width: 3),
+                        Text('${anime.rating}', style: const TextStyle(fontSize: 11)),
+                      ],
+                      if (anime.globalRating != null) ...[
+                        const SizedBox(width: 8),
+                        const SizedBox(height: 4),
+                        const Icon(Icons.public, size: 12, color: Colors.cyan),
+                        const SizedBox(width: 3),
+                        Text('${anime.globalRating!.toStringAsFixed(1)}', style: const TextStyle(fontSize: 11, color: Colors.cyan)),
+                      ],
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -583,12 +612,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
           case 'edit': await editAnime(anime); break;
           case 'favorite': await toggleFavorite(anime); break;
           case 'delete': await deleteAnime(anime); break;
-          case 'fetch_data': await _fetchDataManually(anime); break; // 🔥 اسم الزر
+          case 'fetch_data': await _fetchDataManually(anime); break;
         }
       },
       itemBuilder: (context) => [
         const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit_outlined), SizedBox(width: 10), Text('تعديل بيانات الأنمي')])),
-        const PopupMenuItem(value: 'fetch_data', child: Row(children: [Icon(Icons.cloud_download_outlined, color: Colors.cyan), SizedBox(width: 10), Text('جلب التصنيف والقصة')])), // 🔥 النص
+        const PopupMenuItem(value: 'fetch_data', child: Row(children: [Icon(Icons.cloud_download_outlined, color: Colors.cyan), SizedBox(width: 10), Text('جلب البيانات من الإنترنت')])),
         PopupMenuItem(value: 'favorite', child: Row(children: [const Icon(Icons.favorite_border, color: Color(0xFFFF5364)), const SizedBox(width: 10), Text(anime.favorite ? 'إزالة من المفضلة' : 'إضافة إلى المفضلة')])),
         const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete_outline, color: Color(0xFFFF6B72)), SizedBox(width: 10), Text('حذف الأنمي')])),
       ],
