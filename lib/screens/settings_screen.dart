@@ -83,7 +83,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  // 🔥 دالة التحديث التلقائي مع رسالة مفصلة
+  // 🔥 دالة التحديث التلقائي مع رسالة مفصلة (تم تعديل اسم الدالة هنا)
   Future<void> _autoUpdateGenres() async {
     if (isUpdatingGenres) return;
 
@@ -91,9 +91,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: const Color(0xFF1B1F28),
-        title: const Text('تحديث التصنيفات تلقائياً'),
+        title: const Text('تحديث البيانات تلقائياً'),
         content: const Text(
-          'سيقوم التطبيق بالبحث في الإنترنت عن تصنيفات الأنميات التي لا تحتوي على تصنيف.\n\n'
+          'سيقوم التطبيق بالبحث في الإنترنت عن تصنيفات وقصص الأنميات التي لا تحتوي عليها.\n\n'
           'قد تستغرق العملية بعض الوقت حسب عدد الأنميات. هل تريد المتابعة؟',
         ),
         actions: [
@@ -111,23 +111,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     setState(() => isUpdatingGenres = true);
 
-    // تشغيل عملية التحديث
-    final result = await apiService.autoUpdateLibraryGenres();
+    // 🔥 استدعاء الدالة بالاسم الجديد
+    final result = await apiService.autoUpdateLibraryData();
 
     if (!mounted) return;
     setState(() => isUpdatingGenres = false);
 
-    // 🔥 رسالة النتيجة المفصلة
     final updated = result['updated'] ?? 0;
     final failed = result['failed'] ?? 0;
     
     String message;
     if (updated == 0 && failed == 0) {
-      message = 'كل الأنميات لديها تصنيفات بالفعل! لا حاجة للتحديث.';
+      message = 'كل الأنميات لديها تصنيفات وقصص بالفعل! لا حاجة للتحديث.';
     } else {
       message = 'تم تحديث $updated أنمي بنجاح.\n'
           'فشل تحديث $failed أنمي.\n\n'
-          'ملاحظة: فشل التحديث غالباً بسبب أن اسم الأنمي مكتوب بالعربية. يرجى تعديل الأسماء إلى الإنجليزية أو إضافة التصنيف يدوياً.';
+          'ملاحظة: فشل التحديث غالباً بسبب أن اسم الأنمي مكتوب بالعربية. يرجى تعديل الأسماء إلى الإنجليزية أو إضافة البيانات يدوياً.';
     }
 
     await showDialog<void>(
@@ -293,8 +292,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _settingsTile(
           icon: Icons.sync_alt,
           color: const Color(0xFF3A91B5),
-          title: 'تحديث التصنيفات تلقائياً',
-          subtitle: 'جلب التصنيفات من الإنترنت للأنميات التي لا تحتوي عليها',
+          title: 'تحديث التصنيفات والقصة',
+          subtitle: 'جلب البيانات من الإنترنت للأنميات الناقصة',
           trailing: isUpdatingGenres
               ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
               : const Icon(Icons.chevron_left, color: Colors.white38),
