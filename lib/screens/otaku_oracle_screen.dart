@@ -24,8 +24,8 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
   String catalogMessage = '';
 
   static const Color darkRed = Color(0xFF741C2B);
-  static const Color background = Color(0xFF111318); // توحيد اللون
-  static const Color panel = Color(0xFF1B1F28); // توحيد اللون
+  static const Color background = Color(0xFF111318);
+  static const Color panel = Color(0xFF1B1F28);
 
   @override
   void initState() {
@@ -325,7 +325,7 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
         ),
         boxShadow: [
           BoxShadow(
-            color: darkRed.withValues(alpha: 0.3),
+            color: darkRed.withOpacity(0.3),
             blurRadius: 15,
             offset: const Offset(0, 5),
           ),
@@ -530,10 +530,10 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
       decoration: BoxDecoration(
         color: panel,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: color.withValues(alpha: 0.45)),
+        border: Border.all(color: color.withOpacity(0.45)),
         boxShadow: [
           BoxShadow(
-            color: color.withValues(alpha: 0.1),
+            color: color.withOpacity(0.1),
             blurRadius: 8,
             offset: const Offset(0, 3),
           ),
