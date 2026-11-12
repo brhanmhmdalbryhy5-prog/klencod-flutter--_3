@@ -12,9 +12,10 @@ class Anime {
   int colorIndex;
   String date;
   String? imagePath;
+  double? globalRating;
   
-  // 🔥 الحقل الجديد للتقييم العالمي (AniList)
-  double? globalRating; 
+  // 🔥 الحقل الجديد لسنة النزول
+  int? releaseYear; 
 
   Anime({
     required this.id,
@@ -31,6 +32,7 @@ class Anime {
     this.date = '',
     this.imagePath,
     this.globalRating,
+    this.releaseYear,
   });
 
   Map<String, dynamic> toJson() {
@@ -49,6 +51,7 @@ class Anime {
       'date': date,
       'imagePath': imagePath,
       'globalRating': globalRating,
+      'releaseYear': releaseYear,
     };
   }
 
@@ -68,6 +71,7 @@ class Anime {
       date: json['date'] as String? ?? '',
       imagePath: json['imagePath'] as String?,
       globalRating: (json['globalRating'] as num?)?.toDouble(),
+      releaseYear: (json['releaseYear'] as num?)?.toInt(),
     );
   }
 }
