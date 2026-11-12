@@ -125,7 +125,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     );
   }
 
-  // 🔥 تم تعديل الدالة لتجلب التصنيف والقصة وعدد الحلقات
   Future<void> _fetchDataManually() async {
     if (widget.anime.title.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -148,12 +147,14 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     final List<String> genres = data['genres'];
     final String summary = data['summary'];
     final int episodes = data['episodes'];
+    final double? globalRating = data['globalRating'];
 
-    if (genres.isNotEmpty || summary.isNotEmpty || episodes > 0) {
+    if (genres.isNotEmpty || summary.isNotEmpty || episodes > 0 || globalRating != null) {
       setState(() {
         if (genres.isNotEmpty) widget.anime.genre = genres.join('، ');
         if (summary.isNotEmpty) widget.anime.summary = summary;
-        if (episodes > 0) widget.anime.episodes = episodes; // 🔥 تحديث الحلقات
+        if (episodes > 0) widget.anime.episodes = episodes;
+        if (globalRating != null) widget.anime.globalRating = globalRating;
       });
       final allAnimes = await storage.loadAnimes();
       final index = allAnimes.indexWhere((a) => a.id == widget.anime.id);
@@ -166,7 +167,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
       String msg = 'تم جلب ';
       if (genres.isNotEmpty) msg += 'التصنيفات ';
       if (summary.isNotEmpty) msg += 'والقصة ';
-      if (episodes > 0) msg += 'وعدد الحلقات ';
+      if (episodes > 0) msg += 'والحلقات ';
+      if (globalRating != null) msg += 'والتقييم العالمي ';
       
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     } else {
@@ -313,6 +315,21 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
               ),
             ],
           ),
+          // 🔥 عرض التقييم العالمي
+          if (anime.globalRating != null) ...[
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.public, color: Colors.cyan, size: 20),
+                const SizedBox(width: 6),
+                Text(
+                  'التقييم العالمي: ${anime.globalRating!.toStringAsFixed(1)} / 10',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.cyan),
+                ),
+              ],
+            ),
+          ],
           if (anime.rating > 0) ...[
             const SizedBox(height: 8),
             Row(
@@ -321,7 +338,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                 const Icon(Icons.star, color: Color(0xFFFFC857)),
                 const SizedBox(width: 5),
                 Text(
-                  '${anime.rating} / 10',
+                  'تقييمك: ${anime.rating} / 10',
                   style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
               ],
