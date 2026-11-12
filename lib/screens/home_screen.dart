@@ -7,7 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import '../main.dart';
 import '../models/anime.dart';
 import '../services/storage_service.dart';
-import '../services/anime_api_service.dart'; // استيراد خدمة الـ API
+import '../services/anime_api_service.dart';
 import 'otaku_oracle_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -19,12 +19,12 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final StorageService storage = StorageService();
-  final AnimeApiService apiService = AnimeApiService(); // تعريف الخدمة
+  final AnimeApiService apiService = AnimeApiService();
   final ImagePicker imagePicker = ImagePicker();
 
   List<Anime> animes = [];
   bool loading = true;
-  bool isAutoFetching = false; // لمنع تكرار العملية
+  bool isAutoFetching = false;
 
   final List<Color> colors = const [
     Color(0xFF741C2B), Color(0xFF247BA0), Color(0xFF7651A8),
@@ -46,10 +46,8 @@ class _HomeScreenState extends State<HomeScreen> {
     _initialLoad();
   }
 
-  // دالة التحميل الأولي (تجلب البيانات ثم تبدأ التحديث التلقائي)
   Future<void> _initialLoad() async {
     await loadData();
-    // بعد تحميل البيانات، نبدأ البحث في الخلفية عن التصنيفات الناقصة
     _autoFetchMissingGenres();
   }
 
@@ -62,11 +60,9 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // 🔥 الميزة الجديدة: التحديث التلقائي في الخلفية
   Future<void> _autoFetchMissingGenres() async {
     if (isAutoFetching) return;
     
-    // البحث عن أنميات لا تحتوي على تصنيف
     final missingGenres = animes.where((a) => a.genre.trim().isEmpty).toList();
     if (missingGenres.isEmpty) return;
 
@@ -74,7 +70,6 @@ class _HomeScreenState extends State<HomeScreen> {
     bool hasChanges = false;
 
     for (var anime in missingGenres) {
-      // جلب التصنيف
       final genres = await apiService.fetchGenres(anime.title);
       
       if (genres.isNotEmpty) {
@@ -82,14 +77,13 @@ class _HomeScreenState extends State<HomeScreen> {
         hasChanges = true;
       }
       
-      // تأخير بسيط لتجنب حظر الـ API
       await Future.delayed(const Duration(milliseconds: 800));
     }
 
     if (hasChanges) {
       await storage.saveAnimes(animes);
       if (mounted) {
-        setState(() {}); // تحديث الواجهة لإظهار التصنيفات الجديدة
+        setState(() {});
       }
     }
 
@@ -273,24 +267,25 @@ class _HomeScreenState extends State<HomeScreen> {
                         },
                       ),
                       const SizedBox(height: 16),
-                      const Align(alignment: Alignment.centerRight, child: Text('تقييمك (اختياري)')),
+                      const Align(alignment: Alignment.centerRight, child: Text('تقييمك (اختياري - من 10)')),
                       const SizedBox(height: 8),
+                      // 🔥 تعديل النجوم إلى 10
                       Wrap(
-                        spacing: 4,
-                        children: List.generate(5, (index) {
+                        spacing: 0,
+                        children: List.generate(10, (index) {
                           final value = index + 1;
                           final isSelected = value <= rating;
                           return GestureDetector(
                             onTap: () => setDialogState(() => rating = rating == value ? 0 : value),
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 200),
-                              padding: const EdgeInsets.all(8),
+                              padding: const EdgeInsets.all(4),
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 color: isSelected ? const Color(0xFFFFC857).withOpacity(0.2) : Colors.transparent,
-                                boxShadow: isSelected ? [BoxShadow(color: const Color(0xFFFFC857).withOpacity(0.5), blurRadius: 10, spreadRadius: 2)] : [],
+                                boxShadow: isSelected ? [BoxShadow(color: const Color(0xFFFFC857).withOpacity(0.5), blurRadius: 8, spreadRadius: 1)] : [],
                               ),
-                              child: Icon(Icons.star, color: isSelected ? const Color(0xFFFFC857) : Colors.white24, size: 30),
+                              child: Icon(Icons.star, color: isSelected ? const Color(0xFFFFC857) : Colors.white24, size: 24),
                             ),
                           );
                         }),
@@ -348,7 +343,6 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(saved ? 'تم حفظ الأنمي في مكتبتك' : 'تعذر حفظ البيانات.')));
       
-      // إذا كان التصنيف فارغاً، نحاول جلبها فوراً في الخلفية
       if (result.genre.isEmpty) {
         _autoFetchMissingGenres();
       }
@@ -425,7 +419,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final primaryColor = primaryColorNotifier.value;
 
     return RefreshIndicator(
-      // عند السحب للتحديث، نقوم بتحميل البيانات وتشغيل البحث التلقائي أيضاً
       onRefresh: () async {
         await loadData();
         await _autoFetchMissingGenres();
@@ -533,7 +526,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 const Icon(Icons.star_rounded, color: Color(0xFFFFC857), size: 32),
                 const SizedBox(width: 12),
                 const Expanded(child: Text('متوسط تقييماتك', style: TextStyle(fontWeight: FontWeight.bold))),
-                Text('${averageRating.toStringAsFixed(1)} / 5', style: const TextStyle(color: Color(0xFFFFC857), fontSize: 19, fontWeight: FontWeight.w900)),
+                Text('${averageRating.toStringAsFixed(1)} / 10', style: const TextStyle(color: Color(0xFFFFC857), fontSize: 19, fontWeight: FontWeight.w900)),
               ],
             ),
           ),
@@ -579,7 +572,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   title: Text(anime.title.trim().isEmpty ? 'أنمي بدون اسم' : anime.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold)),
                   subtitle: Text(details.isEmpty ? 'لم تُضف معلومات بعد' : details, style: const TextStyle(color: Colors.white54, fontSize: 12)),
                   trailing: anime.rating > 0
-                      ? Row(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.star_rounded, size: 18, color: Color(0xFFFFC857)), Text('${anime.rating}/5')])
+                      ? Row(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.star_rounded, size: 18, color: Color(0xFFFFC857)), Text('${anime.rating}/10')])
                       : const Icon(Icons.chevron_left, color: Colors.white38),
                 ),
               );
