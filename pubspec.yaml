@@ -1,4 +1,3 @@
-
 name: anime_memory
 description: My personal anime collection and memories.
 publish_to: 'none'
@@ -15,6 +14,7 @@ dependencies:
   path_provider: ^2.1.5
   archive: ^3.6.1
   file_picker: ^8.1.7
+  http: ^1.2.0
 
 dev_dependencies:
   flutter_test:
