@@ -92,7 +92,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
-  // 🔥 دالة الفلترة المعدلة (تشمل الفلاتر الجديدة)
   List<Anime> get filteredAnimes {
     final query = searchText.trim().toLowerCase();
     final result = animes.where((anime) {
@@ -106,10 +105,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
       } else if (selectedStatus == 'المفضلة') {
         matchesStatus = anime.favorite;
       } else if (selectedStatus == 'جُلب تلقائياً') {
-        // الأنميات التي تم جلب تصنيفها آلياً (ليس بها مسافة بعد الفاصلة)
         matchesStatus = anime.genre.isNotEmpty && !anime.genre.contains('، ');
       } else if (selectedStatus == 'بدون تصنيف') {
-        // 🔥 الفلتر الجديد: الأنميات التي فشل جلب تصنيفها أو ليس لها تصنيف
         matchesStatus = anime.genre.trim().isEmpty;
       } else {
         matchesStatus = anime.status == selectedStatus;
@@ -227,7 +224,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
-  Future<void> _fetchGenresManually(Anime anime) async {
+  // 🔥 تم تعديل الدالة لتجلب التصنيف والقصة
+  Future<void> _fetchDataManually(Anime anime) async {
     if (anime.title.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('الأنمي لا يملك اسماً، لا يمكن البحث عنه.')),
@@ -241,23 +239,32 @@ class _LibraryScreenState extends State<LibraryScreen> {
       builder: (_) => const Center(child: CircularProgressIndicator()),
     );
 
-    final genres = await apiService.fetchGenres(anime.title);
+    final data = await apiService.fetchAnimeData(anime.title);
 
     if (!mounted) return;
     Navigator.pop(context);
 
-    if (genres.isNotEmpty) {
+    final List<String> genres = data['genres'];
+    final String summary = data['summary'];
+
+    if (genres.isNotEmpty || summary.isNotEmpty) {
       setState(() {
-        anime.genre = genres.join('، ');
+        if (genres.isNotEmpty) anime.genre = genres.join('، ');
+        if (summary.isNotEmpty) anime.summary = summary;
       });
       await storage.saveAnimes(animes);
       if (!mounted) return;
+      
+      String msg = 'تم جلب ';
+      if (genres.isNotEmpty) msg += 'التصنيفات ';
+      if (summary.isNotEmpty) msg += 'والقصة ';
+      
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('تم جلب التصنيف: ${genres.join('، ')}')),
+        SnackBar(content: Text(msg)),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('لم يتم العثور على تصنيف. تأكد من كتابة الاسم بالإنجليزية.')),
+        const SnackBar(content: Text('لم يتم العثور على بيانات. تأكد من كتابة الاسم بالإنجليزية.')),
       );
     }
   }
@@ -381,23 +388,23 @@ class _LibraryScreenState extends State<LibraryScreen> {
                           onChanged: (value) { if (value != null) setDialogState(() => status = value); },
                         ),
                         const SizedBox(height: 14),
-                        const Align(alignment: Alignment.centerRight, child: Text('التقييم (اختياري)')),
+                        const Align(alignment: Alignment.centerRight, child: Text('التقييم (اختياري - من 10)')),
                         Wrap(
-                          spacing: 4,
-                          children: List.generate(5, (index) {
+                          spacing: 0,
+                          children: List.generate(10, (index) {
                             final value = index + 1;
                             final isSelected = value <= rating;
                             return GestureDetector(
                               onTap: () => setDialogState(() => rating = rating == value ? 0 : value),
                               child: AnimatedContainer(
                                 duration: const Duration(milliseconds: 200),
-                                padding: const EdgeInsets.all(8),
+                                padding: const EdgeInsets.all(4),
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
                                   color: isSelected ? const Color(0xFFFFC857).withOpacity(0.2) : Colors.transparent,
-                                  boxShadow: isSelected ? [BoxShadow(color: const Color(0xFFFFC857).withOpacity(0.5), blurRadius: 10, spreadRadius: 2)] : [],
+                                  boxShadow: isSelected ? [BoxShadow(color: const Color(0xFFFFC857).withOpacity(0.5), blurRadius: 8, spreadRadius: 1)] : [],
                                 ),
-                                child: Icon(Icons.star, color: isSelected ? const Color(0xFFFFC857) : Colors.white24, size: 30),
+                                child: Icon(Icons.star, color: isSelected ? const Color(0xFFFFC857) : Colors.white24, size: 24),
                               ),
                             );
                           }),
@@ -497,7 +504,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       ],
                       if (anime.rating > 0) ...[
                         const SizedBox(height: 5),
-                        Row(children: [const Icon(Icons.star, size: 16, color: Color(0xFFFFC857)), const SizedBox(width: 4), Text('${anime.rating}/5')]),
+                        Row(children: [const Icon(Icons.star, size: 16, color: Color(0xFFFFC857)), const SizedBox(width: 4), Text('${anime.rating}/10')]),
                       ],
                       if (anime.favorite) ...[
                         const SizedBox(height: 5),
@@ -551,7 +558,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   Text(anime.genre.isEmpty ? 'بدون تصنيف' : anime.genre, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white54, fontSize: 11)),
                   if (anime.rating > 0) ...[
                     const SizedBox(height: 4),
-                    Row(children: [const Icon(Icons.star, size: 14, color: Color(0xFFFFC857)), const SizedBox(width: 3), Text('${anime.rating}/5', style: const TextStyle(fontSize: 11))]),
+                    Row(children: [const Icon(Icons.star, size: 14, color: Color(0xFFFFC857)), const SizedBox(width: 3), Text('${anime.rating}/10', style: const TextStyle(fontSize: 11))]),
                   ],
                 ],
               ),
@@ -573,12 +580,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
           case 'edit': await editAnime(anime); break;
           case 'favorite': await toggleFavorite(anime); break;
           case 'delete': await deleteAnime(anime); break;
-          case 'fetch_genres': await _fetchGenresManually(anime); break;
+          case 'fetch_data': await _fetchDataManually(anime); break; // 🔥 اسم الزر الجديد
         }
       },
       itemBuilder: (context) => [
         const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit_outlined), SizedBox(width: 10), Text('تعديل بيانات الأنمي')])),
-        const PopupMenuItem(value: 'fetch_genres', child: Row(children: [Icon(Icons.cloud_download_outlined, color: Colors.cyan), SizedBox(width: 10), Text('جلب التصنيف من الإنترنت')])),
+        const PopupMenuItem(value: 'fetch_data', child: Row(children: [Icon(Icons.cloud_download_outlined, color: Colors.cyan), SizedBox(width: 10), Text('جلب التصنيف والقصة')])), // 🔥 النص الجديد
         PopupMenuItem(value: 'favorite', child: Row(children: [const Icon(Icons.favorite_border, color: Color(0xFFFF5364)), const SizedBox(width: 10), Text(anime.favorite ? 'إزالة من المفضلة' : 'إضافة إلى المفضلة')])),
         const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete_outline, color: Color(0xFFFF6B72)), SizedBox(width: 10), Text('حذف الأنمي')])),
       ],
@@ -650,7 +657,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
               children: [
                 'الكل', 'مكتمل', 'أتابعه', 'مخطط له', 'متوقف', 'المفضلة', 
                 'جُلب تلقائياً', 
-                'بدون تصنيف' // 🔥 تمت إضافة الفلتر الجديد هنا
+                'بدون تصنيف'
               ].map((status) {
                 final selected = selectedStatus == status;
                 return Padding(
