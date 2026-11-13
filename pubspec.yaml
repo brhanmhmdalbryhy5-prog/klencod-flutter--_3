@@ -20,9 +20,9 @@ dependencies:
   screenshot: ^3.0.0
   share_plus: ^10.1.2
   
-  # 🔥 تم تعديل الإصدارات هنا لتجنب خطأ withValues
-  video_player: 2.8.8
-  chewie: 1.7.4
+  # 🔥 تم تثبيت الإصدارات المتوافقة مع Flutter 3.22.0
+  video_player: 2.9.3
+  chewie: 1.8.5
 
 dev_dependencies:
   flutter_test:
