@@ -103,7 +103,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
       final data = await storage.loadAnimes();
       if (!mounted) return;
       setState(() { 
-        // 🔥 فلترة: عرض الأنميات الأصلية فقط (بدون المواسم)
         animes = data.where((a) => a.parentId == null).toList(); 
         loading = false; 
       });
