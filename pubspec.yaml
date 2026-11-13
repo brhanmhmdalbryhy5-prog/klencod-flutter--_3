@@ -16,11 +16,15 @@ dependencies:
   file_picker: ^8.1.7
   http: ^1.2.0
   google_fonts: ^6.2.1
-  
-  # 🔥 الحزم الجديدة للميزات الثلاث:
-  fl_chart: ^0.68.0       # للرسوم البيانية (Pie Chart) في المرآة
-  screenshot: ^3.0.0      # لأخذ لقطة شاشة للبطاقة
-  share_plus: ^10.1.2     # لمشاركة الصورة
+
+  # الحزم الخاصة بالرسوم البيانية والمشاركة
+  fl_chart: ^0.68.0
+  screenshot: ^3.0.0
+  share_plus: ^10.1.2
+
+  # 🔥 الحزم الجديدة لميزة تذكار الفيديو
+  video_player: ^2.9.1
+  chewie: ^1.8.5
 
 dev_dependencies:
   flutter_test:
