@@ -17,7 +17,6 @@ class BulkDownloadProgress {
 }
 
 class BulkDownloadService {
-  // نمط Singleton ليستمر بالعمل بالخلفية عند تغيير الشاشة
   static final BulkDownloadService _instance = BulkDownloadService._internal();
   factory BulkDownloadService() => _instance;
   BulkDownloadService._internal();
@@ -32,7 +31,6 @@ class BulkDownloadService {
   void cancel() => _cancelRequested = true;
   void reset() { progress.value = null; _cancelRequested = false; }
 
-  /// تحميل شامل: يجلب البيانات الكاملة + الصور + المواسم + الشخصيات
   Future<Map<String, int>> downloadAllData() async {
     if (isRunning) return {'updated': 0, 'failed': 0};
     isRunning = true;
@@ -116,7 +114,6 @@ class BulkDownloadService {
     return {'updated': updated, 'failed': failed};
   }
 
-  /// تحميل الصور فقط (بدون تحديث بيانات الأنمي) - للصور المفقودة.
   Future<Map<String, int>> downloadImagesOnly() async {
     if (isRunning) return {'updated': 0, 'failed': 0};
     isRunning = true;
