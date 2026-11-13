@@ -43,7 +43,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
   bool _busy = false;
   
   List<Anime> subAnimes = [];
-  bool _isSeasonGridView = false; // 🔥 لتغيير شكل عرض المواسم
+  bool _isSeasonGridView = false;
   
   VideoPlayerController? _videoController;
   ChewieController? _chewieController;
@@ -127,7 +127,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     }
   }
 
-  // 🔥 إصلاح التكبير ليعمل مع صور الإنترنت أيضاً
   void _showImageZoom() {
     HapticFeedback.lightImpact();
     if (currentAnime.imagePath != null && File(currentAnime.imagePath!).existsSync()) {
@@ -275,7 +274,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     await _loadData();
   }
 
-  // 🔥 دالة جلب صورة الأنمي الأصلي فقط
   Future<void> _fetchMainImageOnly() async {
     if (currentAnime.title.trim().isEmpty) return;
     showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator()));
@@ -477,6 +475,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     final double? globalRating = data['globalRating'];
     final int? releaseYear = data['releaseYear'];
     final List<Map<String, dynamic>> subData = data['subAnimes'];
+    final List<Map<String, dynamic>> charData = data['characters']; // 🔥 استلام الشخصيات
 
     setState(() {
       if (genres.isNotEmpty) currentAnime.genre = genres.join('، ');
@@ -485,9 +484,11 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
       if (globalRating != null) currentAnime.globalRating = globalRating;
       if (releaseYear != null) currentAnime.releaseYear = releaseYear;
       
-      // لا نجلب صورة الأنمي الأصلي هنا
+      // 🔥 حفظ الشخصيات
+      if (charData.isNotEmpty) currentAnime.characters = charData;
+      
       if (currentAnime.parentId == null) {
-        currentAnime.imageUrl = currentAnime.imageUrl; // احتفظ بالصورة إن وجدت
+        currentAnime.imageUrl = currentAnime.imageUrl;
       }
     });
 
@@ -509,7 +510,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
             genre: sub['genre'] ?? '',
             globalRating: sub['globalRating'],
             releaseYear: sub['releaseYear'],
-            imageUrl: sub['imageUrl'], // 🔥 المواسم تجلب صورها
+            imageUrl: sub['imageUrl'],
           );
           allAnimes.add(newSub);
         }
@@ -520,7 +521,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     await _loadData();
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم جلب البيانات والمواسم بنجاح!')));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم جلب البيانات والمواسم والشخصيات بنجاح!')));
   }
 
   void _addSubAnime() {
@@ -572,6 +573,60 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     );
   }
 
+  // 🔥 قسم الشخصيات الرئيسية
+  Widget _buildCharacters() {
+    if (currentAnime.characters.isEmpty) return const SizedBox.shrink();
+    final primaryColor = primaryColorNotifier.value;
+
+    return Container(
+      padding: const EdgeInsets.all(15),
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(16), border: Border.all(color: primaryColor.withOpacity(0.3))),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [Icon(Icons.people, color: primaryColor, size: 20), const SizedBox(width: 8), const Text('الشخصيات الرئيسية', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))]),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 110,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: currentAnime.characters.length,
+              itemBuilder: (context, index) {
+                final char = currentAnime.characters[index];
+                final imgUrl = char['image'] as String?;
+                return Padding(
+                  padding: const EdgeInsets.only(left: 10),
+                  child: Column(
+                    children: [
+                      CircleAvatar(
+                        radius: 38,
+                        backgroundColor: Colors.white10,
+                        backgroundImage: imgUrl != null && imgUrl.isNotEmpty ? NetworkImage(imgUrl) : null,
+                        child: imgUrl == null || imgUrl.isEmpty ? const Icon(Icons.person, color: Colors.white54, size: 30) : null,
+                      ),
+                      const SizedBox(height: 6),
+                      SizedBox(
+                        width: 85,
+                        child: Text(
+                          char['name'] ?? '',
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Colors.white70, fontSize: 11),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _cover() {
     final path = currentAnime.imagePath;
     final url = currentAnime.imageUrl;
@@ -593,7 +648,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     return Container(height: 180, width: double.infinity, color: panel, child: const Icon(Icons.movie_creation_outlined, size: 65, color: Colors.white30));
   }
 
-  // 🔥 بناء كارت الموسم (للعرض الشبكي)
   Widget _buildSeasonGridCard(Anime sub) {
     final hasLocalImage = sub.imagePath != null && sub.imagePath!.isNotEmpty && File(sub.imagePath!).existsSync();
     final hasNetImage = sub.imageUrl != null && sub.imageUrl!.isNotEmpty;
@@ -669,7 +723,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
         centerTitle: true,
         actions: [
           IconButton(tooltip: 'تعديل البيانات', icon: const Icon(Icons.edit, color: Colors.white70), onPressed: _editAnimeDetails),
-          // 🔥 زر جلب الصورة الرئيسية (للأنمي الأصلي فقط)
           if (currentAnime.parentId == null)
             IconButton(tooltip: 'جلب صورة الغلاف من الإنترنت', icon: const Icon(Icons.image, color: Colors.orangeAccent), onPressed: _fetchMainImageOnly),
           IconButton(tooltip: 'صنع بطاقة للمشاركة', icon: const Icon(Icons.dashboard_customize_outlined, color: Colors.cyan), onPressed: _showShareDialog),
@@ -715,7 +768,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                 const Text('المواسم والأفلام المرتبطة', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
                 Row(
                   children: [
-                    // 🔥 زر تغيير شكل العرض (شبكة/قائمة)
                     IconButton(
                       tooltip: _isSeasonGridView ? 'عرض قائمة' : 'عرض شبكة',
                       icon: Icon(_isSeasonGridView ? Icons.view_list : Icons.grid_view, color: Colors.white70, size: 20),
@@ -730,7 +782,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
             if (subAnimes.isEmpty)
               const Text('لا توجد مواسم مضافة. اضغط على "جلب البيانات" للبحث عنها.', style: TextStyle(color: Colors.white54, fontSize: 12))
             else if (_isSeasonGridView)
-              // 🔥 العرض الشبكي للمواسم
               GridView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
@@ -741,7 +792,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                 itemBuilder: (context, index) => _buildSeasonGridCard(subAnimes[index]),
               )
             else
-              // 🔥 عرض القائمة للمواسم
               ...subAnimes.map((sub) {
                 final hasLocalImage = sub.imagePath != null && sub.imagePath!.isNotEmpty && File(sub.imagePath!).existsSync();
                 final hasNetImage = sub.imageUrl != null && sub.imageUrl!.isNotEmpty;
@@ -759,7 +809,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                               ? Image.network(sub.imageUrl!, width: 50, height: 50, fit: BoxFit.cover)
                               : Container(width: 50, height: 50, color: primaryColor.withOpacity(0.2), child: const Icon(Icons.playlist_play, color: Colors.white)),
                     ),
-                    // 🔥 عرض الاسم الأصلي، وتحته النوع
                     title: Text(sub.title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
                     subtitle: Text('${sub.partName} • ${sub.episodes > 0 ? '${sub.episodes} حلقة' : 'غير محدد'}', style: const TextStyle(color: Colors.white54)),
                     trailing: Row(
@@ -769,7 +818,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                           icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
                           onPressed: () => _deleteSubAnime(sub),
                         ),
-                        const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white38),
+                        const Icon(Icons.forward_ios, size: 14, color: Colors.white38),
                       ],
                     ),
                     onTap: () async {
@@ -805,6 +854,9 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
               ),
             ),
           ],
+
+          // 🔥 قسم الشخصيات الرئيسية يظهر هنا
+          _buildCharacters(),
 
           Container(
             padding: const EdgeInsets.all(15), margin: const EdgeInsets.only(bottom: 14),
