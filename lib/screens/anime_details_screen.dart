@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
@@ -106,6 +107,17 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     super.dispose();
   }
 
+  // 🔥 دالة فحص الاتصال بالإنترنت
+  Future<bool> _hasInternet() async {
+    try {
+      final result = await InternetAddress.lookup('google.com')
+          .timeout(const Duration(seconds: 5));
+      return result.isNotEmpty && result[0].rawAddress.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
   void _initializeVideo(String path) {
     _videoController = VideoPlayerController.file(File(path))
       ..initialize().then((_) {
@@ -162,7 +174,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     }
   }
 
-  // 🔥 دالة جديدة لعرض صورة الشخصية وتكبيرها
   void _showCharacterImageZoom(String? imagePath, String? imageUrl) {
     HapticFeedback.lightImpact();
     
@@ -311,16 +322,103 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     await _loadData();
   }
 
+  // 🔥 جلب صورة الغلاف مع شريط تقدم ورسالة خطأ
   Future<void> _fetchMainImageOnly() async {
     if (currentAnime.title.trim().isEmpty) return;
-    showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator()));
-    
-    final data = await apiService.fetchAnimeData(currentAnime.title, downloadImages: true);
-    if (!mounted) return;
-    Navigator.pop(context);
 
-    final String? imageUrl = data['imageUrl'];
-    final String? imagePath = data['imagePath'];
+    final hasNet = await _hasInternet();
+    if (!hasNet) {
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          backgroundColor: panel,
+          title: const Row(children: [
+            Icon(Icons.wifi_off, color: Colors.redAccent),
+            SizedBox(width: 8),
+            Text('لا يوجد إنترنت'),
+          ]),
+          content: const Text('يرجى تشغيل الاتصال بالإنترنت لجلب الصورة ثم المحاولة مرة أخرى.', style: TextStyle(height: 1.6)),
+          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('حسناً'))],
+        ),
+      );
+      return;
+    }
+
+    final progressNotifier = ValueNotifier<double>(0.0);
+    Timer? timer;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        backgroundColor: panel,
+        content: ValueListenableBuilder<double>(
+          valueListenable: progressNotifier,
+          builder: (context, value, _) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.image, size: 50, color: Colors.orangeAccent),
+              const SizedBox(height: 16),
+              const Text('جاري جلب الصورة...', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              const SizedBox(height: 16),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: LinearProgressIndicator(
+                  value: value,
+                  minHeight: 10,
+                  backgroundColor: Colors.white12,
+                  valueColor: AlwaysStoppedAnimation<Color>(primaryColorNotifier.value),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text('${(value * 100).toInt()}%', style: const TextStyle(fontSize: 12, color: Colors.white54)),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    timer = Timer.periodic(const Duration(milliseconds: 200), (t) {
+      if (progressNotifier.value < 0.9) progressNotifier.value += 0.03;
+    });
+
+    Map<String, dynamic>? data;
+    String? error;
+    try {
+      data = await apiService.fetchAnimeData(currentAnime.title, downloadImages: true)
+          .timeout(const Duration(seconds: 60));
+    } on TimeoutException {
+      error = 'انتهت مهلة الاتصال. يرجى المحاولة مجدداً.';
+    } catch (e) {
+      error = 'تعذر الاتصال بالخادم. تحقق من الإنترنت.';
+    }
+
+    timer.cancel();
+    progressNotifier.value = 1.0;
+    await Future.delayed(const Duration(milliseconds: 300));
+    if (mounted) Navigator.pop(context);
+
+    if (error != null) {
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          backgroundColor: panel,
+          title: const Row(children: [
+            Icon(Icons.error_outline, color: Colors.redAccent),
+            SizedBox(width: 8),
+            Text('تعذر الجلب'),
+          ]),
+          content: Text(error, style: const TextStyle(height: 1.6)),
+          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('حسناً'))],
+        ),
+      );
+      return;
+    }
+
+    final imageUrl = data?['imageUrl'] as String?;
+    final imagePath = data?['imagePath'] as String?;
     
     if (imageUrl != null) {
       setState(() { 
@@ -334,8 +432,10 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
         if (imagePath != null) allAnimes[index].imagePath = imagePath;
         await storage.saveAnimes(allAnimes);
       }
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم جلب وحفظ صورة الغلاف محلياً.')));
     } else {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لم يتم العثور على صورة.')));
     }
   }
@@ -356,6 +456,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     }
   }
 
+  // 🔥 بناء البطاقة مع التوقيع
   Widget _buildShareCard() {
     final imagePath = currentAnime.imagePath;
     final fontName = fontNotifier.value;
@@ -429,7 +530,18 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
+                    // توقيع التطبيق
                     Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.shield, size: 16, color: primaryColor), const SizedBox(width: 6), Text('ذاكرة الأوتاكو', style: TextStyle(color: primaryColor, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.2))]),
+                    const SizedBox(height: 8),
+                    // 🔥 التوقيع الخاص BURHAN
+                    Text(
+                      'BURHAN',
+                      style: GoogleFonts.greatVibes(
+                        fontSize: 32,
+                        color: titleColor,
+                        shadows: [Shadow(color: titleColor.withOpacity(0.5), blurRadius: 8)],
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -494,25 +606,138 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     if (index != -1) { allAnimes[index] = currentAnime; await storage.saveAnimes(allAnimes); }
   }
 
+  // 🔥 دالة الجلب الرئيسية مع شريط تقدم ورسالة خطأ
   Future<void> _fetchDataManually() async {
     if (currentAnime.title.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الأنمي لا يملك اسماً، لا يمكن البحث عنه.')));
       return;
     }
-    showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator()));
-    
-    final data = await apiService.fetchAnimeData(currentAnime.title, downloadImages: true);
-    
-    if (!mounted) return;
-    Navigator.pop(context);
-    
-    final List<String> genres = data['genres'];
-    final String summary = data['summary'];
-    final int episodes = data['episodes'];
+
+    // 1. فحص الاتصال بالإنترنت
+    final hasNet = await _hasInternet();
+    if (!hasNet) {
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          backgroundColor: panel,
+          title: const Row(children: [
+            Icon(Icons.wifi_off, color: Colors.redAccent),
+            SizedBox(width: 8),
+            Text('لا يوجد إنترنت'),
+          ]),
+          content: const Text('يرجى تشغيل الاتصال بالإنترنت لجلب البيانات ثم المحاولة مرة أخرى.', style: TextStyle(height: 1.6)),
+          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('حسناً'))],
+        ),
+      );
+      return;
+    }
+
+    // 2. إظهار شريط التقدم
+    final progressNotifier = ValueNotifier<double>(0.0);
+    Timer? progressTimer;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        backgroundColor: panel,
+        content: ValueListenableBuilder<double>(
+          valueListenable: progressNotifier,
+          builder: (context, value, _) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.cloud_download, size: 50, color: Colors.cyan),
+              const SizedBox(height: 16),
+              const Text('جاري جلب البيانات والصور...', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              const SizedBox(height: 16),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: LinearProgressIndicator(
+                  value: value,
+                  minHeight: 10,
+                  backgroundColor: Colors.white12,
+                  valueColor: AlwaysStoppedAnimation<Color>(primaryColorNotifier.value),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text('${(value * 100).toInt()}%', style: const TextStyle(fontSize: 12, color: Colors.white54)),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    progressTimer = Timer.periodic(const Duration(milliseconds: 200), (t) {
+      if (progressNotifier.value < 0.9) progressNotifier.value += 0.02;
+    });
+
+    // 3. تنفيذ الجلب مع معالجة الأخطاء
+    Map<String, dynamic>? data;
+    String? errorMessage;
+    try {
+      data = await apiService.fetchAnimeData(currentAnime.title, downloadImages: true)
+          .timeout(const Duration(seconds: 120));
+    } on TimeoutException {
+      errorMessage = 'انتهت مهلة الاتصال بالخادم. يرجى التحقق من الإنترنت والمحاولة مجدداً.';
+    } catch (e) {
+      errorMessage = 'تعذر الاتصال بالخادم. يرجى التحقق من اتصالك بالإنترنت.';
+    }
+
+    progressTimer.cancel();
+    progressNotifier.value = 1.0;
+    await Future.delayed(const Duration(milliseconds: 300));
+    if (mounted) Navigator.pop(context);
+
+    // 4. إظهار رسالة خطأ إن وجدت
+    if (errorMessage != null) {
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          backgroundColor: panel,
+          title: const Row(children: [
+            Icon(Icons.error_outline, color: Colors.redAccent),
+            SizedBox(width: 8),
+            Text('تعذر الجلب'),
+          ]),
+          content: Text(errorMessage!, style: const TextStyle(height: 1.6)),
+          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('حسناً'))],
+        ),
+      );
+      return;
+    }
+
+    if (data == null) return;
+
+    final genres = data['genres'] as List;
+    final summary = data['summary'] as String;
+    final episodes = data['episodes'] as int;
+    final subAnimesData = data['subAnimes'] as List;
+    final charactersData = data['characters'] as List;
+
+    // 5. التحقق من وجود بيانات فعلية
+    if (genres.isEmpty && summary.isEmpty && episodes == 0 && subAnimesData.isEmpty && charactersData.isEmpty) {
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          backgroundColor: panel,
+          title: const Row(children: [
+            Icon(Icons.search_off, color: Colors.orangeAccent),
+            SizedBox(width: 8),
+            Text('لا توجد نتائج'),
+          ]),
+          content: const Text('لم يتم العثور على بيانات لهذا الأنمي. تأكد من كتابة الاسم بالإنجليزية بشكل صحيح.', style: TextStyle(height: 1.6)),
+          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('حسناً'))],
+        ),
+      );
+      return;
+    }
+
+    // 6. تحديث بيانات الأنمي
     final double? globalRating = data['globalRating'];
     final int? releaseYear = data['releaseYear'];
-    final List<Map<String, dynamic>> subData = data['subAnimes'];
-    final List<Map<String, dynamic>> charData = data['characters'];
     final String? studios = data['studios'];
     final String? mainImagePath = data['imagePath'];
 
@@ -524,15 +749,16 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
       if (releaseYear != null) currentAnime.releaseYear = releaseYear;
       if (studios != null) currentAnime.studios = studios;
       if (mainImagePath != null && currentAnime.imagePath == null) currentAnime.imagePath = mainImagePath;
-      if (charData.isNotEmpty) currentAnime.characters = charData;
+      if (charactersData.isNotEmpty) currentAnime.characters = List<Map<String, dynamic>>.from(charactersData);
     });
 
     final allAnimes = await storage.loadAnimes();
     final index = allAnimes.indexWhere((a) => a.id == currentAnime.id);
     if (index != -1) { allAnimes[index] = currentAnime; }
 
-    if (subData.isNotEmpty) {
-      for (var sub in subData) {
+    // 7. معالجة المواسم
+    if (subAnimesData.isNotEmpty) {
+      for (var sub in subAnimesData) {
         final existingIndex = allAnimes.indexWhere((a) => a.title == sub['title'] && a.parentId == currentAnime.id);
         
         if (existingIndex == -1) {
@@ -652,7 +878,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                   padding: const EdgeInsets.only(left: 10),
                   child: Column(
                     children: [
-                      // 🔥 تغليف الدائرة بـ GestureDetector للتكبير
                       GestureDetector(
                         onTap: () => _showCharacterImageZoom(imgPath, imgUrl),
                         child: CircleAvatar(
