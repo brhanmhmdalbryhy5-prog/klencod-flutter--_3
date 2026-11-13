@@ -28,9 +28,7 @@ class AnimeApiService {
                 startDate { year }
                 coverImage { large }
                 studios(isMain: true) {
-                  nodes {
-                    name
-                  }
+                  nodes { name }
                 }
                 characters(sort: [ROLE, RELEVANCE, ID], perPage: 8) {
                   nodes {
@@ -62,10 +60,7 @@ class AnimeApiService {
         final response = await http.post(
           Uri.parse(url),
           headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({
-            'query': query,
-            'variables': {'search': animeTitle.trim()},
-          }),
+          body: jsonEncode({'query': query, 'variables': {'search': animeTitle.trim()}}),
         ).timeout(const Duration(seconds: 15));
 
         if (response.statusCode == 200) {
@@ -89,14 +84,12 @@ class AnimeApiService {
             final int? releaseYear = media['startDate']?['year'] as int?;
             final String? imageUrl = media['coverImage']?['large'] as String?;
 
-            // 🔥 جلب الاستوديو
             String? studios;
             final studiosList = media['studios']?['nodes'] as List?;
             if (studiosList != null && studiosList.isNotEmpty) {
               studios = studiosList.map((s) => s['name'].toString()).join('، ');
             }
 
-            // استخراج الشخصيات
             List<Map<String, dynamic>> characters = [];
             final charList = media['characters']?['nodes'] as List?;
             if (charList != null) {
@@ -111,9 +104,7 @@ class AnimeApiService {
             if (!hasAdultContent) {
               summary = media['description']?.toString() ?? '';
               summary = summary.replaceAll(RegExp(r'<[^>]*>'), '');
-              if (summary.isNotEmpty) {
-                summary = await _translateToArabic(summary);
-              }
+              if (summary.isNotEmpty) summary = await _translateToArabic(summary);
             }
 
             List<Map<String, dynamic>> subAnimes = [];
@@ -145,17 +136,11 @@ class AnimeApiService {
                     final subScore = node['averageScore'] as int?;
                     
                     String partName = '';
-                    if (format == 'MOVIE') {
-                      partName = 'فيلم';
-                    } else if (relationType == 'PREQUEL') {
-                      partName = 'موسم سابق';
-                    } else if (relationType == 'SEQUEL') {
-                      partName = 'موسم لاحق';
-                    } else if (relationType == 'SIDE_STORY') {
-                      partName = 'قصة جانبية';
-                    } else {
-                      partName = 'جزء إضافي';
-                    }
+                    if (format == 'MOVIE') partName = 'فيلم';
+                    else if (relationType == 'PREQUEL') partName = 'موسم سابق';
+                    else if (relationType == 'SEQUEL') partName = 'موسم لاحق';
+                    else if (relationType == 'SIDE_STORY') partName = 'قصة جانبية';
+                    else partName = 'جزء إضافي';
                     
                     subAnimes.add({
                       'title': displayTitle,
@@ -181,7 +166,7 @@ class AnimeApiService {
               'imageUrl': imageUrl,
               'subAnimes': subAnimes,
               'characters': characters,
-              'studios': studios, // 🔥 إرجاع الاستوديو
+              'studios': studios,
             };
           }
           return {'genres': <String>[], 'summary': '', 'episodes': 0, 'globalRating': null, 'releaseYear': null, 'imageUrl': null, 'subAnimes': [], 'characters': [], 'studios': null};
@@ -199,7 +184,6 @@ class AnimeApiService {
       final encodedText = Uri.encodeComponent(text);
       final url = Uri.parse('https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=ar&dt=t&q=$encodedText');
       final response = await http.get(url).timeout(const Duration(seconds: 10));
-
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data is List && data.isNotEmpty && data[0] is List) {
@@ -237,17 +221,16 @@ class AnimeApiService {
         anime.characters = (data['characters'] as List).map((e) => Map<String, dynamic>.from(e)).toList();
         changed = true;
       }
-      // 🔥 حفظ الاستوديو
-      if (anime.studios == null && data['studios'] != null) {
-        anime.studios = data['studios'];
-        changed = true;
-      }
+      if (anime.studios == null && data['studios'] != null) { anime.studios = data['studios']; changed = true; }
 
+      // 🔥 تحديث المواسم الموجودة وإنشاء الجديدة
       final List<Map<String, dynamic>> subData = data['subAnimes'];
       if (subData.isNotEmpty) {
         for (var sub in subData) {
-          final exists = animes.any((a) => a.title == sub['title'] && a.parentId == anime.id);
-          if (!exists) {
+          final existingIndex = animes.indexWhere((a) => a.title == sub['title'] && a.parentId == anime.id);
+          
+          if (existingIndex == -1) {
+            // إنشاء موسم جديد
             final newSub = Anime(
               id: DateTime.now().microsecondsSinceEpoch.toString() + Random().nextInt(999).toString(),
               title: sub['title'],
@@ -262,6 +245,15 @@ class AnimeApiService {
             );
             animes.add(newSub);
             changed = true;
+          } else {
+            // 🔥 تحديث الموسم الموجود إذا كانت بياناته ناقصة
+            final existing = animes[existingIndex];
+            if (existing.globalRating == null && sub['globalRating'] != null) { existing.globalRating = sub['globalRating']; changed = true; }
+            if (existing.releaseYear == null && sub['releaseYear'] != null) { existing.releaseYear = sub['releaseYear']; changed = true; }
+            if ((existing.imageUrl == null || existing.imageUrl!.isEmpty) && sub['imageUrl'] != null) { existing.imageUrl = sub['imageUrl']; changed = true; }
+            if (existing.summary.isEmpty && (sub['summary'] ?? '').isNotEmpty) { existing.summary = sub['summary']; changed = true; }
+            if (existing.genre.isEmpty && (sub['genre'] ?? '').isNotEmpty) { existing.genre = sub['genre']; changed = true; }
+            if (existing.episodes == 0 && (sub['episodes'] ?? 0) > 0) { existing.episodes = sub['episodes']; changed = true; }
           }
         }
       }
