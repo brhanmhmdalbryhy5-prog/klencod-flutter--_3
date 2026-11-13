@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'dart:math'; // 🔥 تمت إضافة هذا السطر لعملية الخلط العشوائي
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -150,7 +150,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       case 'titleDesc': result.sort((a, b) => b.title.toLowerCase().compareTo(a.title.toLowerCase())); break;
       case 'rating': result.sort((a, b) => b.rating.compareTo(a.rating)); break;
       case 'favorites': result.sort((a, b) { final favoriteOrder = (b.favorite ? 1 : 0).compareTo(a.favorite ? 1 : 0); if (favoriteOrder != 0) return favoriteOrder; return _dateOf(b).compareTo(_dateOf(a)); }); break;
-      case 'random': result.shuffle(Random()); break; // 🔥 الترتيب العشوائي هنا
+      case 'random': result.shuffle(Random()); break;
       case 'newest': default: result.sort((a, b) => _dateOf(b).compareTo(_dateOf(a))); break;
     }
     return result;
@@ -168,7 +168,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       case 'titleDesc': return 'الاسم: ي ← أ';
       case 'rating': return 'الأعلى تقييمًا';
       case 'favorites': return 'المفضلة أولًا';
-      case 'random': return 'عشوائي'; // 🔥 اسم الترتيب العشوائي
+      case 'random': return 'عشوائي';
       default: return 'الأحدث إضافة';
     }
   }
@@ -194,22 +194,39 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
+  // 🔥 دالة عرض الصورة (محلية أولاً، ثم إنترنت، ثم أيقونة)
   Widget _animeImage(Anime anime, Color color, {bool compact = false}) {
     final path = anime.imagePath;
+    final url = anime.imageUrl;
+    final width = compact ? double.infinity : 76.0;
+    final height = compact ? 160.0 : 96.0;
+
     Widget imageWidget;
 
-    if (path != null && path.isNotEmpty) {
-      imageWidget = Image.file(File(path), width: compact ? double.infinity : 76, height: compact ? 160 : 96, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _imagePlaceholder(color, compact: compact));
+    if (path != null && path.isNotEmpty && File(path).existsSync()) {
+      // 1. صورة محلية
+      imageWidget = Image.file(File(path), width: width, height: height, fit: BoxFit.cover);
+    } else if (url != null && url.isNotEmpty) {
+      // 2. صورة من الإنترنت
+      imageWidget = Image.network(
+        url, 
+        width: width, 
+        height: height, 
+        fit: BoxFit.cover,
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return Container(width: width, height: height, color: Colors.white10, child: const Center(child: CircularProgressIndicator(strokeWidth: 2)));
+        },
+        errorBuilder: (_, __, ___) => _imagePlaceholder(color, compact: compact),
+      );
     } else {
+      // 3. لا توجد صورة
       imageWidget = _imagePlaceholder(color, compact: compact);
     }
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(13),
-      child: Hero(
-        tag: 'anime_image_${anime.id}',
-        child: imageWidget,
-      ),
+      child: Hero(tag: 'anime_image_${anime.id}', child: imageWidget),
     );
   }
 
@@ -284,26 +301,20 @@ class _LibraryScreenState extends State<LibraryScreen> {
     final int episodes = data['episodes'];
     final double? globalRating = data['globalRating'];
     final int? releaseYear = data['releaseYear'];
+    final String? imageUrl = data['imageUrl'];
 
-    if (genres.isNotEmpty || summary.isNotEmpty || episodes > 0 || globalRating != null || releaseYear != null) {
+    if (genres.isNotEmpty || summary.isNotEmpty || episodes > 0 || globalRating != null || releaseYear != null || imageUrl != null) {
       setState(() {
         if (genres.isNotEmpty) anime.genre = genres.join('، ');
         if (summary.isNotEmpty) anime.summary = summary;
         if (episodes > 0) anime.episodes = episodes;
         if (globalRating != null) anime.globalRating = globalRating;
         if (releaseYear != null) anime.releaseYear = releaseYear;
+        if (imageUrl != null) anime.imageUrl = imageUrl;
       });
       await storage.saveAnimes(animes);
       if (!mounted) return;
-      
-      String msg = 'تم جلب ';
-      if (genres.isNotEmpty) msg += 'التصنيفات ';
-      if (summary.isNotEmpty) msg += 'والقصة ';
-      if (episodes > 0) msg += 'والحلقات ';
-      if (globalRating != null) msg += 'والتقييم ';
-      if (releaseYear != null) msg += 'والسنة ';
-      
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم جلب البيانات والصورة!')));
     } else {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لم يتم العثور على بيانات. تأكد من كتابة الاسم بالإنجليزية.')));
     }
@@ -394,11 +405,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
                             clipBehavior: Clip.antiAlias,
                             child: imagePath != null && File(imagePath!).existsSync()
                                 ? Image.file(File(imagePath!), fit: BoxFit.cover)
-                                : const Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.add_photo_alternate_outlined, size: 36), SizedBox(height: 8), Text('اختيار صورة (اختياري)')]),
+                                : (anime.imageUrl != null ? Image.network(anime.imageUrl!, fit: BoxFit.cover) : const Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.add_photo_alternate_outlined, size: 36), SizedBox(height: 8), Text('اختيار صورة (اختياري)')])),
                           ),
                         ),
                         if (imagePath != null)
-                          TextButton.icon(onPressed: () => setDialogState(() { imagePath = null; imageChanged = true; }), icon: const Icon(Icons.delete_outline), label: const Text('إزالة الصورة')),
+                          TextButton.icon(onPressed: () => setDialogState(() { imagePath = null; imageChanged = true; }), icon: const Icon(Icons.delete_outline), label: const Text('إزالة الصورة المحلية')),
                         const SizedBox(height: 12),
                         TextField(controller: titleController, decoration: const InputDecoration(labelText: 'اسم الأنمي (اختياري)')),
                         const SizedBox(height: 10),
@@ -704,6 +715,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   Widget _buildCinematicCard(Anime anime) {
     final imagePath = anime.imagePath;
+    final imageUrl = anime.imageUrl;
+
     return Container(
       height: 220, margin: const EdgeInsets.only(bottom: 15),
       decoration: BoxDecoration(borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 15, spreadRadius: 2)]),
@@ -712,10 +725,14 @@ class _LibraryScreenState extends State<LibraryScreen> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            if (imagePath != null && File(imagePath).existsSync())
-                Hero(tag: 'anime_image_${anime.id}', child: Image.file(File(imagePath), fit: BoxFit.cover))
-            else
-                Container(color: Colors.black26, child: const Icon(Icons.movie, size: 50, color: Colors.white24)),
+            Hero(
+              tag: 'anime_image_${anime.id}',
+              child: imagePath != null && File(imagePath).existsSync()
+                  ? Image.file(File(imagePath), fit: BoxFit.cover)
+                  : imageUrl != null && imageUrl.isNotEmpty
+                      ? Image.network(imageUrl, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: Colors.black26, child: const Icon(Icons.movie, size: 50, color: Colors.white24)))
+                      : Container(color: Colors.black26, child: const Icon(Icons.movie, size: 50, color: Colors.white24)),
+            ),
             Container(decoration: const BoxDecoration(gradient: LinearGradient(colors: [Colors.transparent, Colors.black87, Colors.black], begin: Alignment.topCenter, end: Alignment.bottomCenter, stops: [0.4, 0.8, 1.0]))),
             Positioned(
               bottom: 15, left: 15, right: 15,
@@ -744,6 +761,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   Widget _buildCompactListCard(Anime anime) {
+    final imagePath = anime.imagePath;
+    final imageUrl = anime.imageUrl;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(color: const Color(0xFF1B1F28), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white10)),
@@ -758,9 +778,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 borderRadius: BorderRadius.circular(8),
                 child: Hero(
                   tag: 'anime_image_${anime.id}',
-                  child: anime.imagePath != null && File(anime.imagePath!).existsSync()
-                      ? Image.file(File(anime.imagePath!), width: 45, height: 45, fit: BoxFit.cover)
-                      : Container(width: 45, height: 45, color: Colors.black26, child: const Icon(Icons.movie, size: 20, color: Colors.white24)),
+                  child: imagePath != null && File(imagePath).existsSync()
+                      ? Image.file(File(imagePath), width: 45, height: 45, fit: BoxFit.cover)
+                      : imageUrl != null && imageUrl.isNotEmpty
+                          ? Image.network(imageUrl, width: 45, height: 45, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(width: 45, height: 45, color: Colors.black26, child: const Icon(Icons.movie, size: 20, color: Colors.white24)))
+                          : Container(width: 45, height: 45, color: Colors.black26, child: const Icon(Icons.movie, size: 20, color: Colors.white24)),
                 ),
               ),
               const SizedBox(width: 12),
@@ -803,7 +825,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       },
       itemBuilder: (context) => [
         const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit_outlined), SizedBox(width: 10), Text('تعديل بيانات الأنمي')])),
-        const PopupMenuItem(value: 'fetch_data', child: Row(children: [Icon(Icons.cloud_download_outlined, color: Colors.cyan), SizedBox(width: 10), Text('جلب البيانات من الإنترنت')])),
+        const PopupMenuItem(value: 'fetch_data', child: Row(children: [Icon(Icons.cloud_download_outlined, color: Colors.cyan), SizedBox(width: 10), Text('جلب البيانات والصورة')])),
         PopupMenuItem(value: 'favorite', child: Row(children: [const Icon(Icons.favorite_border, color: Color(0xFFFF5364)), const SizedBox(width: 10), Text(anime.favorite ? 'إزالة من المفضلة' : 'إضافة إلى المفضلة')])),
         const PopupMenuItem(value: 'trash', child: Row(children: [Icon(Icons.delete_outline, color: Color(0xFFFF6B72)), SizedBox(width: 10), Text('نقل إلى سلة المهملات')])),
       ],
@@ -834,7 +856,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
               PopupMenuItem(value: 'titleDesc', child: Text('الاسم: ي ← أ')),
               PopupMenuItem(value: 'rating', child: Text('الأعلى تقييمًا')),
               PopupMenuItem(value: 'favorites', child: Text('المفضلة أولًا')),
-              PopupMenuItem(value: 'random', child: Text('عشوائي 🎲')), // 🔥 خيار الترتيب العشوائي
+              PopupMenuItem(value: 'random', child: Text('عشوائي 🎲')),
             ],
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
