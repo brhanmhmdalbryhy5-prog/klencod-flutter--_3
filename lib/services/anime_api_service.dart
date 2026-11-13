@@ -6,7 +6,6 @@ import 'storage_service.dart';
 class AnimeApiService {
   final StorageService _storage = StorageService();
 
-  // 🔥 جلب البيانات مع العلاقات (المواسم والأفلام)
   Future<Map<String, dynamic>> fetchAnimeData(String animeTitle) async {
     if (animeTitle.trim().isEmpty) {
       return {'genres': <String>[], 'summary': '', 'episodes': 0, 'globalRating': null, 'releaseYear': null, 'subAnimes': []};
@@ -16,6 +15,7 @@ class AnimeApiService {
       try {
         const String url = 'https://graphql.anilist.co';
 
+        // 🔥 تم إضافة حقول المواسم (description, averageScore, startDate, genres) للاستعلام
         final String query = '''
           query (\$search: String) {
             Page(perPage: 1) {
@@ -32,7 +32,11 @@ class AnimeApiService {
                     node {
                       id
                       title { romaji english }
+                      description
                       episodes
+                      averageScore
+                      startDate { year }
+                      genres
                       format
                     }
                   }
@@ -80,7 +84,7 @@ class AnimeApiService {
               }
             }
 
-            // 🔥 استخراج المواسم والأفلام
+            // 🔥 استخراج تفاصيل المواسم كاملة
             List<Map<String, dynamic>> subAnimes = [];
             final relations = media['relations']?['edges'] as List?;
             if (relations != null) {
@@ -89,17 +93,35 @@ class AnimeApiService {
                 final node = edge['node'];
                 final format = node['format'];
                 
-                // نأخذ المواسم (TV) والأفلام (MOVIE) و OVA و SPECIAL
                 if (format == 'TV' || format == 'MOVIE' || format == 'OVA' || format == 'SPECIAL') {
                   final titleRomaji = node['title']['romaji'] ?? '';
                   final titleEnglish = node['title']['english'] ?? '';
                   final displayTitle = titleRomaji.isNotEmpty ? titleRomaji : titleEnglish;
                   
                   if (displayTitle.isNotEmpty) {
+                    // جلب تفاصيل الموسم
+                    final subGenresRaw = (node['genres'] as List?)?.map((e) => e.toString()).toList() ?? [];
+                    final subHasAdult = subGenresRaw.any((g) => g == 'Ecchi' || g == 'Hentai');
+                    final subGenres = subGenresRaw.where((g) => g != 'Ecchi' && g != 'Hentai').map((g) => _translateGenre(g)).toList();
+                    
+                    String subSummary = node['description']?.toString() ?? '';
+                    subSummary = subSummary.replaceAll(RegExp(r'<[^>]*>'), '');
+                    if (subSummary.isNotEmpty && !subHasAdult) {
+                      subSummary = await _translateToArabic(subSummary);
+                    } else if (subHasAdult) {
+                      subSummary = ''; // إخفاء القصة إذا كان إباحياً
+                    }
+
+                    final subScore = node['averageScore'] as int?;
+                    
                     subAnimes.add({
                       'title': displayTitle,
-                      'type': format == 'MOVIE' ? 'فيلم' : (relationType == 'PREQUEL' ? 'موسم سابق' : 'موسم لاحق'),
+                      'partName': format == 'MOVIE' ? 'فيلم' : (relationType == 'PREQUEL' ? 'موسم سابق' : 'موسم لاحق'),
                       'episodes': node['episodes'] ?? 0,
+                      'summary': subSummary,
+                      'genre': subGenres.join('، '),
+                      'globalRating': subScore != null ? subScore / 10.0 : null,
+                      'releaseYear': node['startDate']?['year'] as int?,
                     });
                   }
                 }
@@ -152,7 +174,7 @@ class AnimeApiService {
 
     for (int i = 0; i < animes.length; i++) {
       final anime = animes[i];
-      if (anime.parentId != null) continue; // تخطي المواسم
+      if (anime.parentId != null) continue;
 
       if (anime.genre.trim().isNotEmpty && anime.summary.trim().isNotEmpty && anime.episodes > 0 && anime.globalRating != null && anime.releaseYear != null) continue;
 
