@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../main.dart';
 import '../services/backup_service.dart';
@@ -29,9 +30,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadThemePreference() async {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
-    setState(() {
-      darkMode = prefs.getBool('isDarkMode') ?? true;
-    });
+    setState(() { darkMode = prefs.getBool('isDarkMode') ?? true; });
   }
 
   Future<void> _toggleTheme(bool value) async {
@@ -60,12 +59,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 return GestureDetector(
                   onTap: () => Navigator.pop(dialogContext, colorItem.color),
                   child: Container(
-                    decoration: BoxDecoration(
-                      color: colorItem.color,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: isSelected ? Colors.white : Colors.transparent, width: 3),
-                      boxShadow: [BoxShadow(color: colorItem.color.withOpacity(0.6), blurRadius: 10, spreadRadius: 1)],
-                    ),
+                    decoration: BoxDecoration(color: colorItem.color, shape: BoxShape.circle, border: Border.all(color: isSelected ? Colors.white : Colors.transparent, width: 3), boxShadow: [BoxShadow(color: colorItem.color.withOpacity(0.6), blurRadius: 10, spreadRadius: 1)]),
                     child: isSelected ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
                   ),
                 );
@@ -83,35 +77,86 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  // 🔥 اختيار خط الاسم
+  Future<void> _showFontPicker() async {
+    final fonts = ['Cairo', 'Tajawal', 'Almarai', 'Changa'];
+    final selectedFont = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF1B1F28),
+          title: const Text('اختر خط اسم الأنمي'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: fonts.map((font) {
+              return ListTile(
+                title: Text(font, style: TextStyle(fontFamily: font == 'Cairo' ? GoogleFonts.cairo().fontFamily : font == 'Tajawal' ? GoogleFonts.tajawal().fontFamily : font == 'Almarai' ? GoogleFonts.almarai().fontFamily : GoogleFonts.changa().fontFamily, color: Colors.white)),
+                trailing: fontNotifier.value == font ? const Icon(Icons.check, color: Colors.green) : null,
+                onTap: () => Navigator.pop(dialogContext, font),
+              );
+            }).toList(),
+          ),
+        );
+      },
+    );
+
+    if (selectedFont != null) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('app_font', selectedFont);
+      fontNotifier.value = selectedFont;
+    }
+  }
+
+  // 🔥 اختيار لون اسم الأنمي
+  Future<void> _showTitleColorPicker() async {
+    final colors = [const Color(0xFFFFD700), Colors.white, Colors.cyan, Colors.greenAccent, Colors.pinkAccent, Colors.orangeAccent];
+    final selectedColor = await showDialog<Color>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF1B1F28),
+          title: const Text('اختر لون اسم الأنمي'),
+          content: Wrap(
+            spacing: 10, runSpacing: 10,
+            children: colors.map((color) {
+              return GestureDetector(
+                onTap: () => Navigator.pop(dialogContext, color),
+                child: Container(
+                  width: 50, height: 50,
+                  decoration: BoxDecoration(color: color, shape: BoxShape.circle, border: Border.all(color: titleColorNotifier.value == color ? Colors.white : Colors.transparent, width: 3)),
+                ),
+              );
+            }).toList(),
+          ),
+        );
+      },
+    );
+
+    if (selectedColor != null) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('title_color', selectedColor.value);
+      titleColorNotifier.value = selectedColor;
+    }
+  }
+
   Future<void> _autoUpdateGenres() async {
     if (isUpdatingGenres) return;
-
     final confirm = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: const Color(0xFF1B1F28),
         title: const Text('تحديث البيانات تلقائياً'),
-        content: const Text(
-          'سيقوم التطبيق بالبحث في الإنترنت عن تصنيفات، قصص، حلقات، وتقييمات الأنميات التي لا تحتوي عليها.\n\n'
-          'قد تستغرق العملية بعض الوقت حسب عدد الأنميات. هل تريد المتابعة؟',
-        ),
+        content: const Text('سيقوم التطبيق بالبحث في الإنترنت عن تصنيفات، قصص، حلقات، وتقييمات الأنميات التي لا تحتوي عليها.\n\nقد تستغرق العملية بعض الوقت. هل تريد المتابعة؟'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: primaryColorNotifier.value),
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('متابعة'),
-          ),
+          FilledButton(style: FilledButton.styleFrom(backgroundColor: primaryColorNotifier.value), onPressed: () => Navigator.pop(dialogContext, true), child: const Text('متابعة')),
         ],
       ),
     );
 
     if (confirm != true || !mounted) return;
-
     setState(() => isUpdatingGenres = true);
-
     final result = await apiService.autoUpdateLibraryData();
-
     if (!mounted) return;
     setState(() => isUpdatingGenres = false);
 
@@ -122,9 +167,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (updated == 0 && failed == 0) {
       message = 'كل الأنميات لديها بيانات بالفعل! لا حاجة للتحديث.';
     } else {
-      message = 'تم تحديث $updated أنمي بنجاح.\n'
-          'فشل تحديث $failed أنمي.\n\n'
-          'ملاحظة: فشل التحديث غالباً بسبب أن اسم الأنمي مكتوب بالعربية. يرجى تعديل الأسماء إلى الإنجليزية.';
+      message = 'تم تحديث $updated أنمي بنجاح.\nفشل تحديث $failed أنمي.\n\nملاحظة: فشل التحديث غالباً بسبب أن اسم الأنمي مكتوب بالعربية. يرجى تعديل الأسماء إلى الإنجليزية.';
     }
 
     await showDialog<void>(
@@ -133,9 +176,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         backgroundColor: const Color(0xFF1B1F28),
         title: const Text('نتيجة التحديث'),
         content: Text(message),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('حسنًا')),
-        ],
+        actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('حسنًا'))],
       ),
     );
   }
@@ -146,33 +187,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (dialogContext) => AlertDialog(
         backgroundColor: const Color(0xFF1B1F28),
         title: const Text('مسح جميع التصنيفات'),
-        content: const Text(
-          'سيتم مسح التصنيفات من جميع الأنميات في مكتبتك. هل أنت متأكد؟',
-        ),
+        content: const Text('سيتم مسح التصنيفات من جميع الأنميات في مكتبتك. هل أنت متأكد؟'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFFF5A65)),
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('مسح الكل'),
-          ),
+          FilledButton(style: FilledButton.styleFrom(backgroundColor: const Color(0xFFFF5A65)), onPressed: () => Navigator.pop(dialogContext, true), child: const Text('مسح الكل')),
         ],
       ),
     );
 
     if (confirm != true || !mounted) return;
-
     final count = await apiService.clearAllGenres();
-
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('تم مسح التصنيفات من $count أنمي.')),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم مسح التصنيفات من $count أنمي.')));
   }
 
   Future<void> runBackupAction({required bool restore}) async {
     if (backupBusy) return;
-
     if (restore) {
       final confirmed = await showDialog<bool>(
         context: context,
@@ -182,11 +212,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           content: const Text('ستُستبدل قائمة الأنميات الحالية بالأنميات الموجودة في النسخة الاحتياطية.\n\nهل تريد المتابعة؟'),
           actions: [
             TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: primaryColorNotifier.value, foregroundColor: Colors.white),
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('متابعة'),
-            ),
+            ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: primaryColorNotifier.value, foregroundColor: Colors.white), onPressed: () => Navigator.pop(dialogContext, true), child: const Text('متابعة')),
           ],
         ),
       );
@@ -252,11 +278,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const SizedBox(height: 24),
         Container(
           padding: const EdgeInsets.all(19),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(colors: [primaryColor, primaryColor.withOpacity(0.3), const Color(0xFF202431)], begin: Alignment.topRight, end: Alignment.bottomLeft),
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [BoxShadow(color: primaryColor.withOpacity(0.3), blurRadius: 20, spreadRadius: 3)],
-          ),
+          decoration: BoxDecoration(gradient: LinearGradient(colors: [primaryColor, primaryColor.withOpacity(0.3), const Color(0xFF202431)], begin: Alignment.topRight, end: Alignment.bottomLeft), borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: primaryColor.withOpacity(0.3), blurRadius: 20, spreadRadius: 3)]),
           child: const Row(
             children: [
               Icon(Icons.shield_outlined, size: 46, color: Colors.white),
@@ -268,89 +290,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const SizedBox(height: 25),
         const Text('التخصيص', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
         const SizedBox(height: 12),
-        _settingsTile(
-          icon: Icons.palette_outlined,
-          color: primaryColor,
-          title: 'المظهر',
-          subtitle: darkMode ? 'الوضع الداكن' : 'الوضع الفاتح',
-          trailing: Switch(value: darkMode, activeColor: primaryColor, onChanged: _toggleTheme),
-          onTap: null,
-        ),
+        _settingsTile(icon: Icons.palette_outlined, color: primaryColor, title: 'المظهر', subtitle: darkMode ? 'الوضع الداكن' : 'الوضع الفاتح', trailing: Switch(value: darkMode, activeColor: primaryColor, onChanged: _toggleTheme), onTap: null),
         const SizedBox(height: 10),
-        _settingsTile(
-          icon: Icons.color_lens_outlined,
-          color: primaryColor,
-          title: 'لون التطبيق',
-          subtitle: 'تغيير اللون الأساسي للتطبيق (18 لوناً)',
-          trailing: const Icon(Icons.chevron_left, color: Colors.white38),
-          onTap: _showColorPicker,
-        ),
+        _settingsTile(icon: Icons.color_lens_outlined, color: primaryColor, title: 'لون التطبيق', subtitle: 'تغيير اللون الأساسي للتطبيق (18 لوناً)', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: _showColorPicker),
         const SizedBox(height: 10),
-        _settingsTile(
-          icon: Icons.sync_alt,
-          color: const Color(0xFF3A91B5),
-          title: 'تحديث البيانات تلقائياً',
-          subtitle: 'جلب التصنيفات، القصص، الحلقات، والتقييمات من الإنترنت',
-          trailing: isUpdatingGenres
-              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-              : const Icon(Icons.chevron_left, color: Colors.white38),
-          onTap: isUpdatingGenres ? null : _autoUpdateGenres,
-        ),
+        // 🔥 أزرار الخط واللون
+        _settingsTile(icon: Icons.font_download_outlined, color: primaryColor, title: 'خط اسم الأنمي', subtitle: 'اختيار الخط المفضل (Cairo, Tajawal...)', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: _showFontPicker),
         const SizedBox(height: 10),
-        _settingsTile(
-          icon: Icons.delete_sweep_outlined,
-          color: const Color(0xFFFF5A65),
-          title: 'مسح جميع التصنيفات',
-          subtitle: 'حذف التصنيفات من جميع الأنميات (لا يمكن التراجع)',
-          trailing: const Icon(Icons.chevron_left, color: Colors.white38),
-          onTap: _clearAllGenres,
-        ),
+        _settingsTile(icon: Icons.format_color_text, color: titleColorNotifier.value, title: 'لون اسم الأنمي', subtitle: 'تغيير لون النص في البطاقات', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: _showTitleColorPicker),
         const SizedBox(height: 24),
         const Text('إدارة البيانات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
         const SizedBox(height: 12),
-        _settingsTile(
-          icon: Icons.backup_outlined,
-          color: const Color(0xFF35B77A),
-          title: 'إنشاء نسخة احتياطية',
-          subtitle: 'حفظ بياناتك في ملف ZIP داخل ملفات الهاتف',
-          trailing: const Icon(Icons.chevron_left, color: Colors.white38),
-          onTap: backupBusy ? null : () => runBackupAction(restore: false),
-        ),
+        _settingsTile(icon: Icons.sync_alt, color: const Color(0xFF3A91B5), title: 'تحديث البيانات تلقائياً', subtitle: 'جلب التصنيفات، القصص، الحلقات، والتقييمات', trailing: isUpdatingGenres ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.chevron_left, color: Colors.white38), onTap: isUpdatingGenres ? null : _autoUpdateGenres),
         const SizedBox(height: 10),
-        _settingsTile(
-          icon: Icons.settings_backup_restore,
-          color: const Color(0xFFFFC857),
-          title: 'استعادة نسخة احتياطية',
-          subtitle: 'استرجاع بياناتك من ملف ZIP محفوظ',
-          trailing: const Icon(Icons.chevron_left, color: Colors.white38),
-          onTap: backupBusy ? null : () => runBackupAction(restore: true),
-        ),
-        if (backupBusy) ...[
-          const SizedBox(height: 16),
-          const Center(child: CircularProgressIndicator()),
-          const SizedBox(height: 8),
-          const Center(child: Text('جارٍ تجهيز البيانات...', style: TextStyle(color: Colors.white60))),
-        ],
+        _settingsTile(icon: Icons.delete_sweep_outlined, color: const Color(0xFFFF5A65), title: 'مسح جميع التصنيفات', subtitle: 'حذف التصنيفات من جميع الأنميات', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: _clearAllGenres),
+        const SizedBox(height: 24),
+        const Text('النسخ الاحتياطي', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 12),
+        _settingsTile(icon: Icons.backup_outlined, color: const Color(0xFF35B77A), title: 'إنشاء نسخة احتياطية', subtitle: 'حفظ بياناتك في ملف ZIP', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: backupBusy ? null : () => runBackupAction(restore: false)),
         const SizedBox(height: 10),
-        _settingsTile(
-          icon: Icons.storage_outlined,
-          color: const Color(0xFF247BA0),
-          title: 'التخزين المحلي',
-          subtitle: 'معلومات عن حفظ البيانات على الهاتف',
-          trailing: const Icon(Icons.chevron_left, color: Colors.white38),
-          onTap: showStorageInfo,
-        ),
+        _settingsTile(icon: Icons.settings_backup_restore, color: const Color(0xFFFFC857), title: 'استعادة نسخة احتياطية', subtitle: 'استرجاع بياناتك من ملف ZIP', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: backupBusy ? null : () => runBackupAction(restore: true)),
+        if (backupBusy) ...[const SizedBox(height: 16), const Center(child: CircularProgressIndicator()), const SizedBox(height: 8), const Center(child: Text('جارٍ تجهيز البيانات...', style: TextStyle(color: Colors.white60)))],
         const SizedBox(height: 24),
         const Text('حول التطبيق', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
         const SizedBox(height: 12),
-        _settingsTile(
-          icon: Icons.info_outline,
-          color: const Color(0xFFFFC857),
-          title: 'عن ذاكرة الأوتاكو',
-          subtitle: 'معلومات عن التطبيق',
-          trailing: const Icon(Icons.chevron_left, color: Colors.white38),
-          onTap: showAbout,
-        ),
+        _settingsTile(icon: Icons.info_outline, color: const Color(0xFFFFC857), title: 'عن ذاكرة الأوتاكو', subtitle: 'معلومات عن التطبيق', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: showAbout),
         const SizedBox(height: 28),
         const Center(child: Text('صُنع للأوتاكو، ليحفظ كل ذكرى.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 12))),
       ],
@@ -359,20 +323,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _settingsTile({required IconData icon, required Color color, required String title, required String subtitle, required Widget trailing, required VoidCallback? onTap}) {
     return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF1B1F28),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.4), width: 1),
-        boxShadow: [BoxShadow(color: color.withOpacity(0.3), blurRadius: 15, spreadRadius: 2)],
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1B1F28), borderRadius: BorderRadius.circular(16), border: Border.all(color: color.withOpacity(0.4), width: 1), boxShadow: [BoxShadow(color: color.withOpacity(0.3), blurRadius: 15, spreadRadius: 2)]),
       child: ListTile(
         onTap: onTap,
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-        leading: Container(
-          width: 43, height: 43,
-          decoration: BoxDecoration(color: color.withOpacity(0.14), borderRadius: BorderRadius.circular(12)),
-          child: Icon(icon, color: color),
-        ),
+        leading: Container(width: 43, height: 43, decoration: BoxDecoration(color: color.withOpacity(0.14), borderRadius: BorderRadius.circular(12)), child: Icon(icon, color: color)),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
         subtitle: Padding(padding: const EdgeInsets.only(top: 4), child: Text(subtitle, style: const TextStyle(color: Colors.white54, fontSize: 11))),
         trailing: trailing,
