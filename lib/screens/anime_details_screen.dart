@@ -13,6 +13,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
+import 'package:http/http.dart' as http; // 🔥 ضروري لتحميل الصور
 
 import '../main.dart';
 import '../models/anime.dart';
@@ -44,7 +45,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
   
   List<Anime> subAnimes = [];
   bool _isSeasonGridView = false;
-  static const String _seasonViewKey = 'season_view_grid'; // 🔥 مفتاح حفظ شكل العرض
+  static const String _seasonViewKey = 'season_view_grid';
   
   VideoPlayerController? _videoController;
   ChewieController? _chewieController;
@@ -61,7 +62,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
   Future<void> _loadData() async {
     final prefs = await SharedPreferences.getInstance();
     final path = prefs.getString(_preferenceKey);
-    final savedView = prefs.getBool(_seasonViewKey); // 🔥 تحميل شكل العرض المحفوظ
+    final savedView = prefs.getBool(_seasonViewKey);
     
     final allAnimes = await storage.loadAnimes();
     
@@ -70,13 +71,10 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
       currentAnime = allAnimes[index];
     }
 
-    // 🔥 جلب الأجزاء المرتبطة (مترابطة في كلا الاتجاهين)
     List<Anime> relatedAnimes;
     if (currentAnime.parentId == null) {
-      // إذا كنا في الأنمي الأصلي، نجلب كل المواسم والأفلام التابعة له
       relatedAnimes = allAnimes.where((a) => a.parentId == currentAnime.id).toList();
     } else {
-      // إذا كنا في موسم/فيلم، نجلب الأنمي الأصلي + كل الأجزاء الأخرى (باستثناء الحالي)
       final parent = allAnimes.where((a) => a.id == currentAnime.parentId).toList();
       final siblings = allAnimes.where((a) => a.parentId == currentAnime.parentId && a.id != currentAnime.id).toList();
       relatedAnimes = [...parent, ...siblings];
@@ -85,7 +83,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     if (!mounted) return;
     setState(() {
       _characterImagePath = path;
-      if (savedView != null) _isSeasonGridView = savedView; // 🔥 تطبيق الشكل المحفوظ
+      if (savedView != null) _isSeasonGridView = savedView;
       subAnimes = relatedAnimes;
       _loading = false;
     });
@@ -95,7 +93,24 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     }
   }
 
-  // 🔥 دالة حفظ شكل العرض
+  // 🔥 دالة لتحميل الصور من الإنترنت وحفظها محلياً
+  Future<String?> _downloadAndSaveImage(String? url) async {
+    if (url == null || url.isEmpty) return null;
+    try {
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode == 200) {
+        final directory = await getApplicationDocumentsDirectory();
+        final folder = Directory('${directory.path}/anime_images');
+        if (!await folder.exists()) await folder.create(recursive: true);
+        final extension = url.contains('.') ? url.substring(url.lastIndexOf('.')) : '.jpg';
+        final file = File('${folder.path}/dl_${DateTime.now().microsecondsSinceEpoch}$extension');
+        await file.writeAsBytes(response.bodyBytes);
+        return file.path;
+      }
+    } catch (_) {}
+    return null;
+  }
+
   Future<void> _toggleSeasonView() async {
     HapticFeedback.selectionClick();
     setState(() => _isSeasonGridView = !_isSeasonGridView);
@@ -161,19 +176,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
           ),
         ),
       );
-    } else if (currentAnime.imageUrl != null && currentAnime.imageUrl!.isNotEmpty) {
-      showDialog(
-        context: context,
-        builder: (_) => Dialog(
-          backgroundColor: Colors.transparent, insetPadding: EdgeInsets.zero,
-          child: InteractiveViewer(
-            panEnabled: true, minScale: 1.0, maxScale: 5.0,
-            child: Image.network(currentAnime.imageUrl!, fit: BoxFit.contain),
-          ),
-        ),
-      );
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لا توجد صورة لتكبيرها.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لا توجد صورة محلية لتكبيرها.')));
     }
   }
 
@@ -216,18 +220,16 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                         decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(12), border: Border.all(color: primaryColorNotifier.value)),
                         child: newImagePath != null && File(newImagePath!).existsSync()
                             ? ClipRRect(borderRadius: BorderRadius.circular(11), child: Image.file(File(newImagePath!), fit: BoxFit.cover))
-                            : currentAnime.imageUrl != null 
-                                ? ClipRRect(borderRadius: BorderRadius.circular(11), child: Image.network(currentAnime.imageUrl!, fit: BoxFit.cover))
-                                : const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.add_photo_alternate, size: 30), Text('إضافة صورة محلية')])),
+                            : const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.add_photo_alternate, size: 30), Text('إضافة صورة محلية')])),
                       ),
                     ),
                     const SizedBox(height: 12),
                     TextField(controller: titleController, decoration: const InputDecoration(labelText: 'الاسم')),
                     const SizedBox(height: 10),
-                    TextField(controller: studiosController, decoration: const InputDecoration(labelText: 'الاستوديو (مثلاً: Mappa)')),
+                    TextField(controller: studiosController, decoration: const InputDecoration(labelText: 'الاستوديو')),
                     if (currentAnime.parentId != null) ...[
                       const SizedBox(height: 10),
-                      TextField(controller: partNameController, decoration: const InputDecoration(labelText: 'اسم الموسم (مثلاً: الموسم الأول)')),
+                      TextField(controller: partNameController, decoration: const InputDecoration(labelText: 'اسم الموسم')),
                     ],
                     const SizedBox(height: 10),
                     Row(
@@ -299,26 +301,40 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     await _loadData();
   }
 
+  // 🔥 جلب وحفظ صورة الغلاف للأنمي الأصلي
   Future<void> _fetchMainImageOnly() async {
     if (currentAnime.title.trim().isEmpty) return;
     showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator()));
     
     final data = await apiService.fetchAnimeData(currentAnime.title);
-    if (!mounted) return;
-    Navigator.pop(context);
-
     final String? imageUrl = data['imageUrl'];
+    
     if (imageUrl != null) {
-      setState(() { currentAnime.imageUrl = imageUrl; });
+      final localPath = await _downloadAndSaveImage(imageUrl); // 🔥 تحميل محلي
+      
+      if (mounted) {
+        setState(() { 
+          currentAnime.imageUrl = imageUrl; 
+          if (localPath != null) currentAnime.imagePath = localPath;
+        });
+      }
+      
       final allAnimes = await storage.loadAnimes();
       final index = allAnimes.indexWhere((a) => a.id == currentAnime.id);
       if (index != -1) {
         allAnimes[index].imageUrl = imageUrl;
+        if (localPath != null) allAnimes[index].imagePath = localPath;
         await storage.saveAnimes(allAnimes);
       }
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم جلب صورة الغلاف من الإنترنت.')));
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم جلب وحفظ صورة الغلاف محلياً.')));
+      }
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لم يتم العثور على صورة.')));
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لم يتم العثور على صورة.')));
+      }
     }
   }
 
@@ -340,7 +356,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
 
   Widget _buildShareCard() {
     final imagePath = currentAnime.imagePath;
-    final imageUrl = currentAnime.imageUrl;
     final fontName = fontNotifier.value;
     final titleColor = titleColorNotifier.value;
 
@@ -364,9 +379,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
           child: Stack(
             children: [
               if (imagePath != null && File(imagePath).existsSync())
-                Positioned.fill(child: Image.file(File(imagePath), fit: BoxFit.cover))
-              else if (imageUrl != null && imageUrl.isNotEmpty)
-                Positioned.fill(child: Image.network(imageUrl, fit: BoxFit.cover)),
+                Positioned.fill(child: Image.file(File(imagePath), fit: BoxFit.cover)),
               Positioned.fill(
                 child: BackdropFilter(
                   filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
@@ -384,9 +397,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                         borderRadius: BorderRadius.circular(16),
                         child: imagePath != null && File(imagePath).existsSync()
                             ? Image.file(File(imagePath), height: 220, fit: BoxFit.cover)
-                            : imageUrl != null && imageUrl.isNotEmpty
-                                ? Image.network(imageUrl, height: 220, fit: BoxFit.cover)
-                                : Container(height: 220, width: 150, color: Colors.black26, child: const Icon(Icons.movie, size: 60, color: Colors.white24)),
+                            : Container(height: 220, width: 150, color: Colors.black26, child: const Icon(Icons.movie, size: 60, color: Colors.white24)),
                       ),
                     ),
                     const SizedBox(height: 20),
@@ -481,6 +492,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     if (index != -1) { allAnimes[index] = currentAnime; await storage.saveAnimes(allAnimes); }
   }
 
+  // 🔥 جلب وتحميل صور المواسم والشخصيات محلياً
   Future<void> _fetchDataManually() async {
     if (currentAnime.title.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الأنمي لا يملك اسماً، لا يمكن البحث عنه.')));
@@ -508,19 +520,38 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
       if (episodes > 0) currentAnime.episodes = episodes;
       if (globalRating != null) currentAnime.globalRating = globalRating;
       if (releaseYear != null) currentAnime.releaseYear = releaseYear;
-      if (charData.isNotEmpty) currentAnime.characters = charData;
       if (studios != null) currentAnime.studios = studios;
     });
 
     final allAnimes = await storage.loadAnimes();
     final index = allAnimes.indexWhere((a) => a.id == currentAnime.id);
+
+    // 🔥 تحميل صور الشخصيات محلياً
+    if (charData.isNotEmpty) {
+      List<Map<String, dynamic>> localChars = [];
+      for (var char in charData) {
+        final remoteUrl = char['image'] as String?;
+        final localPath = await _downloadAndSaveImage(remoteUrl);
+        localChars.add({
+          'name': char['name'],
+          'imageUrl': remoteUrl,
+          'imagePath': localPath,
+        });
+      }
+      currentAnime.characters = localChars;
+    }
+
     if (index != -1) { allAnimes[index] = currentAnime; }
 
-    // 🔥 تحديث المواسم الموجودة وإنشاء الجديدة
+    // 🔥 تحميل صور المواسم محلياً وتحديثها
     if (subData.isNotEmpty) {
       for (var sub in subData) {
         final existingIndex = allAnimes.indexWhere((a) => a.title == sub['title'] && a.parentId == currentAnime.id);
         
+        // تحميل صورة الموسم فوراً
+        String? subImageUrl = sub['imageUrl'];
+        String? subLocalPath = await _downloadAndSaveImage(subImageUrl);
+
         if (existingIndex == -1) {
           final newSub = Anime(
             id: DateTime.now().microsecondsSinceEpoch.toString() + Random().nextInt(999).toString(),
@@ -532,15 +563,18 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
             genre: sub['genre'] ?? '',
             globalRating: sub['globalRating'],
             releaseYear: sub['releaseYear'],
-            imageUrl: sub['imageUrl'],
+            imageUrl: subImageUrl,
+            imagePath: subLocalPath, // 🔥 حفظ الصورة المحلية
           );
           allAnimes.add(newSub);
         } else {
-          // تحديث الموسم الموجود إذا كانت بياناته ناقصة
           final existing = allAnimes[existingIndex];
           if (existing.globalRating == null && sub['globalRating'] != null) existing.globalRating = sub['globalRating'];
           if (existing.releaseYear == null && sub['releaseYear'] != null) existing.releaseYear = sub['releaseYear'];
-          if ((existing.imageUrl == null || existing.imageUrl!.isEmpty) && sub['imageUrl'] != null) existing.imageUrl = sub['imageUrl'];
+          if ((existing.imagePath == null || existing.imagePath!.isEmpty) && subLocalPath != null) {
+            existing.imagePath = subLocalPath; // 🔥 تحديث الصورة المحلية
+            existing.imageUrl = subImageUrl;
+          }
           if (existing.summary.isEmpty && (sub['summary'] ?? '').isNotEmpty) existing.summary = sub['summary'];
           if (existing.genre.isEmpty && (sub['genre'] ?? '').isNotEmpty) existing.genre = sub['genre'];
           if (existing.episodes == 0 && (sub['episodes'] ?? 0) > 0) existing.episodes = sub['episodes'];
@@ -552,7 +586,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     await _loadData();
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم جلب البيانات وتحديث المواسم بنجاح!')));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم جلب وحفظ جميع البيانات (بما فيها الصور) بنجاح!')));
   }
 
   void _addSubAnime() {
@@ -604,6 +638,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     );
   }
 
+  // 🔥 عرض الشخصيات (تدعم الصور المحلية)
   Widget _buildCharacters() {
     if (currentAnime.characters.isEmpty) return const SizedBox.shrink();
     final primaryColor = primaryColorNotifier.value;
@@ -624,7 +659,16 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
               itemCount: currentAnime.characters.length,
               itemBuilder: (context, index) {
                 final char = currentAnime.characters[index];
-                final imgUrl = char['image'] as String?;
+                final imgPath = char['imagePath'] as String?;
+                final imgUrl = char['imageUrl'] as String?;
+                
+                ImageProvider? imageProvider;
+                if (imgPath != null && File(imgPath).existsSync()) {
+                  imageProvider = FileImage(File(imgPath)); // صورة محلية
+                } else if (imgUrl != null && imgUrl.isNotEmpty) {
+                  imageProvider = NetworkImage(imgUrl); // صورة إنترنت (احتياطي)
+                }
+
                 return Padding(
                   padding: const EdgeInsets.only(left: 10),
                   child: Column(
@@ -632,8 +676,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                       CircleAvatar(
                         radius: 38,
                         backgroundColor: Colors.white10,
-                        backgroundImage: imgUrl != null && imgUrl.isNotEmpty ? NetworkImage(imgUrl) : null,
-                        child: imgUrl == null || imgUrl.isEmpty ? const Icon(Icons.person, color: Colors.white54, size: 30) : null,
+                        backgroundImage: imageProvider,
+                        child: imageProvider == null ? const Icon(Icons.person, color: Colors.white54, size: 30) : null,
                       ),
                       const SizedBox(height: 6),
                       SizedBox(
@@ -659,29 +703,17 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
 
   Widget _cover() {
     final path = currentAnime.imagePath;
-    final url = currentAnime.imageUrl;
-
     if (path != null && path.isNotEmpty && File(path).existsSync()) {
       return Container(
         color: Colors.black26, constraints: const BoxConstraints(maxHeight: 350),
         child: Hero(tag: 'anime_image_${currentAnime.id}', child: Image.file(File(path), width: double.infinity, fit: BoxFit.contain)),
       );
-    } else if (url != null && url.isNotEmpty) {
-      return Container(
-        color: Colors.black26, constraints: const BoxConstraints(maxHeight: 350),
-        child: Hero(
-          tag: 'anime_image_${currentAnime.id}', 
-          child: Image.network(url, width: double.infinity, fit: BoxFit.contain, errorBuilder: (_, __, ___) => Container(height: 180, color: panel, child: const Icon(Icons.movie_creation_outlined, size: 65, color: Colors.white30))),
-        ),
-      );
     }
     return Container(height: 180, width: double.infinity, color: panel, child: const Icon(Icons.movie_creation_outlined, size: 65, color: Colors.white30));
   }
 
-  // 🔥 بطاقة الموسم (شبكة) - تعرض السنة والتقييم
   Widget _buildSeasonGridCard(Anime sub) {
     final hasLocalImage = sub.imagePath != null && sub.imagePath!.isNotEmpty && File(sub.imagePath!).existsSync();
-    final hasNetImage = sub.imageUrl != null && sub.imageUrl!.isNotEmpty;
     final primaryColor = primaryColorNotifier.value;
     final isOriginal = sub.parentId == null;
 
@@ -707,9 +739,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                     borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
                     child: hasLocalImage
                         ? Image.file(File(sub.imagePath!), fit: BoxFit.cover)
-                        : hasNetImage
-                            ? Image.network(sub.imageUrl!, fit: BoxFit.cover)
-                            : Container(color: primaryColor.withOpacity(0.2), child: const Icon(Icons.playlist_play, color: Colors.white)),
+                        : Container(color: primaryColor.withOpacity(0.2), child: const Icon(Icons.playlist_play, color: Colors.white)),
                   ),
                   Positioned(
                     top: 2, right: 2,
@@ -771,7 +801,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     double progress = currentAnime.episodes > 0 ? (currentAnime.watchedEpisodes / currentAnime.episodes) : 0.0;
     if (progress > 1.0) progress = 1.0;
 
-    // 🔥 تحديد عنوان القسم بناءً على الوضع الحالي
     final isOriginalAnime = currentAnime.parentId == null;
     final sectionTitle = isOriginalAnime ? 'المواسم والأفلام المرتبطة' : 'الأجزاء الأخرى من السلسلة';
 
@@ -822,7 +851,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
             ],
           ),
           
-          // 🔥 قسم المواسم - يظهر دائماً (مترابط)
           if (subAnimes.isNotEmpty || isOriginalAnime) ...[
             const SizedBox(height: 20),
             Row(
@@ -831,13 +859,11 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                 Text(sectionTitle, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
                 Row(
                   children: [
-                    // 🔥 زر تغيير العرض (محفوظ)
                     IconButton(
                       tooltip: _isSeasonGridView ? 'عرض قائمة' : 'عرض شبكة',
                       icon: Icon(_isSeasonGridView ? Icons.view_list : Icons.grid_view, color: Colors.white70, size: 20),
                       onPressed: _toggleSeasonView,
                     ),
-                    // زر الإضافة يظهر فقط للأنمي الأصلي
                     if (isOriginalAnime)
                       TextButton.icon(onPressed: _addSubAnime, icon: const Icon(Icons.add, size: 16), label: const Text('إضافة')),
                   ],
@@ -860,10 +886,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
             else
               ...subAnimes.map((sub) {
                 final hasLocalImage = sub.imagePath != null && sub.imagePath!.isNotEmpty && File(sub.imagePath!).existsSync();
-                final hasNetImage = sub.imageUrl != null && sub.imageUrl!.isNotEmpty;
                 final isOriginal = sub.parentId == null;
                 
-                // 🔥 بناء النص الفرعي مع السنة والتقييم
                 List<String> subtitleParts = [];
                 if (isOriginal) {
                   subtitleParts.add('الأنمي الأصلي');
@@ -886,9 +910,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                       borderRadius: BorderRadius.circular(8),
                       child: hasLocalImage
                           ? Image.file(File(sub.imagePath!), width: 50, height: 50, fit: BoxFit.cover)
-                          : hasNetImage
-                              ? Image.network(sub.imageUrl!, width: 50, height: 50, fit: BoxFit.cover)
-                              : Container(width: 50, height: 50, color: primaryColor.withOpacity(0.2), child: const Icon(Icons.playlist_play, color: Colors.white)),
+                          : Container(width: 50, height: 50, color: primaryColor.withOpacity(0.2), child: const Icon(Icons.playlist_play, color: Colors.white)),
                     ),
                     title: Text(
                       sub.title, 
