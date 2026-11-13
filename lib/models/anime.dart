@@ -8,13 +8,18 @@ class Anime {
   String memory;
   int episodes;
   int watchedEpisodes;
-  double rating; // 🔥 أصبح double
+  double rating;
   bool favorite;
   int colorIndex;
   String date;
   String? imagePath;
   double? globalRating;
   int? releaseYear;
+  
+  // 🔥 الحقول الجديدة للمواسم والأفلام والفيديو
+  String? parentId; // إذا كان هذا الأنمي موسم، فهذا الحقل يحتوي على ID الأنمي الأصلي
+  String? partName; // اسم الموسم أو الفيلم (مثل: "الموسم الأول")
+  String? videoPath; // مسار فيديو التذكار
 
   Anime({
     required this.id,
@@ -33,6 +38,9 @@ class Anime {
     this.imagePath,
     this.globalRating,
     this.releaseYear,
+    this.parentId,
+    this.partName,
+    this.videoPath,
   });
 
   Map<String, dynamic> toJson() {
@@ -42,7 +50,8 @@ class Anime {
       'episodes': episodes, 'watchedEpisodes': watchedEpisodes,
       'rating': rating, 'favorite': favorite, 'colorIndex': colorIndex,
       'date': date, 'imagePath': imagePath, 'globalRating': globalRating,
-      'releaseYear': releaseYear,
+      'releaseYear': releaseYear, 'parentId': parentId, 'partName': partName,
+      'videoPath': videoPath,
     };
   }
 
@@ -57,13 +66,16 @@ class Anime {
       memory: json['memory'] as String? ?? '',
       episodes: (json['episodes'] as num?)?.toInt() ?? 0,
       watchedEpisodes: (json['watchedEpisodes'] as num?)?.toInt() ?? 0,
-      rating: (json['rating'] as num?)?.toDouble() ?? 0.0, // 🔥 دعم الأرقام العشرية
+      rating: (json['rating'] as num?)?.toDouble() ?? 0.0,
       favorite: json['favorite'] as bool? ?? false,
       colorIndex: (json['colorIndex'] as num?)?.toInt() ?? 0,
       date: json['date'] as String? ?? '',
       imagePath: json['imagePath'] as String?,
       globalRating: (json['globalRating'] as num?)?.toDouble(),
       releaseYear: (json['releaseYear'] as num?)?.toInt(),
+      parentId: json['parentId'] as String?,
+      partName: json['partName'] as String?,
+      videoPath: json['videoPath'] as String?,
     );
   }
 }
