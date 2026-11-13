@@ -19,9 +19,10 @@ class Anime {
   String? parentId;
   String? partName;
   String? videoPath;
-  
-  // 🔥 حقل جديد للشخصيات الرئيسية
   List<Map<String, dynamic>> characters;
+  
+  // 🔥 حقل جديد للاستوديو
+  String? studios;
 
   Anime({
     required this.id,
@@ -44,7 +45,8 @@ class Anime {
     this.parentId,
     this.partName,
     this.videoPath,
-    this.characters = const [], // القيمة الافتراضية
+    this.characters = const [],
+    this.studios,
   });
 
   Map<String, dynamic> toJson() {
@@ -56,7 +58,8 @@ class Anime {
       'date': date, 'imagePath': imagePath, 'imageUrl': imageUrl,
       'globalRating': globalRating, 'releaseYear': releaseYear, 
       'parentId': parentId, 'partName': partName, 'videoPath': videoPath,
-      'characters': characters, // 🔥
+      'characters': characters,
+      'studios': studios, // 🔥
     };
   }
 
@@ -83,6 +86,7 @@ class Anime {
       partName: json['partName'] as String?,
       videoPath: json['videoPath'] as String?,
       characters: (json['characters'] as List?)?.map((e) => Map<String, dynamic>.from(e)).toList() ?? [],
+      studios: json['studios'] as String?,
     );
   }
 }
