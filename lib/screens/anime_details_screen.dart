@@ -162,6 +162,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     final partNameController = TextEditingController(text: currentAnime.partName ?? '');
     final episodesController = TextEditingController(text: currentAnime.episodes == 0 ? '' : '${currentAnime.episodes}');
     final watchedController = TextEditingController(text: currentAnime.watchedEpisodes == 0 ? '' : '${currentAnime.watchedEpisodes}');
+    final studiosController = TextEditingController(text: currentAnime.studios ?? ''); // 🔥
     double rating = currentAnime.rating;
     String? newImagePath = currentAnime.imagePath;
 
@@ -201,6 +202,9 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                     ),
                     const SizedBox(height: 12),
                     TextField(controller: titleController, decoration: const InputDecoration(labelText: 'الاسم')),
+                    const SizedBox(height: 10),
+                    // 🔥 حقل تعديل الاستوديو
+                    TextField(controller: studiosController, decoration: const InputDecoration(labelText: 'الاستوديو (مثلاً: Mappa)')),
                     if (currentAnime.parentId != null) ...[
                       const SizedBox(height: 10),
                       TextField(controller: partNameController, decoration: const InputDecoration(labelText: 'اسم الموسم (مثلاً: الموسم الأول)')),
@@ -236,6 +240,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
         allAnimes[index]
           ..title = titleController.text.trim()
           ..partName = partNameController.text.trim()
+          ..studios = studiosController.text.trim().isEmpty ? null : studiosController.text.trim() // 🔥
           ..episodes = int.tryParse(episodesController.text) ?? 0
           ..watchedEpisodes = int.tryParse(watchedController.text) ?? 0
           ..rating = rating
@@ -475,7 +480,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     final double? globalRating = data['globalRating'];
     final int? releaseYear = data['releaseYear'];
     final List<Map<String, dynamic>> subData = data['subAnimes'];
-    final List<Map<String, dynamic>> charData = data['characters']; // 🔥 استلام الشخصيات
+    final List<Map<String, dynamic>> charData = data['characters'];
+    final String? studios = data['studios']; // 🔥
 
     setState(() {
       if (genres.isNotEmpty) currentAnime.genre = genres.join('، ');
@@ -483,9 +489,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
       if (episodes > 0) currentAnime.episodes = episodes;
       if (globalRating != null) currentAnime.globalRating = globalRating;
       if (releaseYear != null) currentAnime.releaseYear = releaseYear;
-      
-      // 🔥 حفظ الشخصيات
       if (charData.isNotEmpty) currentAnime.characters = charData;
+      if (studios != null) currentAnime.studios = studios; // 🔥
       
       if (currentAnime.parentId == null) {
         currentAnime.imageUrl = currentAnime.imageUrl;
@@ -521,7 +526,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     await _loadData();
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم جلب البيانات والمواسم والشخصيات بنجاح!')));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم جلب البيانات والاستوديو والشخصيات بنجاح!')));
   }
 
   void _addSubAnime() {
@@ -573,7 +578,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     );
   }
 
-  // 🔥 قسم الشخصيات الرئيسية
   Widget _buildCharacters() {
     if (currentAnime.characters.isEmpty) return const SizedBox.shrink();
     final primaryColor = primaryColorNotifier.value;
@@ -755,6 +759,9 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
             children: [
               if (currentAnime.status.isNotEmpty) Chip(avatar: const Icon(Icons.bookmark_outline, size: 18), label: Text(currentAnime.status)),
               if (currentAnime.releaseYear != null) Chip(avatar: const Icon(Icons.calendar_today, size: 16), label: Text('${currentAnime.releaseYear}'), backgroundColor: primaryColor.withOpacity(0.2), side: BorderSide(color: primaryColor.withOpacity(0.5))),
+              // 🔥 عرض الاستوديو كـ Chip
+              if (currentAnime.studios != null && currentAnime.studios!.isNotEmpty) 
+                Chip(avatar: const Icon(Icons.business, size: 16), label: Text(currentAnime.studios!), backgroundColor: primaryColor.withOpacity(0.2), side: BorderSide(color: primaryColor.withOpacity(0.5))),
               ...genres.map((genre) => Chip(avatar: const Icon(Icons.category_outlined, size: 18), label: Text(genre), backgroundColor: primaryColor.withOpacity(0.2), side: BorderSide(color: primaryColor.withOpacity(0.5)))),
               IconButton(tooltip: 'جلب البيانات والمواسم', onPressed: _fetchDataManually, icon: const Icon(Icons.cloud_download_outlined, color: Colors.cyan)),
             ],
@@ -818,7 +825,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                           icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
                           onPressed: () => _deleteSubAnime(sub),
                         ),
-                        const Icon(Icons.forward_ios, size: 14, color: Colors.white38),
+                        const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white38),
                       ],
                     ),
                     onTap: () async {
@@ -855,7 +862,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
             ),
           ],
 
-          // 🔥 قسم الشخصيات الرئيسية يظهر هنا
           _buildCharacters(),
 
           Container(
