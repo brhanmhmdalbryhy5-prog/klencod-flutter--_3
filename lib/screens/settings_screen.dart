@@ -149,7 +149,103 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  // 🔥 زر التحميل الشامل
+  // 🔥 عرض نتيجة التحميل مع أسماء الفاشلة
+  Future<void> _showDownloadResult(Map<String, dynamic> result) async {
+    final updated = result['updated'] ?? 0;
+    final failed = result['failed'] ?? 0;
+    final failedNames = (result['failedNames'] as List?)?.cast<String>() ?? [];
+    final error = result['error'];
+
+    if (error == 'no_internet') {
+      await showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          backgroundColor: const Color(0xFF1B1F28),
+          title: const Row(children: [
+            Icon(Icons.wifi_off, color: Colors.redAccent),
+            SizedBox(width: 8),
+            Text('لا يوجد إنترنت'),
+          ]),
+          content: const Text('يرجى تشغيل الاتصال بالإنترنت ثم المحاولة مرة أخرى.', style: TextStyle(height: 1.6)),
+          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('حسناً'))],
+        ),
+      );
+      return;
+    }
+
+    if (error == 'connection_lost') {
+      await showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          backgroundColor: const Color(0xFF1B1F28),
+          title: const Row(children: [
+            Icon(Icons.wifi_off, color: Colors.orangeAccent),
+            SizedBox(width: 8),
+            Text('انقطع الاتصال'),
+          ]),
+          content: Text(
+            'انقطع الإنترنت أثناء العملية.\n\n'
+            '✅ نجح: $updated أنمي\n'
+            '❌ فشل: $failed أنمي',
+            style: const TextStyle(height: 1.6),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('حسناً'))],
+        ),
+      );
+      return;
+    }
+
+    // عرض النتيجة الكاملة
+    if (failedNames.isNotEmpty) {
+      await showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          backgroundColor: const Color(0xFF1B1F28),
+          title: const Row(children: [
+            Icon(Icons.info_outline, color: Colors.amber),
+            SizedBox(width: 8),
+            Text('نتيجة التحميل'),
+          ]),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('✅ نجح: $updated أنمي', style: const TextStyle(color: Colors.greenAccent)),
+                Text('❌ فشل: $failed أنمي', style: const TextStyle(color: Colors.redAccent)),
+                const SizedBox(height: 12),
+                const Text('الأنميات التي لم يتم العثور عليها:', style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: failedNames.map((name) => Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 3),
+                        child: Text('• $name', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                      )).toList(),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'ملاحظة: هذه الأنميات قد لا تكون في قاعدة البيانات أو أسماؤها غير دقيقة. جرّب تغيير الاسم إلى الإنجليزية.',
+                  style: TextStyle(color: Colors.white54, fontSize: 11, height: 1.5),
+                ),
+              ],
+            ),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('حسناً'))],
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('✅ اكتمل بنجاح: $updated أنمي')),
+      );
+    }
+  }
+
   Future<void> _startBulkDownload() async {
     if (bulkService.isRunning) return;
     
@@ -160,7 +256,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: const Text('تحميل البيانات الكاملة'),
         content: const Text(
           'سيقوم التطبيق بجلب جميع البيانات والصور والمواسم والشخصيات لكل الأنميات في مكتبتك وحفظها محلياً.\n\n'
-          'تحذير: العملية قد تستغرق وقتاً طويلاً، ويُفضّل استخدامها مع اتصال إنترنت قوي. يمكنك الاستمرار في استخدام التطبيق أثناء التحميل.',
+          'يمكنك الاستمرار في استخدام التطبيق أثناء التحميل.',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
@@ -174,16 +270,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     
     if (confirm != true || !mounted) return;
-
-    bulkService.downloadAllData().then((result) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('اكتمل: ${result['updated']} ناجح | ${result['failed']} فشل')),
-      );
-    });
+    final result = await bulkService.downloadAllData();
+    if (!mounted) return;
+    await _showDownloadResult(result);
   }
 
-  // 🔥 زر تحميل الصور فقط
   Future<void> _startImagesDownload() async {
     if (bulkService.isRunning) return;
     
@@ -192,9 +283,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (dialogContext) => AlertDialog(
         backgroundColor: const Color(0xFF1B1F28),
         title: const Text('تحميل الصور المفقودة'),
-        content: const Text(
-          'سيقوم التطبيق بتحميل جميع الصور (الأغلفة والشخصيات) التي لم تُحفظ محلياً بعد، دون جلب بيانات جديدة من الإنترنت.',
-        ),
+        content: const Text('سيقوم التطبيق بتحميل جميع الصور غير المحفوظة.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
           FilledButton(
@@ -207,13 +296,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     
     if (confirm != true || !mounted) return;
-
-    bulkService.downloadImagesOnly().then((result) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('اكتمل تحميل الصور: ${result['updated']} ناجح | ${result['failed']} فشل')),
-      );
-    });
+    final result = await bulkService.downloadImagesOnly();
+    if (!mounted) return;
+    await _showDownloadResult(result);
   }
 
   Future<void> _clearAllGenres() async {
@@ -328,7 +413,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             
-            // 🔥 شريط التقدم (يظهر فقط أثناء التحميل)
             if (isDownloading) ...[
               const SizedBox(height: 20),
               Container(
@@ -341,8 +425,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       children: [
                         const Icon(Icons.cloud_download, color: Colors.cyan, size: 24),
                         const SizedBox(width: 10),
-                        Expanded(child: Text(progress.status, style: const TextStyle(fontWeight: FontWeight.bold))),
-                        Text('${progress.current}/${progress.total}', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                        Expanded(child: Text(progress.status, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
                       ],
                     ),
                     const SizedBox(height: 10),
@@ -372,49 +455,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 12),
             _settingsTile(icon: Icons.palette_outlined, color: primaryColor, title: 'المظهر', subtitle: darkMode ? 'الوضع الداكن' : 'الوضع الفاتح', trailing: Switch(value: darkMode, activeColor: primaryColor, onChanged: _toggleTheme), onTap: null),
             const SizedBox(height: 10),
-            _settingsTile(icon: Icons.color_lens_outlined, color: primaryColor, title: 'لون التطبيق', subtitle: 'تغيير اللون الأساسي للتطبيق', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: _showColorPicker),
+            _settingsTile(icon: Icons.color_lens_outlined, color: primaryColor, title: 'لون التطبيق', subtitle: 'تغيير اللون الأساسي', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: _showColorPicker),
             const SizedBox(height: 10),
             _settingsTile(icon: Icons.font_download_outlined, color: primaryColor, title: 'خط اسم الأنمي', subtitle: 'اختيار الخط المفضل', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: _showFontPicker),
             const SizedBox(height: 10),
-            _settingsTile(icon: Icons.format_color_text, color: titleColorNotifier.value, title: 'لون اسم الأنمي', subtitle: 'تغيير لون النص في البطاقات', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: _showTitleColorPicker),
+            _settingsTile(icon: Icons.format_color_text, color: titleColorNotifier.value, title: 'لون اسم الأنمي', subtitle: 'تغيير لون النص', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: _showTitleColorPicker),
             
             const SizedBox(height: 24),
             const Text('التحميل والتحديث', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
             const SizedBox(height: 12),
-            
-            // 🔥 التحديث التلقائي (معطل افتراضياً)
             _settingsTile(
               icon: Icons.sync,
               color: const Color(0xFFFF9F43),
               title: 'التحديث التلقائي عند فتح التطبيق',
-              subtitle: autoFetchEnabled ? 'مُفعّل (يستهلك إنترنت)' : 'معطّل (التطبيق لا يعمل إلا بأمرك)',
+              subtitle: autoFetchEnabled ? 'مُفعّل' : 'معطّل (التطبيق لا يعمل إلا بأمرك)',
               trailing: Switch(value: autoFetchEnabled, activeColor: primaryColor, onChanged: _toggleAutoFetch),
               onTap: null,
             ),
             const SizedBox(height: 10),
-            
-            // 🔥 زر التحميل الشامل
             _settingsTile(
               icon: Icons.cloud_download_outlined,
               color: const Color(0xFF3A91B5),
               title: 'تحميل شامل (بيانات + صور + مواسم)',
-              subtitle: 'يجلب كل شيء لكل الأنميات ويحفظه محلياً',
+              subtitle: 'يجلب كل شيء ويحفظه محلياً',
               trailing: const Icon(Icons.chevron_left, color: Colors.white38),
               onTap: isDownloading ? null : _startBulkDownload,
             ),
             const SizedBox(height: 10),
-            
-            // 🔥 زر تحميل الصور فقط
             _settingsTile(
               icon: Icons.image_outlined,
               color: const Color(0xFF9B59B6),
               title: 'تحميل الصور المفقودة فقط',
-              subtitle: 'يحمل الصور غير المحفوظة دون جلب بيانات جديدة',
+              subtitle: 'يحمل الصور غير المحفوظة',
               trailing: const Icon(Icons.chevron_left, color: Colors.white38),
               onTap: isDownloading ? null : _startImagesDownload,
             ),
             const SizedBox(height: 10),
-            
             _settingsTile(icon: Icons.delete_sweep_outlined, color: const Color(0xFFFF5A65), title: 'مسح جميع التصنيفات', subtitle: 'حذف التصنيفات من جميع الأنميات', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: _clearAllGenres),
             const SizedBox(height: 10),
             _settingsTile(icon: Icons.delete_outline, color: const Color(0xFFFFB74D), title: 'سلة المهملات', subtitle: 'استعادة الأنميات المحذوفة', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: () { Navigator.push(context, MaterialPageRoute(builder: (_) => const TrashScreen())); }),
@@ -424,7 +500,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 12),
             _settingsTile(icon: Icons.backup_outlined, color: const Color(0xFF35B77A), title: 'إنشاء نسخة احتياطية', subtitle: 'حفظ بياناتك (مع الصور والفيديوهات)', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: backupBusy ? null : () => runBackupAction(restore: false)),
             const SizedBox(height: 10),
-            _settingsTile(icon: Icons.settings_backup_restore, color: const Color(0xFFFFC857), title: 'استعادة نسخة احتياطية', subtitle: 'استرجاع بياناتك من ملف ZIP', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: backupBusy ? null : () => runBackupAction(restore: true)),
+            _settingsTile(icon: Icons.settings_backup_restore, color: const Color(0xFFFFC857), title: 'استعادة نسخة احتياطية', subtitle: 'استرجاع بياناتك', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: backupBusy ? null : () => runBackupAction(restore: true)),
             if (backupBusy) ...[const SizedBox(height: 16), const Center(child: CircularProgressIndicator()), const SizedBox(height: 8), const Center(child: Text('جارٍ تجهيز البيانات...', style: TextStyle(color: Colors.white60)))],
             
             const SizedBox(height: 24),
