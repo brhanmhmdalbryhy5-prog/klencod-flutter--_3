@@ -57,7 +57,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     final path = prefs.getString(_preferenceKey);
     
     final allAnimes = await storage.loadAnimes();
-    // جلب المواسم المرتبطة بهذا الأنمي
     final children = allAnimes.where((a) => a.parentId == widget.anime.id).toList();
 
     if (!mounted) return;
@@ -134,6 +133,96 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
         ),
       ),
     );
+  }
+
+  // 🔥 دالة تعديل الأنمي أو الموسم مباشرة من شاشة التفاصيل
+  Future<void> _editAnimeDetails() async {
+    HapticFeedback.lightImpact();
+    final titleController = TextEditingController(text: widget.anime.title);
+    final partNameController = TextEditingController(text: widget.anime.partName ?? '');
+    final episodesController = TextEditingController(text: widget.anime.episodes == 0 ? '' : '${widget.anime.episodes}');
+    final watchedController = TextEditingController(text: widget.anime.watchedEpisodes == 0 ? '' : '${widget.anime.watchedEpisodes}');
+    double rating = widget.anime.rating;
+    String? newImagePath = widget.anime.imagePath;
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: panel,
+              title: Text(widget.anime.parentId != null ? 'تعديل الموسم/الفيلم' : 'تعديل الأنمي'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    GestureDetector(
+                      onTap: () async {
+                        final picked = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+                        if (picked != null) {
+                          final directory = await getApplicationDocumentsDirectory();
+                          final folder = Directory('${directory.path}/anime_images');
+                          if (!await folder.exists()) await folder.create(recursive: true);
+                          final dest = '${folder.path}/${DateTime.now().microsecondsSinceEpoch}.jpg';
+                          final saved = await File(picked.path).copy(dest);
+                          setDialogState(() => newImagePath = saved.path);
+                        }
+                      },
+                      child: Container(
+                        height: 120, width: double.infinity,
+                        decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(12), border: Border.all(color: primaryColorNotifier.value)),
+                        child: newImagePath != null && File(newImagePath!).existsSync()
+                            ? ClipRRect(borderRadius: BorderRadius.circular(11), child: Image.file(File(newImagePath!), fit: BoxFit.cover))
+                            : const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.add_photo_alternate, size: 30), Text('إضافة صورة')])),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(controller: titleController, decoration: const InputDecoration(labelText: 'الاسم')),
+                    if (widget.anime.parentId != null) ...[
+                      const SizedBox(height: 10),
+                      TextField(controller: partNameController, decoration: const InputDecoration(labelText: 'اسم الموسم (مثلاً: الموسم الأول)')),
+                    ],
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(child: TextField(controller: episodesController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'إجمالي الحلقات'))),
+                        const SizedBox(width: 10),
+                        Expanded(child: TextField(controller: watchedController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'شاهدت'))),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Text('تقييمك: ${rating.toStringAsFixed(1)}'),
+                    Slider(value: rating, min: 0, max: 10, divisions: 20, onChanged: (v) => setDialogState(() => rating = v)),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
+                FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('حفظ')),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (result == true) {
+      final allAnimes = await storage.loadAnimes();
+      final index = allAnimes.indexWhere((a) => a.id == widget.anime.id);
+      if (index != -1) {
+        allAnimes[index]
+          ..title = titleController.text.trim()
+          ..partName = partNameController.text.trim()
+          ..episodes = int.tryParse(episodesController.text) ?? 0
+          ..watchedEpisodes = int.tryParse(watchedController.text) ?? 0
+          ..rating = rating
+          ..imagePath = newImagePath;
+        await storage.saveAnimes(allAnimes);
+        setState(() { widget.anime = allAnimes[index]; });
+        _loadData(); // تحديث الواجهة
+      }
+    }
   }
 
   Future<void> _shareCardImage() async {
@@ -408,9 +497,12 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
       backgroundColor: background,
       appBar: AppBar(
         backgroundColor: background, 
-        title: const Text('تفاصيل الأنمي'), 
+        title: Text(anime.parentId != null ? 'تفاصيل الموسم/الفيلم' : 'تفاصيل الأنمي'), 
         centerTitle: true,
         actions: [
+          // 🔥 زر التعديل الجديد (يسمح بتعديل الموسم من هنا)
+          IconButton(tooltip: 'تعديل البيانات', icon: const Icon(Icons.edit, color: Colors.white70), onPressed: _editAnimeDetails),
+          // 🔥 زر البطاقة (موجود)
           IconButton(tooltip: 'صنع بطاقة للمشاركة', icon: const Icon(Icons.dashboard_customize_outlined, color: Colors.cyan), onPressed: _showShareDialog),
         ],
       ),
@@ -441,6 +533,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
           ),
           const SizedBox(height: 18),
           Text(title, textAlign: TextAlign.center, style: TextStyle(fontSize: 25, fontWeight: FontWeight.w900, color: titleColorNotifier.value)),
+          if (anime.partName != null && anime.partName!.isNotEmpty)
+            Text(anime.partName!, textAlign: TextAlign.center, style: TextStyle(fontSize: 16, color: primaryColor, fontWeight: FontWeight.bold)),
           const SizedBox(height: 14),
           Wrap(
             alignment: WrapAlignment.center, spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center,
@@ -465,7 +559,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
             if (subAnimes.isEmpty)
               const Text('لا توجد مواسم مضافة. اضغط على "جلب البيانات" للبحث عنها.', style: TextStyle(color: Colors.white54, fontSize: 12))
             else
-              // 🔥 التعديل هنا: عرض صورة الموسم إذا وجدت
               ...subAnimes.map((sub) {
                 final hasImage = sub.imagePath != null && sub.imagePath!.isNotEmpty && File(sub.imagePath!).existsSync();
                 return Container(
@@ -484,7 +577,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                     trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white38),
                     onTap: () async {
                       await Navigator.push(context, MaterialPageRoute(builder: (_) => AnimeDetailsScreen(anime: sub)));
-                      await _loadData(); // تحديث القائمة عند العودة (لتحديث الصورة إذا تمت إضافتها)
+                      await _loadData(); // تحديث القائمة عند العودة لتحديث الصور
                     },
                   ),
                 );
