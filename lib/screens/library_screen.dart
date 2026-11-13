@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math'; // 🔥 تمت إضافة هذا السطر لعملية الخلط العشوائي
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -149,6 +150,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       case 'titleDesc': result.sort((a, b) => b.title.toLowerCase().compareTo(a.title.toLowerCase())); break;
       case 'rating': result.sort((a, b) => b.rating.compareTo(a.rating)); break;
       case 'favorites': result.sort((a, b) { final favoriteOrder = (b.favorite ? 1 : 0).compareTo(a.favorite ? 1 : 0); if (favoriteOrder != 0) return favoriteOrder; return _dateOf(b).compareTo(_dateOf(a)); }); break;
+      case 'random': result.shuffle(Random()); break; // 🔥 الترتيب العشوائي هنا
       case 'newest': default: result.sort((a, b) => _dateOf(b).compareTo(_dateOf(a))); break;
     }
     return result;
@@ -166,6 +168,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       case 'titleDesc': return 'الاسم: ي ← أ';
       case 'rating': return 'الأعلى تقييمًا';
       case 'favorites': return 'المفضلة أولًا';
+      case 'random': return 'عشوائي'; // 🔥 اسم الترتيب العشوائي
       default: return 'الأحدث إضافة';
     }
   }
@@ -831,6 +834,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
               PopupMenuItem(value: 'titleDesc', child: Text('الاسم: ي ← أ')),
               PopupMenuItem(value: 'rating', child: Text('الأعلى تقييمًا')),
               PopupMenuItem(value: 'favorites', child: Text('المفضلة أولًا')),
+              PopupMenuItem(value: 'random', child: Text('عشوائي 🎲')), // 🔥 خيار الترتيب العشوائي
             ],
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
