@@ -42,7 +42,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   List<Anime> animes = [];
   String selectedStatus = 'الكل';
-  int selectedRatingFilter = 0;
+  double selectedRatingFilter = 0; // 🔥 أصبح double
   String searchText = '';
   String sortMode = 'newest';
   int viewMode = 0;
@@ -125,7 +125,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         matchesStatus = anime.genre.isNotEmpty && !anime.genre.contains('، ');
       } else if (selectedStatus == 'بدون تصنيف') {
         matchesStatus = anime.genre.trim().isEmpty;
-      } else if (selectedStatus == 'قيد المشاهدة (تقدم)') { // 🔥 الفلتر الجديد
+      } else if (selectedStatus == 'قيد المشاهدة (تقدم)') {
         matchesStatus = anime.watchedEpisodes > 0 && (anime.episodes == 0 || anime.watchedEpisodes < anime.episodes);
       } else {
         matchesStatus = anime.status == selectedStatus;
@@ -250,17 +250,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   Future<void> _fetchDataManually(Anime anime) async {
     if (anime.title.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('الأنمي لا يملك اسماً، لا يمكن البحث عنه.')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الأنمي لا يملك اسماً، لا يمكن البحث عنه.')));
       return;
     }
 
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const Center(child: CircularProgressIndicator()),
-    );
+    showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator()));
 
     final data = await apiService.fetchAnimeData(anime.title);
 
@@ -293,9 +287,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('لم يتم العثور على بيانات. تأكد من كتابة الاسم بالإنجليزية.')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لم يتم العثور على بيانات. تأكد من كتابة الاسم بالإنجليزية.')));
     }
   }
 
@@ -346,13 +338,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
     final titleController = TextEditingController(text: anime.title);
     final characterController = TextEditingController(text: anime.character);
     final episodesController = TextEditingController(text: anime.episodes == 0 ? '' : '${anime.episodes}');
-    final watchedController = TextEditingController(text: anime.watchedEpisodes == 0 ? '' : '${anime.watchedEpisodes}'); // 🔥
+    final watchedController = TextEditingController(text: anime.watchedEpisodes == 0 ? '' : '${anime.watchedEpisodes}');
     final summaryController = TextEditingController(text: anime.summary);
     final memoryController = TextEditingController(text: anime.memory);
     final yearController = TextEditingController(text: anime.releaseYear?.toString() ?? '');
 
     String status = anime.status;
-    int rating = anime.rating;
+    double rating = anime.rating; // 🔥
     String? imagePath = anime.imagePath;
     bool imageChanged = false;
     List<String> selectedGenres = anime.genre.split('،').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
@@ -408,7 +400,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                           children: [
                             Expanded(child: TextField(controller: episodesController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'إجمالي الحلقات'))),
                             const SizedBox(width: 10),
-                            Expanded(child: TextField(controller: watchedController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'شاهدت منها', prefixIcon: Icon(Icons.play_arrow, size: 16)))), // 🔥
+                            Expanded(child: TextField(controller: watchedController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'شاهدت منها', prefixIcon: Icon(Icons.play_arrow, size: 16)))),
                           ],
                         ),
                         const SizedBox(height: 10),
@@ -428,26 +420,22 @@ class _LibraryScreenState extends State<LibraryScreen> {
                           onChanged: (value) { if (value != null) setDialogState(() => status = value); },
                         ),
                         const SizedBox(height: 14),
-                        const Align(alignment: Alignment.centerRight, child: Text('التقييم (اختياري - من 10)')),
-                        Wrap(
-                          spacing: 0,
-                          children: List.generate(10, (index) {
-                            final value = index + 1;
-                            final isSelected = value <= rating;
-                            return GestureDetector(
-                              onTap: () => setDialogState(() => rating = rating == value ? 0 : value),
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 200),
-                                padding: const EdgeInsets.all(4),
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: isSelected ? const Color(0xFFFFC857).withOpacity(0.2) : Colors.transparent,
-                                  boxShadow: isSelected ? [BoxShadow(color: const Color(0xFFFFC857).withOpacity(0.5), blurRadius: 8, spreadRadius: 1)] : [],
-                                ),
-                                child: Icon(Icons.star, color: isSelected ? const Color(0xFFFFC857) : Colors.white24, size: 24),
-                              ),
-                            );
-                          }),
+                        // 🔥 استخدام Slider للتقييم
+                        Column(
+                          children: [
+                            Text('تقييمك: ${rating.toStringAsFixed(1)} / 10', style: TextStyle(fontWeight: FontWeight.bold, color: primaryColorNotifier.value, fontSize: 16)),
+                            Slider(
+                              value: rating,
+                              min: 0,
+                              max: 10,
+                              divisions: 20, // يسمح بـ 0.5
+                              label: rating.toStringAsFixed(1),
+                              activeColor: const Color(0xFFFFC857),
+                              onChanged: (value) {
+                                setDialogState(() => rating = value);
+                              },
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 10),
                         TextField(controller: summaryController, maxLines: 3, decoration: const InputDecoration(labelText: 'ملخص القصة (اختياري)')),
@@ -480,10 +468,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
         ..genre = selectedGenres.join('، ')
         ..character = characterController.text.trim()
         ..episodes = int.tryParse(episodesController.text) ?? 0
-        ..watchedEpisodes = int.tryParse(watchedController.text) ?? 0 // 🔥
+        ..watchedEpisodes = int.tryParse(watchedController.text) ?? 0
         ..releaseYear = int.tryParse(yearController.text)
         ..status = status
-        ..rating = rating
+        ..rating = rating // 🔥
         ..summary = summaryController.text.trim()
         ..memory = memoryController.text.trim()
         ..imagePath = imagePath;
@@ -511,23 +499,28 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
+  // 🔥 دالة بناء الاسم بالخط واللون المختارين
   Widget _buildAnimeTitle(String title, {double fontSize = 16}) {
+    final fontName = fontNotifier.value;
+    final titleColor = titleColorNotifier.value;
+    
+    TextStyle textStyle;
+    if (fontName == 'Cairo') textStyle = GoogleFonts.cairo(fontSize: fontSize, fontWeight: FontWeight.w900, color: titleColor);
+    else if (fontName == 'Tajawal') textStyle = GoogleFonts.tajawal(fontSize: fontSize, fontWeight: FontWeight.w900, color: titleColor);
+    else if (fontName == 'Almarai') textStyle = GoogleFonts.almarai(fontSize: fontSize, fontWeight: FontWeight.w900, color: titleColor);
+    else if (fontName == 'Changa') textStyle = GoogleFonts.changa(fontSize: fontSize, fontWeight: FontWeight.w900, color: titleColor);
+    else textStyle = TextStyle(fontSize: fontSize, fontWeight: FontWeight.w900, color: titleColor);
+
     return Text(
       title.trim().isEmpty ? 'أنمي بدون اسم' : title,
       maxLines: 2,
       overflow: TextOverflow.ellipsis,
-      style: GoogleFonts.cairo(
-        fontSize: fontSize,
-        fontWeight: FontWeight.w900,
-        color: const Color(0xFFFFD700),
-        shadows: [
-          Shadow(color: primaryColorNotifier.value.withOpacity(0.8), blurRadius: 10),
-        ],
+      style: textStyle.copyWith(
+        shadows: [Shadow(color: titleColor.withOpacity(0.6), blurRadius: 10)],
       ),
     );
   }
 
-  // 🔥 بناء شريط التقدم
   Widget _buildProgressBar(Anime anime) {
     if (anime.episodes <= 0 || anime.watchedEpisodes <= 0) return const SizedBox.shrink();
     double progress = anime.watchedEpisodes / anime.episodes;
@@ -537,18 +530,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 6),
-        LinearProgressIndicator(
-          value: progress,
-          minHeight: 6,
-          backgroundColor: Colors.white12,
-          valueColor: AlwaysStoppedAnimation<Color>(primaryColorNotifier.value),
-          borderRadius: BorderRadius.circular(4),
-        ),
+        LinearProgressIndicator(value: progress, minHeight: 6, backgroundColor: Colors.white12, valueColor: AlwaysStoppedAnimation<Color>(primaryColorNotifier.value), borderRadius: BorderRadius.circular(4)),
         const SizedBox(height: 4),
-        Text(
-          'شاهدت ${anime.watchedEpisodes} من ${anime.episodes}',
-          style: const TextStyle(color: Colors.white54, fontSize: 10),
-        ),
+        Text('شاهدت ${anime.watchedEpisodes} من ${anime.episodes}', style: const TextStyle(color: Colors.white54, fontSize: 10)),
       ],
     );
   }
@@ -563,12 +547,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1B1F28),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: color.withOpacity(0.4), width: 1),
-        boxShadow: [BoxShadow(color: color.withOpacity(0.3), blurRadius: 15, spreadRadius: 2)],
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1B1F28), borderRadius: BorderRadius.circular(18), border: Border.all(color: color.withOpacity(0.4), width: 1), boxShadow: [BoxShadow(color: color.withOpacity(0.3), blurRadius: 15, spreadRadius: 2)]),
       child: InkWell(
         borderRadius: BorderRadius.circular(18),
         onTap: () => openAnimeDetails(anime),
@@ -598,7 +577,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                             const SizedBox(height: 5),
                             const Icon(Icons.star, size: 16, color: Color(0xFFFFC857)),
                             const SizedBox(width: 4),
-                            Text('${anime.rating}/10', style: const TextStyle(fontSize: 12)),
+                            Text('${anime.rating.toStringAsFixed(1)}/10', style: const TextStyle(fontSize: 12)),
                           ],
                           if (anime.globalRating != null) ...[
                             const SizedBox(width: 10),
@@ -609,7 +588,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
                           ],
                         ],
                       ),
-                      // 🔥 شريط التقدم هنا
                       _buildProgressBar(anime),
                       if (anime.favorite) ...[
                         const SizedBox(height: 5),
@@ -631,12 +609,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     final color = colors[anime.colorIndex.abs() % colors.length];
 
     return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF1B1F28),
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: color.withOpacity(0.4), width: 1),
-        boxShadow: [BoxShadow(color: color.withOpacity(0.3), blurRadius: 15, spreadRadius: 2)],
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1B1F28), borderRadius: BorderRadius.circular(15), border: Border.all(color: color.withOpacity(0.4), width: 1), boxShadow: [BoxShadow(color: color.withOpacity(0.3), blurRadius: 15, spreadRadius: 2)]),
       child: InkWell(
         borderRadius: BorderRadius.circular(15),
         onTap: () => openAnimeDetails(anime),
@@ -672,7 +645,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         const SizedBox(height: 4),
                         const Icon(Icons.star, size: 14, color: Color(0xFFFFC857)),
                         const SizedBox(width: 3),
-                        Text('${anime.rating}', style: const TextStyle(fontSize: 11)),
+                        Text('${anime.rating.toStringAsFixed(1)}', style: const TextStyle(fontSize: 11)),
                       ],
                       if (anime.globalRating != null) ...[
                         const SizedBox(width: 8),
@@ -683,7 +656,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       ],
                     ],
                   ),
-                  _buildProgressBar(anime), // 🔥
+                  _buildProgressBar(anime),
                 ],
               ),
             ),
@@ -742,16 +715,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
           decoration: BoxDecoration(color: const Color(0xFF1B1F28), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),
           child: IconButton(
             tooltip: 'تغيير العرض',
-            onPressed: () {
-              setState(() {
-                viewMode = (viewMode + 1) % 3;
-              });
-              _saveLibraryPreferences();
-            },
-            icon: Icon(
-              viewMode == 0 ? Icons.view_agenda_outlined : (viewMode == 1 ? Icons.grid_view_rounded : Icons.apps),
-              color: const Color(0xFFFFC857),
-            ),
+            onPressed: () { setState(() { viewMode = (viewMode + 1) % 3; }); _saveLibraryPreferences(); },
+            icon: Icon(viewMode == 0 ? Icons.view_agenda_outlined : (viewMode == 1 ? Icons.grid_view_rounded : Icons.apps), color: const Color(0xFFFFC857)),
           ),
         ),
       ],
@@ -810,13 +775,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
           ? FloatingActionButton(
               mini: true,
               backgroundColor: primaryColor,
-              onPressed: () {
-                _scrollController.animateTo(
-                  0,
-                  duration: const Duration(milliseconds: 500),
-                  curve: Curves.easeInOut,
-                );
-              },
+              onPressed: () { _scrollController.animateTo(0, duration: const Duration(milliseconds: 500), curve: Curves.easeInOut); },
               child: const Icon(Icons.keyboard_arrow_up, color: Colors.white),
             )
           : null,
@@ -854,9 +813,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   scrollDirection: Axis.horizontal,
                   children: [
                     'الكل', 'مكتمل', 'أتابعه', 'مخطط له', 'متوقف', 'المفضلة', 
-                    'جُلب تلقائياً', 
-                    'بدون تصنيف',
-                    'قيد المشاهدة (تقدم)' // 🔥 الفلتر الجديد هنا
+                    'جُلب تلقائياً', 'بدون تصنيف', 'قيد المشاهدة (تقدم)'
                   ].map((status) {
                     final selected = selectedStatus == status;
                     return Padding(
@@ -874,14 +831,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 ),
               ),
               const SizedBox(height: 10),
+              // 🔥 فلتر التقييم يدعم الآن الأنصاف
               SizedBox(
                 height: 42,
                 child: ListView(
                   scrollDirection: Axis.horizontal,
                   children: [
-                    'كل التقييمات', '10', '9', '8', '7', '6', '5', '4', '3', '2', '1'
+                    'كل التقييمات', '10', '9.5', '9', '8.5', '8', '7.5', '7', '6.5', '6', '5.5', '5', '4.5', '4', '3.5', '3', '2.5', '2', '1.5', '1', '0.5'
                   ].map((rate) {
-                    final val = rate == 'كل التقييمات' ? 0 : int.parse(rate);
+                    final val = rate == 'كل التقييمات' ? 0.0 : double.parse(rate);
                     final selected = selectedRatingFilter == val;
                     return Padding(
                       padding: const EdgeInsets.only(left: 8),
