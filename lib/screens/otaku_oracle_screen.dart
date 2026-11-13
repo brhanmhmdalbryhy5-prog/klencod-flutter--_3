@@ -18,13 +18,10 @@ class OtakuOracleScreen extends StatefulWidget {
 
 class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
   final StorageService storage = StorageService();
-  final TextEditingController searchController = TextEditingController();
-  final ScrollController _achievementsController = ScrollController(); // 🔥 للتمرير التلقائي
+  final ScrollController _achievementsController = ScrollController();
 
   List<Anime> animes = [];
-  List<Map<String, dynamic>> catalog = [];
   bool loading = true;
-  String catalogMessage = '';
 
   static const Color background = Color(0xFF111318);
   static const Color panel = Color(0xFF1B1F28);
@@ -36,7 +33,6 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
   }
 
   void _scrollToLatestAchievement() {
-    // الانتقال لآخر إنجاز مفتوح
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_achievementsController.hasClients) {
         _achievementsController.animateTo(
@@ -49,19 +45,9 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
   }
 
   Future<void> loadData() async {
-    try {
-      final results = await Future.wait([storage.loadAnimes(), rootBundle.loadString('lib/anime_catalog.json')]);
-      final saved = results[0] as List<Anime>;
-      final decoded = jsonDecode(results[1] as String);
-      if (decoded is! List) throw const FormatException('يجب أن تكون قاعدة البيانات قائمة JSON.');
-      final entries = decoded.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
-      if (!mounted) return;
-      setState(() { animes = saved.where((a) => a.parentId == null).toList(); catalog = entries; catalogMessage = ''; loading = false; });
-    } catch (e) {
-      final saved = await storage.loadAnimes();
-      if (!mounted) return;
-      setState(() { animes = saved.where((a) => a.parentId == null).toList(); catalog = []; catalogMessage = 'تعذرت قراءة قاعدة الأنمي.'; loading = false; });
-    }
+    final saved = await storage.loadAnimes();
+    if (!mounted) return;
+    setState(() { animes = saved.where((a) => a.parentId == null).toList(); loading = false; });
   }
 
   List<Anime> get ratedAnimes => animes.where((anime) => anime.rating > 0).toList();
@@ -72,7 +58,6 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
   }
 
   List<Anime> get favorites => animes.where((anime) => anime.favorite).toList();
-  List<Anime> get highRated => ratedAnimes.where((anime) => anime.rating >= 8.0).toList();
 
   int get totalEpisodesWatched => animes.where((a) => a.status == 'مكتمل').fold<int>(0, (sum, a) => sum + a.episodes);
 
@@ -91,19 +76,16 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
     return scores;
   }
 
-  // 🔥 تصميم الإنجازات الجديد (ألقاب وأيقونات مميزة)
   Widget _buildAchievements() {
     int totalCount = animes.length;
-    
-    // قائمة الإنجازات المخصصة
     final achievements = [
-      {'count': 10, 'title': 'مبتدئ', 'icon': Icons.star_border, 'color': const Color(0xFFCD7F32)}, // برونزي
-      {'count': 30, 'title': 'مستكشف', 'icon': Icons.explore, 'color': const Color(0xFFC0C0C0)}, // فضي
-      {'count': 50, 'title': 'متذوق', 'icon': Icons.local_cafe, 'color': const Color(0xFFFFD700)}, // ذهبي
-      {'count': 100, 'title': 'خبير', 'icon': Icons.psychology, 'color': const Color(0xFF00E5FF)}, // بلاتيني
-      {'count': 200, 'title': 'أسطورة', 'icon': Icons.auto_awesome, 'color': const Color(0xFFE040FB)}, // ماسي
-      {'count': 500, 'title': 'أوتاكو حقيقي', 'icon': Icons.verified, 'color': const Color(0xFFFF5252)}, // أحمر
-      {'count': 1000, 'title': 'إمبراطور الأوتاكو', 'icon': Icons.workspace_premium, 'color': const Color(0xFFFFC857)}, // ذهبي فاخر
+      {'count': 10, 'title': 'مبتدئ', 'icon': Icons.star_border, 'color': const Color(0xFFCD7F32)},
+      {'count': 30, 'title': 'مستكشف', 'icon': Icons.explore, 'color': const Color(0xFFC0C0C0)},
+      {'count': 50, 'title': 'متذوق', 'icon': Icons.local_cafe, 'color': const Color(0xFFFFD700)},
+      {'count': 100, 'title': 'خبير', 'icon': Icons.psychology, 'color': const Color(0xFF00E5FF)},
+      {'count': 200, 'title': 'أسطورة', 'icon': Icons.auto_awesome, 'color': const Color(0xFFE040FB)},
+      {'count': 500, 'title': 'أوتاكو حقيقي', 'icon': Icons.verified, 'color': const Color(0xFFFF5252)},
+      {'count': 1000, 'title': 'إمبراطور الأوتاكو', 'icon': Icons.workspace_premium, 'color': const Color(0xFFFFC857)},
     ];
 
     return Container(
@@ -112,29 +94,21 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
-            children: [
-              Icon(Icons.emoji_events, color: Color(0xFFFFC857)),
-              SizedBox(width: 8),
-              Text('الإنجازات والألقاب', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-            ],
-          ),
+          const Row(children: [Icon(Icons.emoji_events, color: Color(0xFFFFC857)), SizedBox(width: 8), Text('الإنجازات والألقاب', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold))]),
           const SizedBox(height: 10),
           Text('لقد أضفت $totalCount أنمي حتى الآن. استمر لفتح الألقاب!', style: const TextStyle(color: Colors.white60, fontSize: 12)),
           const SizedBox(height: 16),
           SizedBox(
             height: 110,
             child: ListView.builder(
-              controller: _achievementsController, // 🔥 ربط المتحكم
+              controller: _achievementsController,
               scrollDirection: Axis.horizontal,
               itemCount: achievements.length,
               itemBuilder: (context, index) {
                 final ach = achievements[index];
                 final isUnlocked = totalCount >= (ach['count'] as int);
-                
                 return Container(
-                  width: 90,
-                  margin: const EdgeInsets.only(left: 10),
+                  width: 90, margin: const EdgeInsets.only(left: 10),
                   child: Column(
                     children: [
                       Container(
@@ -145,22 +119,11 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
                           border: Border.all(color: isUnlocked ? (ach['color'] as Color) : Colors.white24, width: 2),
                           boxShadow: isUnlocked ? [BoxShadow(color: (ach['color'] as Color).withOpacity(0.5), blurRadius: 15, spreadRadius: 2)] : [],
                         ),
-                        child: Icon(
-                          isUnlocked ? (ach['icon'] as IconData) : Icons.lock,
-                          color: isUnlocked ? (ach['color'] as Color) : Colors.white38,
-                          size: 30,
-                        ),
+                        child: Icon(isUnlocked ? (ach['icon'] as IconData) : Icons.lock, color: isUnlocked ? (ach['color'] as Color) : Colors.white38, size: 30),
                       ),
                       const SizedBox(height: 8),
-                      Text(
-                        ach['title'] as String,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: isUnlocked ? Colors.white : Colors.white54, fontSize: 12, fontWeight: FontWeight.bold),
-                      ),
-                      Text(
-                        '${ach['count']}',
-                        style: TextStyle(color: isUnlocked ? (ach['color'] as Color) : Colors.white38, fontSize: 10),
-                      ),
+                      Text(ach['title'] as String, textAlign: TextAlign.center, style: TextStyle(color: isUnlocked ? Colors.white : Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
+                      Text('${ach['count']}', style: TextStyle(color: isUnlocked ? (ach['color'] as Color) : Colors.white38, fontSize: 10)),
                     ],
                   ),
                 );
@@ -175,7 +138,6 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
   @override
   Widget build(BuildContext context) {
     final primaryColor = primaryColorNotifier.value;
-    
     return Scaffold(
       backgroundColor: background,
       appBar: AppBar(backgroundColor: primaryColor, foregroundColor: Colors.white, title: const Text('مرآة الأوتاكو', style: TextStyle(fontWeight: FontWeight.bold)), centerTitle: true),
@@ -190,10 +152,8 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
           const SizedBox(height: 22),
           _buildGenreChart(),
           const SizedBox(height: 22),
-          _buildAchievements(), // 🔥
+          _buildAchievements(),
           const SizedBox(height: 22),
-          _buildAnimeSection(title: 'أنمياتك المفضلة', icon: Icons.favorite, items: favorites, emptyMessage: 'لم تضف أنميات إلى المفضلة بعد.'),
-          const SizedBox(height: 24),
         ],
       ),
     );
@@ -257,23 +217,6 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
               ),
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAnimeSection({required String title, required IconData icon, required List<Anime> items, required String emptyMessage}) {
-    final primaryColor = primaryColorNotifier.value;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(18), border: Border.all(color: Colors.white10)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(children: [Icon(icon, color: const Color(0xFFB87928)), const SizedBox(width: 8), Expanded(child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold)))]),
-          const SizedBox(height: 12),
-          if (items.isEmpty) Text(emptyMessage, style: const TextStyle(color: Colors.white54, height: 1.6))
-          else ...items.take(5).map((anime) => ListTile(contentPadding: EdgeInsets.zero, leading: CircleAvatar(backgroundColor: primaryColor, child: Text(anime.rating > 0 ? '${anime.rating.toStringAsFixed(1)}' : '★', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))), title: Text(anime.title, style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: titleColorNotifier.value)), subtitle: Text(anime.genre.isNotEmpty ? anime.genre : 'لم يُحدّد النوع', style: const TextStyle(color: Colors.white54)))),
         ],
       ),
     );
