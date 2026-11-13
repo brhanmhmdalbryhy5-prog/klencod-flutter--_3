@@ -34,8 +34,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
   final ImagePicker _picker = ImagePicker();
   final AnimeApiService apiService = AnimeApiService();
   final StorageService storage = StorageService();
-  
-  // 🔥 مفتاح البطاقة
   final GlobalKey _cardKey = GlobalKey();
 
   String? _characterImagePath;
@@ -59,6 +57,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     final path = prefs.getString(_preferenceKey);
     
     final allAnimes = await storage.loadAnimes();
+    // جلب المواسم المرتبطة بهذا الأنمي
     final children = allAnimes.where((a) => a.parentId == widget.anime.id).toList();
 
     if (!mounted) return;
@@ -137,7 +136,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     );
   }
 
-  // 🔥 دالة المشاركة
   Future<void> _shareCardImage() async {
     HapticFeedback.mediumImpact();
     try {
@@ -154,7 +152,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     }
   }
 
-  // 🔥 تصميم البطاقة
   Widget _buildShareCard() {
     final anime = widget.anime;
     final primaryColor = primaryColorNotifier.value;
@@ -294,6 +291,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     if (index != -1) { allAnimes[index] = widget.anime; await storage.saveAnimes(allAnimes); }
   }
 
+  // 🔥 دالة الجلب الرئيسية (تقوم بإنشاء المواسم تلقائياً)
   Future<void> _fetchDataManually() async {
     if (widget.anime.title.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الأنمي لا يملك اسماً، لا يمكن البحث عنه.')));
@@ -313,6 +311,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     final int? releaseYear = data['releaseYear'];
     final List<Map<String, dynamic>> subData = data['subAnimes'];
 
+    // تحديث بيانات الأنمي الأصلي
     setState(() {
       if (genres.isNotEmpty) widget.anime.genre = genres.join('، ');
       if (summary.isNotEmpty) widget.anime.summary = summary;
@@ -323,28 +322,31 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
 
     final allAnimes = await storage.loadAnimes();
     final index = allAnimes.indexWhere((a) => a.id == widget.anime.id);
-    if (index != -1) { allAnimes[index] = widget.anime; await storage.saveAnimes(allAnimes); }
+    if (index != -1) { allAnimes[index] = widget.anime; }
 
+    // 🔥 إنشاء قوالب المواسم والأفلام
     if (subData.isNotEmpty) {
       for (var sub in subData) {
+        // التأكد من عدم وجود الموسم مسبقاً
         final exists = allAnimes.any((a) => a.title == sub['title'] && a.parentId == widget.anime.id);
         if (!exists) {
           final newSub = Anime(
             id: DateTime.now().microsecondsSinceEpoch.toString() + Random().nextInt(999).toString(),
             title: sub['title'],
             partName: sub['type'],
-            parentId: widget.anime.id,
+            parentId: widget.anime.id, // يربطه بالأنمي الأصلي
             episodes: sub['episodes'] ?? 0,
           );
           allAnimes.add(newSub);
         }
       }
-      await storage.saveAnimes(allAnimes);
-      await _loadData();
     }
+    
+    await storage.saveAnimes(allAnimes);
+    await _loadData(); // تحديث الواجهة لإظهار المواسم
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم جلب البيانات بنجاح!')));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم جلب البيانات وإنشاء قوالب المواسم بنجاح!')));
   }
 
   void _addSubAnime() {
@@ -353,7 +355,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: panel,
-        title: const Text('إضافة موسم أو فيلم'),
+        title: const Text('إضافة موسم أو فيلم يدوياً'),
         content: TextField(controller: controller, decoration: const InputDecoration(labelText: 'اسم الموسم (مثلاً: الموسم الثاني)')),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إلغاء')),
@@ -413,7 +415,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
         title: const Text('تفاصيل الأنمي'), 
         centerTitle: true,
         actions: [
-          // 🔥 زر المشاركة
           IconButton(tooltip: 'صنع بطاقة للمشاركة', icon: const Icon(Icons.dashboard_customize_outlined, color: Colors.cyan), onPressed: _showShareDialog),
         ],
       ),
@@ -455,7 +456,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
             ],
           ),
           
-          if (subAnimes.isNotEmpty || anime.parentId == null) ...[
+          // 🔥 قسم المواسم يظهر فقط للأنمي الأصلي
+          if (anime.parentId == null) ...[
             const SizedBox(height: 20),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -483,7 +485,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
 
           const SizedBox(height: 22),
           
-          if (anime.episodes > 0 && anime.parentId == null) ...[
+          // 🔥 شريط تقدم المشاهدة يظهر للأنمي الأصلي وللموسم أيضاً
+          if (anime.episodes > 0) ...[
             Container(
               padding: const EdgeInsets.all(15), margin: const EdgeInsets.only(bottom: 14),
               decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(16), border: Border.all(color: primaryColor.withOpacity(0.4))),
