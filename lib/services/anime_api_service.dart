@@ -9,7 +9,7 @@ class AnimeApiService {
 
   Future<Map<String, dynamic>> fetchAnimeData(String animeTitle) async {
     if (animeTitle.trim().isEmpty) {
-      return {'genres': <String>[], 'summary': '', 'episodes': 0, 'globalRating': null, 'releaseYear': null, 'imageUrl': null, 'subAnimes': [], 'characters': []};
+      return {'genres': <String>[], 'summary': '', 'episodes': 0, 'globalRating': null, 'releaseYear': null, 'imageUrl': null, 'subAnimes': [], 'characters': [], 'studios': null};
     }
 
     for (int attempt = 1; attempt <= 3; attempt++) {
@@ -27,6 +27,11 @@ class AnimeApiService {
                 averageScore
                 startDate { year }
                 coverImage { large }
+                studios(isMain: true) {
+                  nodes {
+                    name
+                  }
+                }
                 characters(sort: [ROLE, RELEVANCE, ID], perPage: 8) {
                   nodes {
                     name { full }
@@ -84,7 +89,14 @@ class AnimeApiService {
             final int? releaseYear = media['startDate']?['year'] as int?;
             final String? imageUrl = media['coverImage']?['large'] as String?;
 
-            // 🔥 استخراج الشخصيات
+            // 🔥 جلب الاستوديو
+            String? studios;
+            final studiosList = media['studios']?['nodes'] as List?;
+            if (studiosList != null && studiosList.isNotEmpty) {
+              studios = studiosList.map((s) => s['name'].toString()).join('، ');
+            }
+
+            // استخراج الشخصيات
             List<Map<String, dynamic>> characters = [];
             final charList = media['characters']?['nodes'] as List?;
             if (charList != null) {
@@ -168,16 +180,17 @@ class AnimeApiService {
               'releaseYear': releaseYear,
               'imageUrl': imageUrl,
               'subAnimes': subAnimes,
-              'characters': characters, // 🔥 إرجاع الشخصيات
+              'characters': characters,
+              'studios': studios, // 🔥 إرجاع الاستوديو
             };
           }
-          return {'genres': <String>[], 'summary': '', 'episodes': 0, 'globalRating': null, 'releaseYear': null, 'imageUrl': null, 'subAnimes': [], 'characters': []};
+          return {'genres': <String>[], 'summary': '', 'episodes': 0, 'globalRating': null, 'releaseYear': null, 'imageUrl': null, 'subAnimes': [], 'characters': [], 'studios': null};
         }
       } catch (e) {
         if (attempt < 3) await Future.delayed(const Duration(seconds: 2));
       }
     }
-    return {'genres': <String>[], 'summary': '', 'episodes': 0, 'globalRating': null, 'releaseYear': null, 'imageUrl': null, 'subAnimes': [], 'characters': []};
+    return {'genres': <String>[], 'summary': '', 'episodes': 0, 'globalRating': null, 'releaseYear': null, 'imageUrl': null, 'subAnimes': [], 'characters': [], 'studios': null};
   }
 
   Future<String> _translateToArabic(String text) async {
@@ -220,9 +233,13 @@ class AnimeApiService {
       if (anime.episodes == 0 && data['episodes'] > 0) { anime.episodes = data['episodes']; changed = true; }
       if (anime.globalRating == null && data['globalRating'] != null) { anime.globalRating = data['globalRating']; changed = true; }
       if (anime.releaseYear == null && data['releaseYear'] != null) { anime.releaseYear = data['releaseYear']; changed = true; }
-      // 🔥 حفظ الشخصيات
       if (anime.characters.isEmpty && (data['characters'] as List).isNotEmpty) {
         anime.characters = (data['characters'] as List).map((e) => Map<String, dynamic>.from(e)).toList();
+        changed = true;
+      }
+      // 🔥 حفظ الاستوديو
+      if (anime.studios == null && data['studios'] != null) {
+        anime.studios = data['studios'];
         changed = true;
       }
 
