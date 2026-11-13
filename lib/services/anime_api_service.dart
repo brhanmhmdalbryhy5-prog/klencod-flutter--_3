@@ -9,7 +9,7 @@ class AnimeApiService {
 
   Future<Map<String, dynamic>> fetchAnimeData(String animeTitle) async {
     if (animeTitle.trim().isEmpty) {
-      return {'genres': <String>[], 'summary': '', 'episodes': 0, 'globalRating': null, 'releaseYear': null, 'imageUrl': null, 'subAnimes': []};
+      return {'genres': <String>[], 'summary': '', 'episodes': 0, 'globalRating': null, 'releaseYear': null, 'imageUrl': null, 'subAnimes': [], 'characters': []};
     }
 
     for (int attempt = 1; attempt <= 3; attempt++) {
@@ -27,6 +27,12 @@ class AnimeApiService {
                 averageScore
                 startDate { year }
                 coverImage { large }
+                characters(sort: [ROLE, RELEVANCE, ID], perPage: 8) {
+                  nodes {
+                    name { full }
+                    image { large }
+                  }
+                }
                 relations {
                   edges {
                     relationType
@@ -78,6 +84,17 @@ class AnimeApiService {
             final int? releaseYear = media['startDate']?['year'] as int?;
             final String? imageUrl = media['coverImage']?['large'] as String?;
 
+            // 🔥 استخراج الشخصيات
+            List<Map<String, dynamic>> characters = [];
+            final charList = media['characters']?['nodes'] as List?;
+            if (charList != null) {
+              for (var c in charList) {
+                final name = c['name']?['full'] ?? 'غير معروف';
+                final img = c['image']?['large'] ?? '';
+                characters.add({'name': name, 'image': img});
+              }
+            }
+
             String summary = '';
             if (!hasAdultContent) {
               summary = media['description']?.toString() ?? '';
@@ -95,7 +112,6 @@ class AnimeApiService {
                 final node = edge['node'];
                 final format = node['format'];
                 
-                // نأخذ كل شيء (TV, MOVIE, OVA, SPECIAL, TV_SHORT)
                 if (format == 'TV' || format == 'MOVIE' || format == 'OVA' || format == 'SPECIAL' || format == 'TV_SHORT') {
                   final titleRomaji = node['title']['romaji'] ?? '';
                   final titleEnglish = node['title']['english'] ?? '';
@@ -150,17 +166,18 @@ class AnimeApiService {
               'episodes': episodes,
               'globalRating': globalRating,
               'releaseYear': releaseYear,
-              'imageUrl': imageUrl, // سيعود للأنمي الأصلي ولكننا سنتجاهله
+              'imageUrl': imageUrl,
               'subAnimes': subAnimes,
+              'characters': characters, // 🔥 إرجاع الشخصيات
             };
           }
-          return {'genres': <String>[], 'summary': '', 'episodes': 0, 'globalRating': null, 'releaseYear': null, 'imageUrl': null, 'subAnimes': []};
+          return {'genres': <String>[], 'summary': '', 'episodes': 0, 'globalRating': null, 'releaseYear': null, 'imageUrl': null, 'subAnimes': [], 'characters': []};
         }
       } catch (e) {
         if (attempt < 3) await Future.delayed(const Duration(seconds: 2));
       }
     }
-    return {'genres': <String>[], 'summary': '', 'episodes': 0, 'globalRating': null, 'releaseYear': null, 'imageUrl': null, 'subAnimes': []};
+    return {'genres': <String>[], 'summary': '', 'episodes': 0, 'globalRating': null, 'releaseYear': null, 'imageUrl': null, 'subAnimes': [], 'characters': []};
   }
 
   Future<String> _translateToArabic(String text) async {
@@ -203,6 +220,11 @@ class AnimeApiService {
       if (anime.episodes == 0 && data['episodes'] > 0) { anime.episodes = data['episodes']; changed = true; }
       if (anime.globalRating == null && data['globalRating'] != null) { anime.globalRating = data['globalRating']; changed = true; }
       if (anime.releaseYear == null && data['releaseYear'] != null) { anime.releaseYear = data['releaseYear']; changed = true; }
+      // 🔥 حفظ الشخصيات
+      if (anime.characters.isEmpty && (data['characters'] as List).isNotEmpty) {
+        anime.characters = (data['characters'] as List).map((e) => Map<String, dynamic>.from(e)).toList();
+        changed = true;
+      }
 
       final List<Map<String, dynamic>> subData = data['subAnimes'];
       if (subData.isNotEmpty) {
