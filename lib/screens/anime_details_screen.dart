@@ -13,7 +13,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
-import 'package:http/http.dart' as http; // 🔥 ضروري لتحميل الصور
 
 import '../main.dart';
 import '../models/anime.dart';
@@ -91,24 +90,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     if (currentAnime.videoPath != null && File(currentAnime.videoPath!).existsSync()) {
       _initializeVideo(currentAnime.videoPath!);
     }
-  }
-
-  // 🔥 دالة لتحميل الصور من الإنترنت وحفظها محلياً
-  Future<String?> _downloadAndSaveImage(String? url) async {
-    if (url == null || url.isEmpty) return null;
-    try {
-      final response = await http.get(Uri.parse(url));
-      if (response.statusCode == 200) {
-        final directory = await getApplicationDocumentsDirectory();
-        final folder = Directory('${directory.path}/anime_images');
-        if (!await folder.exists()) await folder.create(recursive: true);
-        final extension = url.contains('.') ? url.substring(url.lastIndexOf('.')) : '.jpg';
-        final file = File('${folder.path}/dl_${DateTime.now().microsecondsSinceEpoch}$extension');
-        await file.writeAsBytes(response.bodyBytes);
-        return file.path;
-      }
-    } catch (_) {}
-    return null;
   }
 
   Future<void> _toggleSeasonView() async {
@@ -301,40 +282,32 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     await _loadData();
   }
 
-  // 🔥 جلب وحفظ صورة الغلاف للأنمي الأصلي
   Future<void> _fetchMainImageOnly() async {
     if (currentAnime.title.trim().isEmpty) return;
     showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator()));
     
-    final data = await apiService.fetchAnimeData(currentAnime.title);
+    final data = await apiService.fetchAnimeData(currentAnime.title, downloadImages: true);
+    if (!mounted) return;
+    Navigator.pop(context);
+
     final String? imageUrl = data['imageUrl'];
+    final String? imagePath = data['imagePath'];
     
     if (imageUrl != null) {
-      final localPath = await _downloadAndSaveImage(imageUrl); // 🔥 تحميل محلي
-      
-      if (mounted) {
-        setState(() { 
-          currentAnime.imageUrl = imageUrl; 
-          if (localPath != null) currentAnime.imagePath = localPath;
-        });
-      }
-      
+      setState(() { 
+        currentAnime.imageUrl = imageUrl; 
+        if (imagePath != null) currentAnime.imagePath = imagePath;
+      });
       final allAnimes = await storage.loadAnimes();
       final index = allAnimes.indexWhere((a) => a.id == currentAnime.id);
       if (index != -1) {
         allAnimes[index].imageUrl = imageUrl;
-        if (localPath != null) allAnimes[index].imagePath = localPath;
+        if (imagePath != null) allAnimes[index].imagePath = imagePath;
         await storage.saveAnimes(allAnimes);
       }
-      if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم جلب وحفظ صورة الغلاف محلياً.')));
-      }
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم جلب وحفظ صورة الغلاف محلياً.')));
     } else {
-      if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لم يتم العثور على صورة.')));
-      }
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لم يتم العثور على صورة.')));
     }
   }
 
@@ -492,7 +465,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     if (index != -1) { allAnimes[index] = currentAnime; await storage.saveAnimes(allAnimes); }
   }
 
-  // 🔥 جلب وتحميل صور المواسم والشخصيات محلياً
+  // 🔥 تم تعديل هذه الدالة لتحميل الصور محلياً
   Future<void> _fetchDataManually() async {
     if (currentAnime.title.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الأنمي لا يملك اسماً، لا يمكن البحث عنه.')));
@@ -500,7 +473,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     }
     showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator()));
     
-    final data = await apiService.fetchAnimeData(currentAnime.title);
+    // نمرر downloadImages: true لتحميل الصور محلياً
+    final data = await apiService.fetchAnimeData(currentAnime.title, downloadImages: true);
     
     if (!mounted) return;
     Navigator.pop(context);
@@ -513,6 +487,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     final List<Map<String, dynamic>> subData = data['subAnimes'];
     final List<Map<String, dynamic>> charData = data['characters'];
     final String? studios = data['studios'];
+    final String? mainImagePath = data['imagePath'];
 
     setState(() {
       if (genres.isNotEmpty) currentAnime.genre = genres.join('، ');
@@ -521,37 +496,18 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
       if (globalRating != null) currentAnime.globalRating = globalRating;
       if (releaseYear != null) currentAnime.releaseYear = releaseYear;
       if (studios != null) currentAnime.studios = studios;
+      if (mainImagePath != null && currentAnime.imagePath == null) currentAnime.imagePath = mainImagePath;
+      if (charData.isNotEmpty) currentAnime.characters = charData;
     });
 
     final allAnimes = await storage.loadAnimes();
     final index = allAnimes.indexWhere((a) => a.id == currentAnime.id);
-
-    // 🔥 تحميل صور الشخصيات محلياً
-    if (charData.isNotEmpty) {
-      List<Map<String, dynamic>> localChars = [];
-      for (var char in charData) {
-        final remoteUrl = char['image'] as String?;
-        final localPath = await _downloadAndSaveImage(remoteUrl);
-        localChars.add({
-          'name': char['name'],
-          'imageUrl': remoteUrl,
-          'imagePath': localPath,
-        });
-      }
-      currentAnime.characters = localChars;
-    }
-
     if (index != -1) { allAnimes[index] = currentAnime; }
 
-    // 🔥 تحميل صور المواسم محلياً وتحديثها
     if (subData.isNotEmpty) {
       for (var sub in subData) {
         final existingIndex = allAnimes.indexWhere((a) => a.title == sub['title'] && a.parentId == currentAnime.id);
         
-        // تحميل صورة الموسم فوراً
-        String? subImageUrl = sub['imageUrl'];
-        String? subLocalPath = await _downloadAndSaveImage(subImageUrl);
-
         if (existingIndex == -1) {
           final newSub = Anime(
             id: DateTime.now().microsecondsSinceEpoch.toString() + Random().nextInt(999).toString(),
@@ -563,18 +519,15 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
             genre: sub['genre'] ?? '',
             globalRating: sub['globalRating'],
             releaseYear: sub['releaseYear'],
-            imageUrl: subImageUrl,
-            imagePath: subLocalPath, // 🔥 حفظ الصورة المحلية
+            imageUrl: sub['imageUrl'],
+            imagePath: sub['imagePath'],
           );
           allAnimes.add(newSub);
         } else {
           final existing = allAnimes[existingIndex];
           if (existing.globalRating == null && sub['globalRating'] != null) existing.globalRating = sub['globalRating'];
           if (existing.releaseYear == null && sub['releaseYear'] != null) existing.releaseYear = sub['releaseYear'];
-          if ((existing.imagePath == null || existing.imagePath!.isEmpty) && subLocalPath != null) {
-            existing.imagePath = subLocalPath; // 🔥 تحديث الصورة المحلية
-            existing.imageUrl = subImageUrl;
-          }
+          if (existing.imagePath == null && sub['imagePath'] != null) existing.imagePath = sub['imagePath'];
           if (existing.summary.isEmpty && (sub['summary'] ?? '').isNotEmpty) existing.summary = sub['summary'];
           if (existing.genre.isEmpty && (sub['genre'] ?? '').isNotEmpty) existing.genre = sub['genre'];
           if (existing.episodes == 0 && (sub['episodes'] ?? 0) > 0) existing.episodes = sub['episodes'];
@@ -586,7 +539,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     await _loadData();
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم جلب وحفظ جميع البيانات (بما فيها الصور) بنجاح!')));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم جلب البيانات وحفظ الصور محلياً!')));
   }
 
   void _addSubAnime() {
@@ -638,7 +591,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     );
   }
 
-  // 🔥 عرض الشخصيات (تدعم الصور المحلية)
   Widget _buildCharacters() {
     if (currentAnime.characters.isEmpty) return const SizedBox.shrink();
     final primaryColor = primaryColorNotifier.value;
@@ -660,13 +612,10 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
               itemBuilder: (context, index) {
                 final char = currentAnime.characters[index];
                 final imgPath = char['imagePath'] as String?;
-                final imgUrl = char['imageUrl'] as String?;
                 
                 ImageProvider? imageProvider;
                 if (imgPath != null && File(imgPath).existsSync()) {
-                  imageProvider = FileImage(File(imgPath)); // صورة محلية
-                } else if (imgUrl != null && imgUrl.isNotEmpty) {
-                  imageProvider = NetworkImage(imgUrl); // صورة إنترنت (احتياطي)
+                  imageProvider = FileImage(File(imgPath));
                 }
 
                 return Padding(
