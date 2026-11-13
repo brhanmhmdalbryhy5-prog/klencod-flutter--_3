@@ -5,11 +5,9 @@ import 'package:path_provider/path_provider.dart';
 class ImageService {
   static final Map<String, String> _cache = {};
 
-  /// تحميل صورة من الإنترنت وحفظها محلياً (تجنب التكرار تلقائياً).
   static Future<String?> downloadImage(String? url, {String prefix = 'img'}) async {
     if (url == null || url.isEmpty) return null;
     
-    // التحقق من الكاش الداخلي
     if (_cache.containsKey(url)) {
       final cached = _cache[url]!;
       if (await File(cached).exists()) return cached;
@@ -22,7 +20,6 @@ class ImageService {
         final folder = Directory('${directory.path}/anime_images');
         if (!await folder.exists()) await folder.create(recursive: true);
         
-        // اسم الملف مبني على hash الرابط لمنع التكرار
         final filename = '${prefix}_${url.hashCode.abs()}.jpg';
         final file = File('${folder.path}/$filename');
         
