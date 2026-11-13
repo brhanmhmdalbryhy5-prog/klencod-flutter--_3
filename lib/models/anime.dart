@@ -13,9 +13,10 @@ class Anime {
   String date;
   String? imagePath;
   double? globalRating;
+  int? releaseYear;
   
-  // 🔥 الحقل الجديد لسنة النزول
-  int? releaseYear; 
+  // 🔥 الحقل الجديد: عدد الحلقات التي شاهدتها
+  int watchedEpisodes; 
 
   Anime({
     required this.id,
@@ -33,6 +34,7 @@ class Anime {
     this.imagePath,
     this.globalRating,
     this.releaseYear,
+    this.watchedEpisodes = 0, // القيمة الافتراضية
   });
 
   Map<String, dynamic> toJson() {
@@ -52,6 +54,7 @@ class Anime {
       'imagePath': imagePath,
       'globalRating': globalRating,
       'releaseYear': releaseYear,
+      'watchedEpisodes': watchedEpisodes,
     };
   }
 
@@ -72,6 +75,7 @@ class Anime {
       imagePath: json['imagePath'] as String?,
       globalRating: (json['globalRating'] as num?)?.toDouble(),
       releaseYear: (json['releaseYear'] as num?)?.toInt(),
+      watchedEpisodes: (json['watchedEpisodes'] as num?)?.toInt() ?? 0,
     );
   }
 }
