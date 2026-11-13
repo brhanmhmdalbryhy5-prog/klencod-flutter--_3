@@ -2,8 +2,8 @@ import 'dart:convert';
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../main.dart';
 import '../models/anime.dart';
@@ -55,11 +55,11 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
 
   double get averageRating {
     if (ratedAnimes.isEmpty) return 0;
-    return ratedAnimes.fold<double>(0, (sum, anime) => sum + anime.rating) / ratedAnimes.length; // 🔥 sum double
+    return ratedAnimes.fold<double>(0, (sum, anime) => sum + anime.rating) / ratedAnimes.length;
   }
 
   List<Anime> get favorites => animes.where((anime) => anime.favorite).toList();
-  List<Anime> get highRated => ratedAnimes.where((anime) => anime.rating >= 8.0).toList(); // 🔥 8.0
+  List<Anime> get highRated => ratedAnimes.where((anime) => anime.rating >= 8.0).toList();
 
   int get totalEpisodesWatched => animes.where((a) => a.status == 'مكتمل').fold<int>(0, (sum, a) => sum + a.episodes);
 
@@ -84,7 +84,7 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
     return null;
   }
 
-  Map<String, double> get genreScores { // 🔥 double scores
+  Map<String, double> get genreScores {
     final scores = <String, double>{};
     for (final anime in ratedAnimes) {
       final item = findCatalogAnime(anime.title);
@@ -98,6 +98,71 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
   void dispose() {
     searchController.dispose();
     super.dispose();
+  }
+
+  // 🔥 قسم الإنجازات الجديد (يعتمد على عدد الأنميات المضافة)
+  Widget _buildAchievements() {
+    int totalCount = animes.length;
+    // توليد الإنجازات من 10 إلى 1000 كل 10
+    final List<int> milestones = List.generate(100, (index) => (index + 1) * 10);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(18), border: Border.all(color: const Color(0xFFFFC857).withOpacity(0.3))),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.emoji_events, color: Color(0xFFFFC857)),
+              SizedBox(width: 8),
+              Text('الإنجازات', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text('لقد أضفت $totalCount أنمي حتى الآن. استمر في جمع الأنميات لفتح المزيد!', style: const TextStyle(color: Colors.white60, fontSize: 12)),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 90,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: milestones.length,
+              itemBuilder: (context, index) {
+                final milestone = milestones[index];
+                final isUnlocked = totalCount >= milestone;
+                
+                return Container(
+                  width: 70,
+                  margin: const EdgeInsets.only(left: 10),
+                  child: Column(
+                    children: [
+                      Container(
+                        width: 50, height: 50,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: isUnlocked ? const Color(0xFFFFC857).withOpacity(0.2) : Colors.white10,
+                          border: Border.all(color: isUnlocked ? const Color(0xFFFFC857) : Colors.white24, width: 2),
+                          boxShadow: isUnlocked ? [BoxShadow(color: const Color(0xFFFFC857).withOpacity(0.4), blurRadius: 10)] : [],
+                        ),
+                        child: Icon(
+                          isUnlocked ? Icons.emoji_events : Icons.lock,
+                          color: isUnlocked ? const Color(0xFFFFC857) : Colors.white38,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '$milestone',
+                        style: TextStyle(color: isUnlocked ? Colors.white : Colors.white54, fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -124,6 +189,8 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
           _buildStatistics(),
           const SizedBox(height: 22),
           _buildGenreChart(),
+          const SizedBox(height: 22),
+          _buildAchievements(), // 🔥 استدعاء قسم الإنجازات هنا
           const SizedBox(height: 22),
           _buildAnimeSection(title: 'أنمياتك المفضلة', icon: Icons.favorite, items: favorites, emptyMessage: 'لم تضف أنميات إلى المفضلة بعد.'),
           const SizedBox(height: 22),
@@ -215,8 +282,7 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
             height: 200,
             child: PieChart(
               PieChartData(
-                sectionsSpace: 3,
-                centerSpaceRadius: 40,
+                sectionsSpace: 3, centerSpaceRadius: 40,
                 sections: List.generate(topScores.length, (index) {
                   final entry = topScores[index];
                   final percentage = (entry.value / total) * 100;
