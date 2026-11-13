@@ -44,6 +44,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
   
   List<Anime> subAnimes = [];
   bool _isSeasonGridView = false;
+  static const String _seasonViewKey = 'season_view_grid'; // 🔥 مفتاح حفظ شكل العرض
   
   VideoPlayerController? _videoController;
   ChewieController? _chewieController;
@@ -60,6 +61,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
   Future<void> _loadData() async {
     final prefs = await SharedPreferences.getInstance();
     final path = prefs.getString(_preferenceKey);
+    final savedView = prefs.getBool(_seasonViewKey); // 🔥 تحميل شكل العرض المحفوظ
     
     final allAnimes = await storage.loadAnimes();
     
@@ -68,18 +70,37 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
       currentAnime = allAnimes[index];
     }
 
-    final children = allAnimes.where((a) => a.parentId == currentAnime.id).toList();
+    // 🔥 جلب الأجزاء المرتبطة (مترابطة في كلا الاتجاهين)
+    List<Anime> relatedAnimes;
+    if (currentAnime.parentId == null) {
+      // إذا كنا في الأنمي الأصلي، نجلب كل المواسم والأفلام التابعة له
+      relatedAnimes = allAnimes.where((a) => a.parentId == currentAnime.id).toList();
+    } else {
+      // إذا كنا في موسم/فيلم، نجلب الأنمي الأصلي + كل الأجزاء الأخرى (باستثناء الحالي)
+      final parent = allAnimes.where((a) => a.id == currentAnime.parentId).toList();
+      final siblings = allAnimes.where((a) => a.parentId == currentAnime.parentId && a.id != currentAnime.id).toList();
+      relatedAnimes = [...parent, ...siblings];
+    }
 
     if (!mounted) return;
     setState(() {
       _characterImagePath = path;
-      subAnimes = children;
+      if (savedView != null) _isSeasonGridView = savedView; // 🔥 تطبيق الشكل المحفوظ
+      subAnimes = relatedAnimes;
       _loading = false;
     });
     
     if (currentAnime.videoPath != null && File(currentAnime.videoPath!).existsSync()) {
       _initializeVideo(currentAnime.videoPath!);
     }
+  }
+
+  // 🔥 دالة حفظ شكل العرض
+  Future<void> _toggleSeasonView() async {
+    HapticFeedback.selectionClick();
+    setState(() => _isSeasonGridView = !_isSeasonGridView);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_seasonViewKey, _isSeasonGridView);
   }
 
   @override
@@ -162,7 +183,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     final partNameController = TextEditingController(text: currentAnime.partName ?? '');
     final episodesController = TextEditingController(text: currentAnime.episodes == 0 ? '' : '${currentAnime.episodes}');
     final watchedController = TextEditingController(text: currentAnime.watchedEpisodes == 0 ? '' : '${currentAnime.watchedEpisodes}');
-    final studiosController = TextEditingController(text: currentAnime.studios ?? ''); // 🔥
+    final studiosController = TextEditingController(text: currentAnime.studios ?? '');
     double rating = currentAnime.rating;
     String? newImagePath = currentAnime.imagePath;
 
@@ -203,7 +224,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                     const SizedBox(height: 12),
                     TextField(controller: titleController, decoration: const InputDecoration(labelText: 'الاسم')),
                     const SizedBox(height: 10),
-                    // 🔥 حقل تعديل الاستوديو
                     TextField(controller: studiosController, decoration: const InputDecoration(labelText: 'الاستوديو (مثلاً: Mappa)')),
                     if (currentAnime.parentId != null) ...[
                       const SizedBox(height: 10),
@@ -240,7 +260,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
         allAnimes[index]
           ..title = titleController.text.trim()
           ..partName = partNameController.text.trim()
-          ..studios = studiosController.text.trim().isEmpty ? null : studiosController.text.trim() // 🔥
+          ..studios = studiosController.text.trim().isEmpty ? null : studiosController.text.trim()
           ..episodes = int.tryParse(episodesController.text) ?? 0
           ..watchedEpisodes = int.tryParse(watchedController.text) ?? 0
           ..rating = rating
@@ -347,7 +367,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                 Positioned.fill(child: Image.file(File(imagePath), fit: BoxFit.cover))
               else if (imageUrl != null && imageUrl.isNotEmpty)
                 Positioned.fill(child: Image.network(imageUrl, fit: BoxFit.cover)),
-                
               Positioned.fill(
                 child: BackdropFilter(
                   filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
@@ -481,7 +500,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     final int? releaseYear = data['releaseYear'];
     final List<Map<String, dynamic>> subData = data['subAnimes'];
     final List<Map<String, dynamic>> charData = data['characters'];
-    final String? studios = data['studios']; // 🔥
+    final String? studios = data['studios'];
 
     setState(() {
       if (genres.isNotEmpty) currentAnime.genre = genres.join('، ');
@@ -490,21 +509,19 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
       if (globalRating != null) currentAnime.globalRating = globalRating;
       if (releaseYear != null) currentAnime.releaseYear = releaseYear;
       if (charData.isNotEmpty) currentAnime.characters = charData;
-      if (studios != null) currentAnime.studios = studios; // 🔥
-      
-      if (currentAnime.parentId == null) {
-        currentAnime.imageUrl = currentAnime.imageUrl;
-      }
+      if (studios != null) currentAnime.studios = studios;
     });
 
     final allAnimes = await storage.loadAnimes();
     final index = allAnimes.indexWhere((a) => a.id == currentAnime.id);
     if (index != -1) { allAnimes[index] = currentAnime; }
 
+    // 🔥 تحديث المواسم الموجودة وإنشاء الجديدة
     if (subData.isNotEmpty) {
       for (var sub in subData) {
-        final exists = allAnimes.any((a) => a.title == sub['title'] && a.parentId == currentAnime.id);
-        if (!exists) {
+        final existingIndex = allAnimes.indexWhere((a) => a.title == sub['title'] && a.parentId == currentAnime.id);
+        
+        if (existingIndex == -1) {
           final newSub = Anime(
             id: DateTime.now().microsecondsSinceEpoch.toString() + Random().nextInt(999).toString(),
             title: sub['title'],
@@ -518,6 +535,15 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
             imageUrl: sub['imageUrl'],
           );
           allAnimes.add(newSub);
+        } else {
+          // تحديث الموسم الموجود إذا كانت بياناته ناقصة
+          final existing = allAnimes[existingIndex];
+          if (existing.globalRating == null && sub['globalRating'] != null) existing.globalRating = sub['globalRating'];
+          if (existing.releaseYear == null && sub['releaseYear'] != null) existing.releaseYear = sub['releaseYear'];
+          if ((existing.imageUrl == null || existing.imageUrl!.isEmpty) && sub['imageUrl'] != null) existing.imageUrl = sub['imageUrl'];
+          if (existing.summary.isEmpty && (sub['summary'] ?? '').isNotEmpty) existing.summary = sub['summary'];
+          if (existing.genre.isEmpty && (sub['genre'] ?? '').isNotEmpty) existing.genre = sub['genre'];
+          if (existing.episodes == 0 && (sub['episodes'] ?? 0) > 0) existing.episodes = sub['episodes'];
         }
       }
     }
@@ -526,7 +552,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     await _loadData();
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم جلب البيانات والاستوديو والشخصيات بنجاح!')));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم جلب البيانات وتحديث المواسم بنجاح!')));
   }
 
   void _addSubAnime() {
@@ -652,13 +678,18 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     return Container(height: 180, width: double.infinity, color: panel, child: const Icon(Icons.movie_creation_outlined, size: 65, color: Colors.white30));
   }
 
+  // 🔥 بطاقة الموسم (شبكة) - تعرض السنة والتقييم
   Widget _buildSeasonGridCard(Anime sub) {
     final hasLocalImage = sub.imagePath != null && sub.imagePath!.isNotEmpty && File(sub.imagePath!).existsSync();
     final hasNetImage = sub.imageUrl != null && sub.imageUrl!.isNotEmpty;
     final primaryColor = primaryColorNotifier.value;
+    final isOriginal = sub.parentId == null;
 
     return Container(
-      decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),
+      decoration: BoxDecoration(
+        color: panel, borderRadius: BorderRadius.circular(12), 
+        border: Border.all(color: isOriginal ? primaryColor.withOpacity(0.5) : Colors.white12, width: isOriginal ? 2 : 1),
+      ),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: () async {
@@ -690,6 +721,15 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                       ),
                     ),
                   ),
+                  if (isOriginal)
+                    Positioned(
+                      top: 8, left: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(color: primaryColor, borderRadius: BorderRadius.circular(6)),
+                        child: const Text('الأصلي', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -700,7 +740,19 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                 children: [
                   Text(sub.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white)),
                   const SizedBox(height: 4),
-                  Text('${sub.partName} • ${sub.episodes > 0 ? '${sub.episodes} حلقة' : 'غير محدد'}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white54, fontSize: 10)),
+                  Text(
+                    '${sub.partName ?? 'الأنمي الأصلي'}${sub.releaseYear != null ? ' • ${sub.releaseYear}' : ''}${sub.episodes > 0 ? ' • ${sub.episodes} حلقة' : ''}',
+                    maxLines: 2, overflow: TextOverflow.ellipsis, 
+                    style: const TextStyle(color: Colors.white54, fontSize: 10),
+                  ),
+                  if (sub.globalRating != null) ...[
+                    const SizedBox(height: 4),
+                    Row(children: [
+                      const Icon(Icons.public, size: 12, color: Colors.cyan),
+                      const SizedBox(width: 3),
+                      Text(sub.globalRating!.toStringAsFixed(1), style: const TextStyle(color: Colors.cyan, fontSize: 10, fontWeight: FontWeight.bold)),
+                    ]),
+                  ],
                 ],
               ),
             ),
@@ -719,15 +771,19 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     double progress = currentAnime.episodes > 0 ? (currentAnime.watchedEpisodes / currentAnime.episodes) : 0.0;
     if (progress > 1.0) progress = 1.0;
 
+    // 🔥 تحديد عنوان القسم بناءً على الوضع الحالي
+    final isOriginalAnime = currentAnime.parentId == null;
+    final sectionTitle = isOriginalAnime ? 'المواسم والأفلام المرتبطة' : 'الأجزاء الأخرى من السلسلة';
+
     return Scaffold(
       backgroundColor: background,
       appBar: AppBar(
         backgroundColor: background, 
-        title: Text(currentAnime.parentId != null ? 'تفاصيل الموسم/الفيلم' : 'تفاصيل الأنمي'), 
+        title: Text(isOriginalAnime ? 'تفاصيل الأنمي' : 'تفاصيل الموسم/الفيلم'), 
         centerTitle: true,
         actions: [
           IconButton(tooltip: 'تعديل البيانات', icon: const Icon(Icons.edit, color: Colors.white70), onPressed: _editAnimeDetails),
-          if (currentAnime.parentId == null)
+          if (isOriginalAnime)
             IconButton(tooltip: 'جلب صورة الغلاف من الإنترنت', icon: const Icon(Icons.image, color: Colors.orangeAccent), onPressed: _fetchMainImageOnly),
           IconButton(tooltip: 'صنع بطاقة للمشاركة', icon: const Icon(Icons.dashboard_customize_outlined, color: Colors.cyan), onPressed: _showShareDialog),
         ],
@@ -759,7 +815,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
             children: [
               if (currentAnime.status.isNotEmpty) Chip(avatar: const Icon(Icons.bookmark_outline, size: 18), label: Text(currentAnime.status)),
               if (currentAnime.releaseYear != null) Chip(avatar: const Icon(Icons.calendar_today, size: 16), label: Text('${currentAnime.releaseYear}'), backgroundColor: primaryColor.withOpacity(0.2), side: BorderSide(color: primaryColor.withOpacity(0.5))),
-              // 🔥 عرض الاستوديو كـ Chip
               if (currentAnime.studios != null && currentAnime.studios!.isNotEmpty) 
                 Chip(avatar: const Icon(Icons.business, size: 16), label: Text(currentAnime.studios!), backgroundColor: primaryColor.withOpacity(0.2), side: BorderSide(color: primaryColor.withOpacity(0.5))),
               ...genres.map((genre) => Chip(avatar: const Icon(Icons.category_outlined, size: 18), label: Text(genre), backgroundColor: primaryColor.withOpacity(0.2), side: BorderSide(color: primaryColor.withOpacity(0.5)))),
@@ -767,20 +822,24 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
             ],
           ),
           
-          if (currentAnime.parentId == null) ...[
+          // 🔥 قسم المواسم - يظهر دائماً (مترابط)
+          if (subAnimes.isNotEmpty || isOriginalAnime) ...[
             const SizedBox(height: 20),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('المواسم والأفلام المرتبطة', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                Text(sectionTitle, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
                 Row(
                   children: [
+                    // 🔥 زر تغيير العرض (محفوظ)
                     IconButton(
                       tooltip: _isSeasonGridView ? 'عرض قائمة' : 'عرض شبكة',
                       icon: Icon(_isSeasonGridView ? Icons.view_list : Icons.grid_view, color: Colors.white70, size: 20),
-                      onPressed: () => setState(() => _isSeasonGridView = !_isSeasonGridView),
+                      onPressed: _toggleSeasonView,
                     ),
-                    TextButton.icon(onPressed: _addSubAnime, icon: const Icon(Icons.add, size: 16), label: const Text('إضافة')),
+                    // زر الإضافة يظهر فقط للأنمي الأصلي
+                    if (isOriginalAnime)
+                      TextButton.icon(onPressed: _addSubAnime, icon: const Icon(Icons.add, size: 16), label: const Text('إضافة')),
                   ],
                 ),
               ],
@@ -794,7 +853,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: subAnimes.length,
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2, crossAxisSpacing: 10, mainAxisSpacing: 10, childAspectRatio: 0.8,
+                  crossAxisCount: 2, crossAxisSpacing: 10, mainAxisSpacing: 10, childAspectRatio: 0.75,
                 ),
                 itemBuilder: (context, index) => _buildSeasonGridCard(subAnimes[index]),
               )
@@ -802,10 +861,25 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
               ...subAnimes.map((sub) {
                 final hasLocalImage = sub.imagePath != null && sub.imagePath!.isNotEmpty && File(sub.imagePath!).existsSync();
                 final hasNetImage = sub.imageUrl != null && sub.imageUrl!.isNotEmpty;
+                final isOriginal = sub.parentId == null;
+                
+                // 🔥 بناء النص الفرعي مع السنة والتقييم
+                List<String> subtitleParts = [];
+                if (isOriginal) {
+                  subtitleParts.add('الأنمي الأصلي');
+                } else if (sub.partName != null) {
+                  subtitleParts.add(sub.partName!);
+                }
+                if (sub.releaseYear != null) subtitleParts.add('${sub.releaseYear}');
+                if (sub.episodes > 0) subtitleParts.add('${sub.episodes} حلقة');
+                if (subtitleParts.isEmpty) subtitleParts.add('غير محدد');
                 
                 return Container(
                   margin: const EdgeInsets.only(bottom: 8),
-                  decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),
+                  decoration: BoxDecoration(
+                    color: panel, borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: isOriginal ? primaryColor.withOpacity(0.5) : Colors.white12, width: isOriginal ? 2 : 1),
+                  ),
                   child: ListTile(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     leading: ClipRRect(
@@ -816,8 +890,25 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                               ? Image.network(sub.imageUrl!, width: 50, height: 50, fit: BoxFit.cover)
                               : Container(width: 50, height: 50, color: primaryColor.withOpacity(0.2), child: const Icon(Icons.playlist_play, color: Colors.white)),
                     ),
-                    title: Text(sub.title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                    subtitle: Text('${sub.partName} • ${sub.episodes > 0 ? '${sub.episodes} حلقة' : 'غير محدد'}', style: const TextStyle(color: Colors.white54)),
+                    title: Text(
+                      sub.title, 
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold, 
+                        color: isOriginal ? primaryColor : Colors.white,
+                      ),
+                    ),
+                    subtitle: Row(
+                      children: [
+                        Expanded(
+                          child: Text(subtitleParts.join(' • '), style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                        ),
+                        if (sub.globalRating != null) ...[
+                          const Icon(Icons.public, size: 12, color: Colors.cyan),
+                          const SizedBox(width: 3),
+                          Text(sub.globalRating!.toStringAsFixed(1), style: const TextStyle(color: Colors.cyan, fontSize: 11, fontWeight: FontWeight.bold)),
+                        ],
+                      ],
+                    ),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
