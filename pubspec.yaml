@@ -15,6 +15,7 @@ dependencies:
   archive: ^3.6.1
   file_picker: ^8.1.7
   http: ^1.2.0
+  google_fonts: ^6.2.1 # 🔥 هذه هي الحزمة الجديدة التي أضفناها
 
 dev_dependencies:
   flutter_test:
