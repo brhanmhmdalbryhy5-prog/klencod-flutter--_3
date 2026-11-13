@@ -1,6 +1,8 @@
+
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/services.dart';
 
 import '../main.dart';
@@ -79,7 +81,24 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
   }
 
   List<Anime> get favorites => animes.where((anime) => anime.favorite).toList();
-  List<Anime> get highRated => ratedAnimes.where((anime) => anime.rating >= 4).toList();
+  List<Anime> get highRated => ratedAnimes.where((anime) => anime.rating >= 8).toList(); // 🔥 تعديل إلى 8 لأن التقييم من 10
+
+  // 🔥 حسابات جديدة
+  int get totalEpisodesWatched {
+    return animes.where((a) => a.status == 'مكتمل').fold<int>(0, (sum, a) => sum + a.episodes);
+  }
+
+  double get completionRate {
+    if (animes.isEmpty) return 0;
+    final completed = animes.where((a) => a.status == 'مكتمل').length;
+    return (completed / animes.length) * 100;
+  }
+
+  Anime? get topRatedAnime {
+    if (ratedAnimes.isEmpty) return null;
+    ratedAnimes.sort((a, b) => b.rating.compareTo(a.rating));
+    return ratedAnimes.first;
+  }
 
   String normalize(String value) {
     return value
@@ -171,6 +190,25 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
     super.dispose();
   }
 
+  Widget _buildAnimeTitle(String title, {double fontSize = 16}) {
+    return Text(
+      title.trim().isEmpty ? 'أنمي بدون اسم' : title,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: GoogleFonts.cairo(
+        fontSize: fontSize,
+        fontWeight: FontWeight.w900,
+        color: const Color(0xFFFFD700), // لون ذهبي
+        shadows: [
+          Shadow(
+            color: primaryColorNotifier.value.withOpacity(0.8),
+            blurRadius: 10,
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final primaryColor = primaryColorNotifier.value;
@@ -231,10 +269,10 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
                   ),
                   const SizedBox(height: 22),
                   _buildAnimeSection(
-                    title: 'الأنميات الأعلى تقييمًا',
+                    title: 'الأنميات الأعلى تقييمًا (8+)',
                     icon: Icons.star,
                     items: highRated,
-                    emptyMessage: 'قيّم أنمياتك لعرض الأعلى تقييمًا.',
+                    emptyMessage: 'قيّم أنمياتك بـ 8 أو أكثر لعرضها هنا.',
                   ),
                   const SizedBox(height: 24),
                   Text(
@@ -336,17 +374,11 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
             )
           else
             ...libraryResults.take(5).map((anime) {
-              final entry = findCatalogAnime(anime.title);
-              final genres = anime.genre.trim().isNotEmpty
-                  ? anime.genre
-                  : entry == null
-                      ? 'لم يُعرف التصنيف في القاعدة'
-                      : catalogGenres(entry).join('، ');
               return ListTile(
                 contentPadding: EdgeInsets.zero,
-                title: Text(anime.title, style: const TextStyle(color: Colors.white)),
+                title: _buildAnimeTitle(anime.title, fontSize: 14),
                 subtitle: Text(
-                  genres.isEmpty ? 'لم يُحدّد النوع' : genres,
+                  anime.genre.isEmpty ? 'لم يُحدّد النوع' : anime.genre,
                   style: const TextStyle(color: Colors.white60),
                 ),
                 trailing: Text(
@@ -368,7 +400,7 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
               final genres = catalogGenres(item);
               return ListTile(
                 contentPadding: EdgeInsets.zero,
-                title: Text(title, style: const TextStyle(color: Colors.white)),
+                title: _buildAnimeTitle(title, fontSize: 14),
                 subtitle: Text(
                   genres.isEmpty ? 'لا توجد تصنيفات مسجلة' : genres.join('، '),
                   style: const TextStyle(color: Colors.white60),
@@ -395,19 +427,22 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
       physics: const NeverScrollableScrollPhysics(),
       mainAxisSpacing: 10,
       crossAxisSpacing: 10,
-      childAspectRatio: 1.7,
+      childAspectRatio: 1.5, // 🔥 زيادة الارتفاع قليلاً لاستيعاب النصوص
       children: [
         _statCard('إجمالي الأنميات', '${animes.length}', Icons.movie, const Color(0xFF247BA0)),
         _statCard('الأنميات المفضلة', '${favorites.length}', Icons.favorite, const Color(0xFFB34E68)),
-        _statCard('تقييمات مرتفعة', '${highRated.length}', Icons.star, const Color(0xFFB87928)),
+        _statCard('تقييمات مرتفعة (8+)', '${highRated.length}', Icons.star, const Color(0xFFB87928)),
         _statCard('متوسط تقييمك', ratedAnimes.isEmpty ? '—' : averageRating.toStringAsFixed(1), Icons.insights, const Color(0xFF27866F)),
+        // 🔥 إحصائيات جديدة
+        _statCard('الحلقات المشاهدة', '$totalEpisodesWatched', Icons.play_circle_fill, const Color(0xFF8B65C6)),
+        _statCard('نسبة الإكمال', '${completionRate.toStringAsFixed(0)}%', Icons.donut_large, const Color(0xFF00ACC1)),
       ],
     );
   }
 
   Widget _statCard(String title, String value, IconData icon, Color color) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: panel,
         borderRadius: BorderRadius.circular(18),
@@ -432,7 +467,7 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
               children: [
                 Text(
                   value,
-                  style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+                  style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 Text(
                   title,
@@ -453,8 +488,8 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
     } else if (ratedAnimes.isEmpty) {
       message = 'لديك ${animes.length} أنمي، لكنك لم تقيّم أيًّا منها بعد.';
     } else {
-      message = 'قيّمت ${ratedAnimes.length} أنمي بمتوسط ${averageRating.toStringAsFixed(1)} من 5. '
-          'لديك ${highRated.length} أنمي بتقييم 4 أو 5.';
+      message = 'قيّمت ${ratedAnimes.length} أنمي بمتوسط ${averageRating.toStringAsFixed(1)} من 10. '
+          'لديك ${highRated.length} أنمي بتقييم 8 أو أعلى.';
     }
 
     return _messageCard(
@@ -470,7 +505,7 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
                 ClipRRect(
                   borderRadius: BorderRadius.circular(10),
                   child: LinearProgressIndicator(
-                    value: averageRating / 5,
+                    value: averageRating / 10, // 🔥 تعديل القسمة إلى 10
                     minHeight: 9,
                     backgroundColor: Colors.white12,
                     valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFB87928)),
@@ -478,7 +513,7 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'مستوى تقييمك: ${((averageRating / 5) * 100).round()}%',
+                  'مستوى تقييمك: ${((averageRating / 10) * 100).round()}%', // 🔥 تعديل النسبة
                   style: const TextStyle(color: Colors.white54, fontSize: 12),
                 ),
               ],
@@ -589,17 +624,13 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
                     leading: CircleAvatar(
                       backgroundColor: primaryColor,
                       child: Text(
-                        anime.rating > 0 ? '${anime.rating}★' : '★',
-                        style: const TextStyle(color: Colors.white),
+                        anime.rating > 0 ? '${anime.rating}' : '★',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                       ),
                     ),
-                    title: Text(anime.title, style: const TextStyle(color: Colors.white)),
+                    title: _buildAnimeTitle(anime.title, fontSize: 15),
                     subtitle: Text(
-                      anime.genre.isNotEmpty
-                          ? anime.genre
-                          : (catalogGenres(findCatalogAnime(anime.title) ?? <String, dynamic>{}).join('، ').isEmpty
-                              ? 'لم يُحدّد النوع'
-                              : catalogGenres(findCatalogAnime(anime.title) ?? <String, dynamic>{}).join('، ')),
+                      anime.genre.isNotEmpty ? anime.genre : 'لم يُحدّد النوع',
                       style: const TextStyle(color: Colors.white54),
                     ),
                   ),
