@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart'; // 🔥 استيراد الخط
+import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -24,6 +24,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
   final AnimeApiService apiService = AnimeApiService();
   final TextEditingController searchController = TextEditingController();
   final ImagePicker imagePicker = ImagePicker();
+  
+  // 🔥 أدوات التحكم في التمرير
+  final ScrollController _scrollController = ScrollController();
+  bool _showBackToTop = false;
 
   static const String _sortKey = 'anime_library_sort';
   static const String _viewKey = 'anime_library_view';
@@ -39,10 +43,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   List<Anime> animes = [];
   String selectedStatus = 'الكل';
-  int selectedRatingFilter = 0; // 🔥 0 = الكل، 10 = تقييم 10، إلخ
+  int selectedRatingFilter = 0;
   String searchText = '';
   String sortMode = 'newest';
-  int viewMode = 0; // 0: قائمة، 1: شبكة 2، 2: شبكة 3
+  int viewMode = 0;
   bool loading = true;
 
   final List<Color> colors = const [
@@ -55,12 +59,26 @@ class _LibraryScreenState extends State<LibraryScreen> {
     super.initState();
     loadAnimes();
     _loadLibraryPreferences();
+    // 🔥 مراقبة التمرير
+    _scrollController.addListener(() {
+      if (_scrollController.offset > 300 && !_showBackToTop) {
+        setState(() => _showBackToTop = true);
+      } else if (_scrollController.offset <= 300 && _showBackToTop) {
+        setState(() => _showBackToTop = false);
+      }
+    });
   }
 
   @override
   void dispose() {
     searchController.dispose();
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  // 🔥 البحث الفوري حرف بحرف
+  void _onSearchChanged(String value) {
+    setState(() => searchText = value);
   }
 
   Future<void> _loadLibraryPreferences() async {
@@ -114,7 +132,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
         matchesStatus = anime.status == selectedStatus;
       }
 
-      // 🔥 فلترة التقييم
       bool matchesRating = true;
       if (selectedRatingFilter > 0) {
         matchesRating = anime.rating == selectedRatingFilter;
@@ -492,7 +509,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
-  // 🔥 تنسيق اسم الأنمي ليكون مميزاً (خط Cairo ولون ذهبي مع توهج)
   Widget _buildAnimeTitle(String title, {double fontSize = 16}) {
     return Text(
       title.trim().isEmpty ? 'أنمي بدون اسم' : title,
@@ -501,12 +517,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
       style: GoogleFonts.cairo(
         fontSize: fontSize,
         fontWeight: FontWeight.w900,
-        color: const Color(0xFFFFD700), // لون ذهبي
+        color: const Color(0xFFFFD700),
         shadows: [
-          Shadow(
-            color: primaryColorNotifier.value.withOpacity(0.8),
-            blurRadius: 10,
-          ),
+          Shadow(color: primaryColorNotifier.value.withOpacity(0.8), blurRadius: 10),
         ],
       ),
     );
@@ -694,14 +707,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
           ),
         ),
         const SizedBox(width: 10),
-        // 🔥 زر تغيير شكل العرض
         Container(
           decoration: BoxDecoration(color: const Color(0xFF1B1F28), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),
           child: IconButton(
             tooltip: 'تغيير العرض',
             onPressed: () {
               setState(() {
-                viewMode = (viewMode + 1) % 3; // 0 -> 1 -> 2 -> 0
+                viewMode = (viewMode + 1) % 3;
               });
               _saveLibraryPreferences();
             },
@@ -720,115 +732,148 @@ class _LibraryScreenState extends State<LibraryScreen> {
     final items = filteredAnimes;
     final primaryColor = primaryColorNotifier.value;
 
-    return RefreshIndicator(
-      onRefresh: loadAnimes,
-      child: ListView(
-        padding: const EdgeInsets.all(18),
-        children: [
-          const Text('مكتبة الأنمي', style: TextStyle(fontSize: 27, fontWeight: FontWeight.w900)),
-          const SizedBox(height: 6),
-          Text('كل أعمالك في مكان واحد • ${animes.length} أنمي', style: const TextStyle(color: Colors.white60)),
-          const SizedBox(height: 22),
-          TextField(
-            controller: searchController,
-            onChanged: (value) => setState(() => searchText = value),
-            decoration: InputDecoration(
-              hintText: 'ابحث عن أنمي أو تصنيف...',
-              prefixIcon: const Icon(Icons.search),
-              suffixIcon: searchText.isNotEmpty ? IconButton(onPressed: () { searchController.clear(); setState(() => searchText = ''); }, icon: const Icon(Icons.close)) : null,
-            ),
+    Widget buildContent() {
+      if (loading) {
+        return const Center(child: Padding(padding: EdgeInsets.all(30), child: CircularProgressIndicator()));
+      }
+      if (items.isEmpty) {
+        return Container(
+          margin: const EdgeInsets.only(top: 20),
+          padding: const EdgeInsets.all(30),
+          decoration: BoxDecoration(color: const Color(0xFF1B1F28), borderRadius: BorderRadius.circular(18)),
+          child: Column(
+            children: [
+              const Icon(Icons.video_library_outlined, size: 50, color: Colors.white38),
+              const SizedBox(height: 12),
+              Text(animes.isEmpty ? 'مكتبتك فارغة' : 'لا توجد نتائج مطابقة', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              const Text('أضف أنمياتك من الصفحة الرئيسية.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white54)),
+            ],
           ),
-          const SizedBox(height: 16),
-          // فلاتر الحالة
-          SizedBox(
-            height: 42,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: [
-                'الكل', 'مكتمل', 'أتابعه', 'مخطط له', 'متوقف', 'المفضلة', 
-                'جُلب تلقائياً', 
-                'بدون تصنيف'
-              ].map((status) {
-                final selected = selectedStatus == status;
-                return Padding(
-                  padding: const EdgeInsets.only(left: 8),
-                  child: ChoiceChip(
-                    label: Text(status),
-                    selected: selected,
-                    selectedColor: primaryColor,
-                    backgroundColor: const Color(0xFF1B1F28),
-                    side: BorderSide(color: selected ? primaryColor : Colors.white12),
-                    onSelected: (_) => setState(() => selectedStatus = status),
-                  ),
+        );
+      }
+      if (viewMode == 1) {
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: items.length,
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 10, mainAxisSpacing: 12, childAspectRatio: 0.58),
+          itemBuilder: (context, index) => _buildGridCard(items[index]),
+        );
+      }
+      if (viewMode == 2) {
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: items.length,
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, crossAxisSpacing: 8, mainAxisSpacing: 8, childAspectRatio: 0.6),
+          itemBuilder: (context, index) => _buildGridCard(items[index], isCompact: true),
+        );
+      }
+      return Column(children: items.map(_buildRowCard).toList());
+    }
+
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      floatingActionButton: _showBackToTop
+          ? FloatingActionButton(
+              mini: true,
+              backgroundColor: primaryColor,
+              onPressed: () {
+                _scrollController.animateTo(
+                  0,
+                  duration: const Duration(milliseconds: 500),
+                  curve: Curves.easeInOut,
                 );
-              }).toList(),
-            ),
-          ),
-          const SizedBox(height: 10),
-          // 🔥 فلاتر التقييم الجديدة
-          SizedBox(
-            height: 42,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: [
-                'كل التقييمات', '10', '9', '8', '7', '6', '5', '4', '3', '2', '1'
-              ].map((rate) {
-                final val = rate == 'كل التقييمات' ? 0 : int.parse(rate);
-                final selected = selectedRatingFilter == val;
-                return Padding(
-                  padding: const EdgeInsets.only(left: 8),
-                  child: ChoiceChip(
-                    label: Text(rate),
-                    selected: selected,
-                    selectedColor: const Color(0xFFFFC857),
-                    backgroundColor: const Color(0xFF1B1F28),
-                    side: BorderSide(color: selected ? const Color(0xFFFFC857) : Colors.white12),
-                    labelStyle: TextStyle(color: selected ? Colors.black : Colors.white),
-                    onSelected: (_) => setState(() => selectedRatingFilter = val),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-          const SizedBox(height: 14),
-          _buildToolbar(),
-          const SizedBox(height: 18),
-          if (loading)
-            const Center(child: Padding(padding: EdgeInsets.all(30), child: CircularProgressIndicator()))
-          else if (items.isEmpty)
-            Container(
-              padding: const EdgeInsets.all(30),
-              decoration: BoxDecoration(color: const Color(0xFF1B1F28), borderRadius: BorderRadius.circular(18)),
-              child: Column(
-                children: [
-                  const Icon(Icons.video_library_outlined, size: 50, color: Colors.white38),
-                  const SizedBox(height: 12),
-                  Text(animes.isEmpty ? 'مكتبتك فارغة' : 'لا توجد نتائج مطابقة', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 6),
-                  const Text('أضف أنمياتك من الصفحة الرئيسية.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white54)),
-                ],
+              },
+              child: const Icon(Icons.keyboard_arrow_up, color: Colors.white),
+            )
+          : null,
+      body: RefreshIndicator(
+        onRefresh: loadAnimes,
+        child: Scrollbar(
+          controller: _scrollController,
+          thumbVisibility: false,
+          trackVisibility: false,
+          thickness: 8,
+          radius: const Radius.circular(10),
+          interactive: true,
+          child: ListView(
+            controller: _scrollController,
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: const EdgeInsets.all(18),
+            children: [
+              const Text('مكتبة الأنمي', style: TextStyle(fontSize: 27, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 6),
+              Text('كل أعمالك في مكان واحد • ${animes.length} أنمي', style: const TextStyle(color: Colors.white60)),
+              const SizedBox(height: 22),
+              TextField(
+                controller: searchController,
+                onChanged: _onSearchChanged, // 🔥 البحث الفوري حرف بحرف
+                decoration: InputDecoration(
+                  hintText: 'ابحث عن أنمي أو تصنيف...',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: searchText.isNotEmpty ? IconButton(onPressed: () { searchController.clear(); setState(() => searchText = ''); }, icon: const Icon(Icons.close)) : null,
+                ),
               ),
-            )
-          else if (viewMode == 1) // شبكة 2 أعمدة
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: items.length,
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 10, mainAxisSpacing: 12, childAspectRatio: 0.58),
-              itemBuilder: (context, index) => _buildGridCard(items[index]),
-            )
-          else if (viewMode == 2) // 🔥 شبكة 3 أعمدة (مضغوطة)
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: items.length,
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, crossAxisSpacing: 8, mainAxisSpacing: 8, childAspectRatio: 0.6),
-              itemBuilder: (context, index) => _buildGridCard(items[index], isCompact: true),
-            )
-          else // قائمة
-            ...items.map(_buildRowCard),
-          const SizedBox(height: 20),
-        ],
+              const SizedBox(height: 16),
+              SizedBox(
+                height: 42,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: [
+                    'الكل', 'مكتمل', 'أتابعه', 'مخطط له', 'متوقف', 'المفضلة', 
+                    'جُلب تلقائياً', 
+                    'بدون تصنيف'
+                  ].map((status) {
+                    final selected = selectedStatus == status;
+                    return Padding(
+                      padding: const EdgeInsets.only(left: 8),
+                      child: ChoiceChip(
+                        label: Text(status),
+                        selected: selected,
+                        selectedColor: primaryColor,
+                        backgroundColor: const Color(0xFF1B1F28),
+                        side: BorderSide(color: selected ? primaryColor : Colors.white12),
+                        onSelected: (_) => setState(() => selectedStatus = status),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                height: 42,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: [
+                    'كل التقييمات', '10', '9', '8', '7', '6', '5', '4', '3', '2', '1'
+                  ].map((rate) {
+                    final val = rate == 'كل التقييمات' ? 0 : int.parse(rate);
+                    final selected = selectedRatingFilter == val;
+                    return Padding(
+                      padding: const EdgeInsets.only(left: 8),
+                      child: ChoiceChip(
+                        label: Text(rate),
+                        selected: selected,
+                        selectedColor: const Color(0xFFFFC857),
+                        backgroundColor: const Color(0xFF1B1F28),
+                        side: BorderSide(color: selected ? const Color(0xFFFFC857) : Colors.white12),
+                        labelStyle: TextStyle(color: selected ? Colors.black : Colors.white),
+                        onSelected: (_) => setState(() => selectedRatingFilter = val),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+              const SizedBox(height: 14),
+              _buildToolbar(),
+              const SizedBox(height: 18),
+              buildContent(),
+              const SizedBox(height: 80), // مساحة للـ FAB
+            ],
+          ),
+        ),
       ),
     );
   }
