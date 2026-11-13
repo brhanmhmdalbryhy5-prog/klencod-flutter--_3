@@ -291,7 +291,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     if (index != -1) { allAnimes[index] = widget.anime; await storage.saveAnimes(allAnimes); }
   }
 
-  // 🔥 دالة الجلب الرئيسية (تقوم بإنشاء المواسم تلقائياً)
   Future<void> _fetchDataManually() async {
     if (widget.anime.title.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الأنمي لا يملك اسماً، لا يمكن البحث عنه.')));
@@ -311,7 +310,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     final int? releaseYear = data['releaseYear'];
     final List<Map<String, dynamic>> subData = data['subAnimes'];
 
-    // تحديث بيانات الأنمي الأصلي
     setState(() {
       if (genres.isNotEmpty) widget.anime.genre = genres.join('، ');
       if (summary.isNotEmpty) widget.anime.summary = summary;
@@ -324,17 +322,15 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     final index = allAnimes.indexWhere((a) => a.id == widget.anime.id);
     if (index != -1) { allAnimes[index] = widget.anime; }
 
-    // 🔥 إنشاء قوالب المواسم والأفلام
     if (subData.isNotEmpty) {
       for (var sub in subData) {
-        // التأكد من عدم وجود الموسم مسبقاً
         final exists = allAnimes.any((a) => a.title == sub['title'] && a.parentId == widget.anime.id);
         if (!exists) {
           final newSub = Anime(
             id: DateTime.now().microsecondsSinceEpoch.toString() + Random().nextInt(999).toString(),
             title: sub['title'],
             partName: sub['type'],
-            parentId: widget.anime.id, // يربطه بالأنمي الأصلي
+            parentId: widget.anime.id,
             episodes: sub['episodes'] ?? 0,
           );
           allAnimes.add(newSub);
@@ -343,7 +339,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     }
     
     await storage.saveAnimes(allAnimes);
-    await _loadData(); // تحديث الواجهة لإظهار المواسم
+    await _loadData();
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم جلب البيانات وإنشاء قوالب المواسم بنجاح!')));
@@ -456,7 +452,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
             ],
           ),
           
-          // 🔥 قسم المواسم يظهر فقط للأنمي الأصلي
           if (anime.parentId == null) ...[
             const SizedBox(height: 20),
             Row(
@@ -470,22 +465,34 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
             if (subAnimes.isEmpty)
               const Text('لا توجد مواسم مضافة. اضغط على "جلب البيانات" للبحث عنها.', style: TextStyle(color: Colors.white54, fontSize: 12))
             else
-              ...subAnimes.map((sub) => Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),
-                child: ListTile(
-                  leading: CircleAvatar(backgroundColor: primaryColor.withOpacity(0.2), child: const Icon(Icons.playlist_play, color: Colors.white)),
-                  title: Text(sub.partName ?? 'موسم', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                  subtitle: Text(sub.episodes > 0 ? '${sub.episodes} حلقة' : 'غير محدد', style: const TextStyle(color: Colors.white54)),
-                  trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white38),
-                  onTap: () { Navigator.push(context, MaterialPageRoute(builder: (_) => AnimeDetailsScreen(anime: sub))); },
-                ),
-              )),
+              // 🔥 التعديل هنا: عرض صورة الموسم إذا وجدت
+              ...subAnimes.map((sub) {
+                final hasImage = sub.imagePath != null && sub.imagePath!.isNotEmpty && File(sub.imagePath!).existsSync();
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    leading: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: hasImage
+                          ? Image.file(File(sub.imagePath!), width: 50, height: 50, fit: BoxFit.cover)
+                          : Container(width: 50, height: 50, color: primaryColor.withOpacity(0.2), child: const Icon(Icons.playlist_play, color: Colors.white)),
+                    ),
+                    title: Text(sub.partName ?? 'موسم', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                    subtitle: Text(sub.episodes > 0 ? '${sub.episodes} حلقة' : 'غير محدد', style: const TextStyle(color: Colors.white54)),
+                    trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white38),
+                    onTap: () async {
+                      await Navigator.push(context, MaterialPageRoute(builder: (_) => AnimeDetailsScreen(anime: sub)));
+                      await _loadData(); // تحديث القائمة عند العودة (لتحديث الصورة إذا تمت إضافتها)
+                    },
+                  ),
+                );
+              }),
           ],
 
           const SizedBox(height: 22),
           
-          // 🔥 شريط تقدم المشاهدة يظهر للأنمي الأصلي وللموسم أيضاً
           if (anime.episodes > 0) ...[
             Container(
               padding: const EdgeInsets.all(15), margin: const EdgeInsets.only(bottom: 14),
