@@ -6,18 +6,21 @@ import 'storage_service.dart';
 class AnimeApiService {
   final StorageService _storage = StorageService();
 
+  // 🔥 جلب البيانات مع العلاقات (المواسم والأفلام)
   Future<Map<String, dynamic>> fetchAnimeData(String animeTitle) async {
-    if (animeTitle.trim().isEmpty) return {'genres': <String>[], 'summary': '', 'episodes': 0, 'globalRating': null, 'releaseYear': null, 'subAnimes': []};
+    if (animeTitle.trim().isEmpty) {
+      return {'genres': <String>[], 'summary': '', 'episodes': 0, 'globalRating': null, 'releaseYear': null, 'subAnimes': []};
+    }
 
     for (int attempt = 1; attempt <= 3; attempt++) {
       try {
         const String url = 'https://graphql.anilist.co';
 
-        // 🔥 إضافة relations لجلب المواسم والأفلام
         final String query = '''
           query (\$search: String) {
             Page(perPage: 1) {
               media(search: \$search, type: ANIME) {
+                id
                 genres
                 description
                 episodes
@@ -42,7 +45,10 @@ class AnimeApiService {
         final response = await http.post(
           Uri.parse(url),
           headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'query': query, 'variables': {'search': animeTitle.trim()}}),
+          body: jsonEncode({
+            'query': query,
+            'variables': {'search': animeTitle.trim()},
+          }),
         ).timeout(const Duration(seconds: 15));
 
         if (response.statusCode == 200) {
@@ -80,14 +86,18 @@ class AnimeApiService {
             if (relations != null) {
               for (var edge in relations) {
                 final relationType = edge['relationType'];
-                // نأخذ المواسم والأفلام فقط
-                if (relationType == 'SEQUEL' || relationType == 'PREQUEL' || relationType == 'SIDE_STORY') {
-                  final node = edge['node'];
-                  final format = node['format'];
-                  if (format == 'TV' || format == 'MOVIE' || format == 'OVA' || format == 'SPECIAL') {
-                    final title = node['title']['romaji'] ?? node['title']['english'] ?? 'غير معروف';
+                final node = edge['node'];
+                final format = node['format'];
+                
+                // نأخذ المواسم (TV) والأفلام (MOVIE) و OVA و SPECIAL
+                if (format == 'TV' || format == 'MOVIE' || format == 'OVA' || format == 'SPECIAL') {
+                  final titleRomaji = node['title']['romaji'] ?? '';
+                  final titleEnglish = node['title']['english'] ?? '';
+                  final displayTitle = titleRomaji.isNotEmpty ? titleRomaji : titleEnglish;
+                  
+                  if (displayTitle.isNotEmpty) {
                     subAnimes.add({
-                      'title': title,
+                      'title': displayTitle,
                       'type': format == 'MOVIE' ? 'فيلم' : (relationType == 'PREQUEL' ? 'موسم سابق' : 'موسم لاحق'),
                       'episodes': node['episodes'] ?? 0,
                     });
@@ -102,7 +112,7 @@ class AnimeApiService {
               'episodes': episodes,
               'globalRating': globalRating,
               'releaseYear': releaseYear,
-              'subAnimes': subAnimes, // 🔥 إرجاع قائمة المواسم
+              'subAnimes': subAnimes,
             };
           }
           return {'genres': <String>[], 'summary': '', 'episodes': 0, 'globalRating': null, 'releaseYear': null, 'subAnimes': []};
