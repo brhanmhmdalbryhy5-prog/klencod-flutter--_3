@@ -1,8 +1,9 @@
 import 'dart:io';
+import 'dart:math'; // 🔥 هذا السطر كان ناقصاً وسبب الخطأ
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-import 'package:chewie/chewie.dart'; // 🔥 لتشغيل الفيديو
+import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -11,7 +12,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:video_player/video_player.dart'; // 🔥
+import 'package:video_player/video_player.dart';
 
 import '../main.dart';
 import '../models/anime.dart';
@@ -39,7 +40,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
   bool _loading = true;
   bool _busy = false;
   
-  // 🔥 متغيرات الفيديو والمواسم
   List<Anime> subAnimes = [];
   VideoPlayerController? _videoController;
   ChewieController? _chewieController;
@@ -56,7 +56,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     final prefs = await SharedPreferences.getInstance();
     final path = prefs.getString(_preferenceKey);
     
-    // جلب المواسم من التخزين
     final allAnimes = await storage.loadAnimes();
     final children = allAnimes.where((a) => a.parentId == widget.anime.id).toList();
 
@@ -92,7 +91,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
       });
   }
 
-  // 🔥 اختيار فيديو من المعرض
   Future<void> _pickVideo() async {
     HapticFeedback.lightImpact();
     try {
@@ -118,7 +116,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     }
   }
 
-  // 🔥 تكبير الصورة
   void _showImageZoom() {
     HapticFeedback.lightImpact();
     if (widget.anime.imagePath == null || !File(widget.anime.imagePath!).existsSync()) return;
@@ -150,7 +147,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     if (index != -1) { allAnimes[index] = widget.anime; await storage.saveAnimes(allAnimes); }
   }
 
-  // 🔥 جلب البيانات (مع إنشاء المواسم تلقائياً)
   Future<void> _fetchDataManually() async {
     if (widget.anime.title.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الأنمي لا يملك اسماً، لا يمكن البحث عنه.')));
@@ -182,7 +178,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     final index = allAnimes.indexWhere((a) => a.id == widget.anime.id);
     if (index != -1) { allAnimes[index] = widget.anime; await storage.saveAnimes(allAnimes); }
 
-    // 🔥 إنشاء المواسم في الخلفية
     if (subData.isNotEmpty) {
       for (var sub in subData) {
         final exists = allAnimes.any((a) => a.title == sub['title'] && a.parentId == widget.anime.id);
@@ -198,14 +193,13 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
         }
       }
       await storage.saveAnimes(allAnimes);
-      await _loadData(); // تحديث القائمة
+      await _loadData();
     }
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم جلب البيانات بنجاح!')));
   }
 
-  // إضافة موسم يدوياً
   void _addSubAnime() {
     final controller = TextEditingController();
     showDialog(
@@ -273,7 +267,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // 🔥 صورة قابلة للتكبير
           GestureDetector(
             onTap: _showImageZoom,
             child: Stack(
@@ -289,8 +282,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                   ),
                 ),
                 Container(
-                  margin: const EdgeInsets.all(10),
-                  padding: const EdgeInsets.all(6),
+                  margin: const EdgeInsets.all(10), padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(10)),
                   child: const Icon(Icons.zoom_in, color: Colors.white, size: 24),
                 ),
@@ -310,7 +302,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
             ],
           ),
           
-          // 🔥 قسم المواسم والأفلام
           if (subAnimes.isNotEmpty || anime.parentId == null) ...[
             const SizedBox(height: 20),
             Row(
@@ -332,16 +323,13 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                   title: Text(sub.partName ?? 'موسم', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
                   subtitle: Text(sub.episodes > 0 ? '${sub.episodes} حلقة' : 'غير محدد', style: const TextStyle(color: Colors.white54)),
                   trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white38),
-                  onTap: () {
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => AnimeDetailsScreen(anime: sub)));
-                  },
+                  onTap: () { Navigator.push(context, MaterialPageRoute(builder: (_) => AnimeDetailsScreen(anime: sub))); },
                 ),
               )),
           ],
 
           const SizedBox(height: 22),
           
-          // 🔥 قسم تقدم المشاهدة
           if (anime.episodes > 0 && anime.parentId == null) ...[
             Container(
               padding: const EdgeInsets.all(15), margin: const EdgeInsets.only(bottom: 14),
@@ -365,11 +353,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
             ),
           ],
 
-          // 🔥 قسم الفيديو (التذكارات)
-          const SizedBox(height: 10),
           Container(
-            padding: const EdgeInsets.all(15),
-            margin: const EdgeInsets.only(bottom: 14),
+            padding: const EdgeInsets.all(15), margin: const EdgeInsets.only(bottom: 14),
             decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white10)),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
