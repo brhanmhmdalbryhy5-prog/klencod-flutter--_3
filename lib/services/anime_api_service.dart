@@ -26,6 +26,7 @@ class AnimeApiService {
                 episodes
                 averageScore
                 startDate { year }
+                coverImage { large }
                 relations {
                   edges {
                     relationType
@@ -75,6 +76,7 @@ class AnimeApiService {
             final int? averageScore = media['averageScore'] as int?;
             final double? globalRating = averageScore != null ? averageScore / 10.0 : null;
             final int? releaseYear = media['startDate']?['year'] as int?;
+            final String? imageUrl = media['coverImage']?['large'] as String?;
 
             String summary = '';
             if (!hasAdultContent) {
@@ -93,7 +95,8 @@ class AnimeApiService {
                 final node = edge['node'];
                 final format = node['format'];
                 
-                if (format == 'TV' || format == 'MOVIE' || format == 'OVA' || format == 'SPECIAL') {
+                // نأخذ كل شيء (TV, MOVIE, OVA, SPECIAL, TV_SHORT)
+                if (format == 'TV' || format == 'MOVIE' || format == 'OVA' || format == 'SPECIAL' || format == 'TV_SHORT') {
                   final titleRomaji = node['title']['romaji'] ?? '';
                   final titleEnglish = node['title']['english'] ?? '';
                   final displayTitle = titleRomaji.isNotEmpty ? titleRomaji : titleEnglish;
@@ -113,15 +116,28 @@ class AnimeApiService {
 
                     final subScore = node['averageScore'] as int?;
                     
+                    String partName = '';
+                    if (format == 'MOVIE') {
+                      partName = 'فيلم';
+                    } else if (relationType == 'PREQUEL') {
+                      partName = 'موسم سابق';
+                    } else if (relationType == 'SEQUEL') {
+                      partName = 'موسم لاحق';
+                    } else if (relationType == 'SIDE_STORY') {
+                      partName = 'قصة جانبية';
+                    } else {
+                      partName = 'جزء إضافي';
+                    }
+                    
                     subAnimes.add({
                       'title': displayTitle,
-                      'partName': format == 'MOVIE' ? 'فيلم' : (relationType == 'PREQUEL' ? 'موسم سابق' : 'موسم لاحق'),
+                      'partName': partName,
                       'episodes': node['episodes'] ?? 0,
                       'summary': subSummary,
                       'genre': subGenres.join('، '),
                       'globalRating': subScore != null ? subScore / 10.0 : null,
                       'releaseYear': node['startDate']?['year'] as int?,
-                      'imageUrl': node['coverImage']?['large'] as String?, // 🔥 الصورة للمواسم فقط
+                      'imageUrl': node['coverImage']?['large'] as String?,
                     });
                   }
                 }
@@ -134,7 +150,7 @@ class AnimeApiService {
               'episodes': episodes,
               'globalRating': globalRating,
               'releaseYear': releaseYear,
-              'imageUrl': null, // 🔥 الأنمي الأصلي لا يجلب صورة
+              'imageUrl': imageUrl, // سيعود للأنمي الأصلي ولكننا سنتجاهله
               'subAnimes': subAnimes,
             };
           }
