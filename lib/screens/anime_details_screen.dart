@@ -118,17 +118,25 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
 
   void _showImageZoom() {
     HapticFeedback.lightImpact();
-    if (widget.anime.imagePath == null || !File(widget.anime.imagePath!).existsSync()) return;
+    if (widget.anime.imagePath == null || !File(widget.anime.imagePath!).existsSync()) {
+      if (widget.anime.imageUrl != null) {
+         showDialog(
+          context: context,
+          builder: (_) => Dialog(
+            backgroundColor: Colors.transparent, insetPadding: EdgeInsets.zero,
+            child: InteractiveViewer(panEnabled: true, minScale: 1.0, maxScale: 5.0, child: Image.network(widget.anime.imageUrl!, fit: BoxFit.contain)),
+          ),
+        );
+      }
+      return;
+    }
     
     showDialog(
       context: context,
       builder: (_) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: EdgeInsets.zero,
+        backgroundColor: Colors.transparent, insetPadding: EdgeInsets.zero,
         child: InteractiveViewer(
-          panEnabled: true,
-          minScale: 1.0,
-          maxScale: 5.0,
+          panEnabled: true, minScale: 1.0, maxScale: 5.0,
           child: Image.file(File(widget.anime.imagePath!), fit: BoxFit.contain),
         ),
       ),
@@ -173,7 +181,9 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                         decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(12), border: Border.all(color: primaryColorNotifier.value)),
                         child: newImagePath != null && File(newImagePath!).existsSync()
                             ? ClipRRect(borderRadius: BorderRadius.circular(11), child: Image.file(File(newImagePath!), fit: BoxFit.cover))
-                            : const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.add_photo_alternate, size: 30), Text('إضافة صورة')])),
+                            : widget.anime.imageUrl != null 
+                                ? ClipRRect(borderRadius: BorderRadius.circular(11), child: Image.network(widget.anime.imageUrl!, fit: BoxFit.cover))
+                                : const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.add_photo_alternate, size: 30), Text('إضافة صورة محلية')])),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -244,6 +254,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     final anime = widget.anime;
     final primaryColor = primaryColorNotifier.value;
     final imagePath = anime.imagePath;
+    final imageUrl = anime.imageUrl;
     final fontName = fontNotifier.value;
     final titleColor = titleColorNotifier.value;
 
@@ -266,7 +277,10 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
           child: Stack(
             children: [
               if (imagePath != null && File(imagePath).existsSync())
-                Positioned.fill(child: Image.file(File(imagePath), fit: BoxFit.cover)),
+                Positioned.fill(child: Image.file(File(imagePath), fit: BoxFit.cover))
+              else if (imageUrl != null && imageUrl.isNotEmpty)
+                Positioned.fill(child: Image.network(imageUrl, fit: BoxFit.cover)),
+                
               Positioned.fill(
                 child: BackdropFilter(
                   filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
@@ -284,7 +298,9 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                         borderRadius: BorderRadius.circular(16),
                         child: imagePath != null && File(imagePath).existsSync()
                             ? Image.file(File(imagePath), height: 220, fit: BoxFit.cover)
-                            : Container(height: 220, width: 150, color: Colors.black26, child: const Icon(Icons.movie, size: 60, color: Colors.white24)),
+                            : imageUrl != null && imageUrl.isNotEmpty
+                                ? Image.network(imageUrl, height: 220, fit: BoxFit.cover)
+                                : Container(height: 220, width: 150, color: Colors.black26, child: const Icon(Icons.movie, size: 60, color: Colors.white24)),
                       ),
                     ),
                     const SizedBox(height: 20),
@@ -379,7 +395,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     if (index != -1) { allAnimes[index] = widget.anime; await storage.saveAnimes(allAnimes); }
   }
 
-  // 🔥 تم تعديل هذه الدالة لاستقبال تفاصيل المواسم كاملة
   Future<void> _fetchDataManually() async {
     if (widget.anime.title.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الأنمي لا يملك اسماً، لا يمكن البحث عنه.')));
@@ -397,6 +412,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     final int episodes = data['episodes'];
     final double? globalRating = data['globalRating'];
     final int? releaseYear = data['releaseYear'];
+    final String? imageUrl = data['imageUrl'];
     final List<Map<String, dynamic>> subData = data['subAnimes'];
 
     setState(() {
@@ -405,6 +421,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
       if (episodes > 0) widget.anime.episodes = episodes;
       if (globalRating != null) widget.anime.globalRating = globalRating;
       if (releaseYear != null) widget.anime.releaseYear = releaseYear;
+      if (imageUrl != null) widget.anime.imageUrl = imageUrl;
     });
 
     final allAnimes = await storage.loadAnimes();
@@ -421,11 +438,11 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
             partName: sub['partName'],
             parentId: widget.anime.id,
             episodes: sub['episodes'] ?? 0,
-            // 🔥 إضافة البيانات الكاملة التي تم جلبها
             summary: sub['summary'] ?? '',
             genre: sub['genre'] ?? '',
             globalRating: sub['globalRating'],
             releaseYear: sub['releaseYear'],
+            imageUrl: sub['imageUrl'], // 🔥 حفظ صورة الموسم
           );
           allAnimes.add(newSub);
         }
@@ -436,7 +453,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     await _loadData();
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم جلب بيانات الأنمي والمواسم بالكامل!')));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم جلب البيانات والصور بنجاح!')));
   }
 
   void _addSubAnime() {
@@ -488,6 +505,28 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     );
   }
 
+  // 🔥 دالة عرض الغلاف (محلي أولاً، ثم إنترنت)
+  Widget _cover() {
+    final path = widget.anime.imagePath;
+    final url = widget.anime.imageUrl;
+
+    if (path != null && path.isNotEmpty && File(path).existsSync()) {
+      return Container(
+        color: Colors.black26, constraints: const BoxConstraints(maxHeight: 350),
+        child: Hero(tag: 'anime_image_${widget.anime.id}', child: Image.file(File(path), width: double.infinity, fit: BoxFit.contain)),
+      );
+    } else if (url != null && url.isNotEmpty) {
+      return Container(
+        color: Colors.black26, constraints: const BoxConstraints(maxHeight: 350),
+        child: Hero(
+          tag: 'anime_image_${widget.anime.id}', 
+          child: Image.network(url, width: double.infinity, fit: BoxFit.contain, errorBuilder: (_, __, ___) => Container(height: 180, color: panel, child: const Icon(Icons.movie_creation_outlined, size: 65, color: Colors.white30))),
+        ),
+      );
+    }
+    return Container(height: 180, width: double.infinity, color: panel, child: const Icon(Icons.movie_creation_outlined, size: 65, color: Colors.white30));
+  }
+
   @override
   Widget build(BuildContext context) {
     final anime = widget.anime;
@@ -517,15 +556,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
             child: Stack(
               alignment: Alignment.bottomRight,
               children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(18),
-                  child: Container(
-                    color: Colors.black26, constraints: const BoxConstraints(maxHeight: 350),
-                    child: anime.imagePath != null && File(anime.imagePath!).existsSync()
-                        ? Hero(tag: 'anime_image_${anime.id}', child: Image.file(File(anime.imagePath!), width: double.infinity, fit: BoxFit.contain))
-                        : Container(height: 180, color: panel, child: const Icon(Icons.movie_creation_outlined, size: 65, color: Colors.white30)),
-                  ),
-                ),
+                ClipRRect(borderRadius: BorderRadius.circular(18), child: _cover()),
                 Container(
                   margin: const EdgeInsets.all(10), padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(10)),
@@ -563,7 +594,9 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
               const Text('لا توجد مواسم مضافة. اضغط على "جلب البيانات" للبحث عنها.', style: TextStyle(color: Colors.white54, fontSize: 12))
             else
               ...subAnimes.map((sub) {
-                final hasImage = sub.imagePath != null && sub.imagePath!.isNotEmpty && File(sub.imagePath!).existsSync();
+                final hasLocalImage = sub.imagePath != null && sub.imagePath!.isNotEmpty && File(sub.imagePath!).existsSync();
+                final hasNetImage = sub.imageUrl != null && sub.imageUrl!.isNotEmpty;
+                
                 return Container(
                   margin: const EdgeInsets.only(bottom: 8),
                   decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),
@@ -571,9 +604,11 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                     contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     leading: ClipRRect(
                       borderRadius: BorderRadius.circular(8),
-                      child: hasImage
+                      child: hasLocalImage
                           ? Image.file(File(sub.imagePath!), width: 50, height: 50, fit: BoxFit.cover)
-                          : Container(width: 50, height: 50, color: primaryColor.withOpacity(0.2), child: const Icon(Icons.playlist_play, color: Colors.white)),
+                          : hasNetImage
+                              ? Image.network(sub.imageUrl!, width: 50, height: 50, fit: BoxFit.cover)
+                              : Container(width: 50, height: 50, color: primaryColor.withOpacity(0.2), child: const Icon(Icons.playlist_play, color: Colors.white)),
                     ),
                     title: Text(sub.partName ?? 'موسم', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
                     subtitle: Text(sub.episodes > 0 ? '${sub.episodes} حلقة' : 'غير محدد', style: const TextStyle(color: Colors.white54)),
