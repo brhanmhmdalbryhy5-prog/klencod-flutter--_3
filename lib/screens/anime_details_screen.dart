@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart'; // 🔥
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
@@ -52,6 +53,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
   }
 
   Future<void> _incrementWatchedEpisode() async {
+    HapticFeedback.lightImpact(); // 🔥
     if (widget.anime.episodes > 0 && widget.anime.watchedEpisodes >= widget.anime.episodes) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لقد أكملت جميع الحلقات!')));
       return;
@@ -148,6 +150,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
   }
 
   Future<void> _shareCardImage() async {
+    HapticFeedback.mediumImpact(); // 🔥
     try {
       RenderRepaintBoundary boundary = _cardKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
       ui.Image image = await boundary.toImage(pixelRatio: 3.0);
@@ -162,7 +165,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     }
   }
 
-  // 🔥 تصميم البطاقة الأنيقة الجديدة (Glassmorphism)
   Widget _buildShareCard() {
     final anime = widget.anime;
     final primaryColor = primaryColorNotifier.value;
@@ -183,40 +185,26 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
       key: _cardKey,
       child: Container(
         width: 340,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(24),
-          color: const Color(0xFF1B1F28),
-        ),
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(24), color: const Color(0xFF1B1F28)),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(24),
           child: Stack(
             children: [
-              // 1. الخلفية الضبابية (Blur)
               if (imagePath != null && File(imagePath).existsSync())
-                Positioned.fill(
-                  child: Image.file(File(imagePath), fit: BoxFit.cover),
-                ),
+                Positioned.fill(child: Image.file(File(imagePath), fit: BoxFit.cover)),
               Positioned.fill(
                 child: BackdropFilter(
                   filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                  child: Container(
-                    color: Colors.black.withOpacity(0.7), // تعتيم الخلفية
-                  ),
+                  child: Container(color: Colors.black.withOpacity(0.7)),
                 ),
               ),
-
-              // 2. المحتوى
               Padding(
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // صورة الأنمي (في المنتصف)
                     Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 15, spreadRadius: 2)],
-                      ),
+                      decoration: BoxDecoration(borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 15, spreadRadius: 2)]),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(16),
                         child: imagePath != null && File(imagePath).existsSync()
@@ -225,69 +213,33 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                       ),
                     ),
                     const SizedBox(height: 20),
-
-                    // الاسم
-                    Text(
-                      anime.title,
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: titleStyle.copyWith(shadows: [Shadow(color: Colors.black87, blurRadius: 10)]),
-                    ),
+                    Text(anime.title, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: titleStyle.copyWith(shadows: [Shadow(color: Colors.black87, blurRadius: 10)])),
                     const SizedBox(height: 12),
-
-                    // التصنيفات
                     if (genres.isNotEmpty)
                       Wrap(
-                        alignment: WrapAlignment.center,
-                        spacing: 6,
-                        runSpacing: 6,
+                        alignment: WrapAlignment.center, spacing: 6, runSpacing: 6,
                         children: genres.take(3).map((g) => Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: primaryColor.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: primaryColor.withOpacity(0.5)),
-                          ),
+                          decoration: BoxDecoration(color: primaryColor.withOpacity(0.2), borderRadius: BorderRadius.circular(20), border: Border.all(color: primaryColor.withOpacity(0.5))),
                           child: Text(g, style: const TextStyle(color: Colors.white, fontSize: 10)),
                         )).toList(),
                       ),
                     const SizedBox(height: 20),
-
-                    // الإحصائيات (تقييمك، عالمي، السنة)
                     Container(
                       padding: const EdgeInsets.symmetric(vertical: 12),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.05),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.white12),
-                      ),
+                      decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white12)),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
-                          if (anime.rating > 0)
-                            _cardStat(Icons.star, '${anime.rating.toStringAsFixed(1)}', 'تقييمك', const Color(0xFFFFC857)),
-                          if (anime.globalRating != null)
-                            _cardStat(Icons.public, '${anime.globalRating!.toStringAsFixed(1)}', 'عالمي', Colors.cyan),
-                          if (anime.releaseYear != null)
-                            _cardStat(Icons.calendar_today, '${anime.releaseYear}', 'السنة', Colors.white70),
-                          if (anime.episodes > 0)
-                            _cardStat(Icons.play_circle_outline, '${anime.episodes}', 'حلقة', primaryColor),
+                          if (anime.rating > 0) _cardStat(Icons.star, '${anime.rating.toStringAsFixed(1)}', 'تقييمك', const Color(0xFFFFC857)),
+                          if (anime.globalRating != null) _cardStat(Icons.public, '${anime.globalRating!.toStringAsFixed(1)}', 'عالمي', Colors.cyan),
+                          if (anime.releaseYear != null) _cardStat(Icons.calendar_today, '${anime.releaseYear}', 'السنة', Colors.white70),
+                          if (anime.episodes > 0) _cardStat(Icons.play_circle_outline, '${anime.episodes}', 'حلقة', primaryColor),
                         ],
                       ),
                     ),
-                    
                     const SizedBox(height: 16),
-                    
-                    // توقيع التطبيق
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.shield, size: 16, color: primaryColor),
-                        const SizedBox(width: 6),
-                        Text('ذاكرة الأوتاكو', style: TextStyle(color: primaryColor, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-                      ],
-                    ),
+                    Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.shield, size: 16, color: primaryColor), const SizedBox(width: 6), Text('ذاكرة الأوتاكو', style: TextStyle(color: primaryColor, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.2))]),
                   ],
                 ),
               ),
@@ -310,12 +262,12 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
   }
 
   void _showShareDialog() {
+    HapticFeedback.lightImpact(); // 🔥
     showDialog(
       context: context,
       builder: (dialogContext) {
         return Dialog(
-          backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.all(20),
+          backgroundColor: Colors.transparent, insetPadding: const EdgeInsets.all(20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -327,8 +279,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                   ElevatedButton.icon(
                     onPressed: () { Navigator.pop(dialogContext); _shareCardImage(); },
                     style: ElevatedButton.styleFrom(backgroundColor: primaryColorNotifier.value, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                    icon: const Icon(Icons.share),
-                    label: const Text('مشاركة البطاقة', style: TextStyle(fontWeight: FontWeight.bold)),
+                    icon: const Icon(Icons.share), label: const Text('مشاركة البطاقة', style: TextStyle(fontWeight: FontWeight.bold)),
                   ),
                   const SizedBox(width: 12),
                   IconButton(onPressed: () => Navigator.pop(dialogContext), style: IconButton.styleFrom(backgroundColor: Colors.white12), icon: const Icon(Icons.close, color: Colors.white)),
@@ -345,9 +296,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     if (value.trim().isEmpty) return const SizedBox.shrink();
     final primaryColor = primaryColorNotifier.value;
     return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(15),
+      width: double.infinity, margin: const EdgeInsets.only(bottom: 12), padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(15), border: Border.all(color: primaryColor.withOpacity(0.3), width: 1), boxShadow: [BoxShadow(color: primaryColor.withOpacity(0.2), blurRadius: 15, spreadRadius: 2)]),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -360,13 +309,16 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     );
   }
 
+  // 🔥 إضافة Hero للغلاف
   Widget _cover() {
     final path = widget.anime.imagePath;
     if (path != null && path.isNotEmpty && File(path).existsSync()) {
       return Container(
-        color: Colors.black26,
-        constraints: const BoxConstraints(maxHeight: 350),
-        child: Image.file(File(path), width: double.infinity, fit: BoxFit.contain, errorBuilder: (_, __, ___) => _coverPlaceholder()),
+        color: Colors.black26, constraints: const BoxConstraints(maxHeight: 350),
+        child: Hero(
+          tag: 'anime_image_${widget.anime.id}', // يجب أن يطابق الـ tag في المكتبة
+          child: Image.file(File(path), width: double.infinity, fit: BoxFit.contain, errorBuilder: (_, __, ___) => _coverPlaceholder()),
+        ),
       );
     }
     return _coverPlaceholder();
@@ -411,12 +363,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     return Scaffold(
       backgroundColor: background,
       appBar: AppBar(
-        backgroundColor: background,
-        title: const Text('تفاصيل الأنمي'),
-        centerTitle: true,
-        actions: [
-          IconButton(tooltip: 'صنع بطاقة للمشاركة', icon: const Icon(Icons.dashboard_customize_outlined, color: Colors.cyan), onPressed: _showShareDialog),
-        ],
+        backgroundColor: background, title: const Text('تفاصيل الأنمي'), centerTitle: true,
+        actions: [IconButton(tooltip: 'صنع بطاقة للمشاركة', icon: const Icon(Icons.dashboard_customize_outlined, color: Colors.cyan), onPressed: _showShareDialog)],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -426,10 +374,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
           Text(title, textAlign: TextAlign.center, style: titleStyle.copyWith(shadows: [Shadow(color: titleColor.withOpacity(0.6), blurRadius: 10)])),
           const SizedBox(height: 14),
           Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 8,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
+            alignment: WrapAlignment.center, spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               if (anime.status.isNotEmpty) Chip(avatar: const Icon(Icons.bookmark_outline, size: 18), label: Text(anime.status)),
               if (anime.releaseYear != null) Chip(avatar: const Icon(Icons.calendar_today, size: 16), label: Text('${anime.releaseYear}'), backgroundColor: primaryColor.withOpacity(0.2), side: BorderSide(color: primaryColor.withOpacity(0.5))),
@@ -450,8 +395,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
           
           if (anime.episodes > 0) ...[
             Container(
-              padding: const EdgeInsets.all(15),
-              margin: const EdgeInsets.only(bottom: 14),
+              padding: const EdgeInsets.all(15), margin: const EdgeInsets.only(bottom: 14),
               decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(16), border: Border.all(color: primaryColor.withOpacity(0.4))),
               child: Column(
                 children: [
@@ -464,8 +408,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                     child: OutlinedButton.icon(
                       onPressed: _incrementWatchedEpisode,
                       style: OutlinedButton.styleFrom(foregroundColor: primaryColor, side: BorderSide(color: primaryColor), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                      icon: const Icon(Icons.add),
-                      label: const Text('شاهدت حلقة جديدة (+1)'),
+                      icon: const Icon(Icons.add), label: const Text('شاهدت حلقة جديدة (+1)'),
                     ),
                   ),
                 ],
@@ -476,8 +419,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
           _section('ملخص القصة', anime.summary, Icons.menu_book_outlined),
           _section('ذكرياتك مع الأنمي', anime.memory, Icons.auto_awesome_outlined),
           Container(
-            padding: const EdgeInsets.all(15),
-            margin: const EdgeInsets.only(bottom: 14),
+            padding: const EdgeInsets.all(15), margin: const EdgeInsets.only(bottom: 14),
             decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white10)),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
