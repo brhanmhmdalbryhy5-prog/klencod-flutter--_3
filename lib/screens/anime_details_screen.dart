@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'dart:math'; // 🔥 هذا السطر كان ناقصاً وسبب الخطأ
+import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -34,6 +34,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
   final ImagePicker _picker = ImagePicker();
   final AnimeApiService apiService = AnimeApiService();
   final StorageService storage = StorageService();
+  
+  // 🔥 مفتاح البطاقة
   final GlobalKey _cardKey = GlobalKey();
 
   String? _characterImagePath;
@@ -132,6 +134,151 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
           child: Image.file(File(widget.anime.imagePath!), fit: BoxFit.contain),
         ),
       ),
+    );
+  }
+
+  // 🔥 دالة المشاركة
+  Future<void> _shareCardImage() async {
+    HapticFeedback.mediumImpact();
+    try {
+      RenderRepaintBoundary boundary = _cardKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+      ui.Image image = await boundary.toImage(pixelRatio: 3.0);
+      ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      Uint8List pngBytes = byteData!.buffer.asUint8List();
+      final directory = await getApplicationDocumentsDirectory();
+      final file = File('${directory.path}/anime_card_${DateTime.now().millisecondsSinceEpoch}.png');
+      await file.writeAsBytes(pngBytes);
+      await Share.shareXFiles([XFile(file.path)], text: 'أنمي: ${widget.anime.title}');
+    } catch (e) {
+      if (mounted) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تعذر مشاركة البطاقة.'))); }
+    }
+  }
+
+  // 🔥 تصميم البطاقة
+  Widget _buildShareCard() {
+    final anime = widget.anime;
+    final primaryColor = primaryColorNotifier.value;
+    final imagePath = anime.imagePath;
+    final fontName = fontNotifier.value;
+    final titleColor = titleColorNotifier.value;
+
+    TextStyle titleStyle;
+    if (fontName == 'Cairo') titleStyle = GoogleFonts.cairo(fontSize: 22, fontWeight: FontWeight.w900, color: titleColor);
+    else if (fontName == 'Tajawal') titleStyle = GoogleFonts.tajawal(fontSize: 22, fontWeight: FontWeight.w900, color: titleColor);
+    else if (fontName == 'Almarai') titleStyle = GoogleFonts.almarai(fontSize: 22, fontWeight: FontWeight.w900, color: titleColor);
+    else if (fontName == 'Changa') titleStyle = GoogleFonts.changa(fontSize: 22, fontWeight: FontWeight.w900, color: titleColor);
+    else titleStyle = TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: titleColor);
+
+    final genres = anime.genre.split('،').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+
+    return RepaintBoundary(
+      key: _cardKey,
+      child: Container(
+        width: 340,
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(24), color: const Color(0xFF1B1F28)),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: Stack(
+            children: [
+              if (imagePath != null && File(imagePath).existsSync())
+                Positioned.fill(child: Image.file(File(imagePath), fit: BoxFit.cover)),
+              Positioned.fill(
+                child: BackdropFilter(
+                  filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                  child: Container(color: Colors.black.withOpacity(0.7)),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 15, spreadRadius: 2)]),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: imagePath != null && File(imagePath).existsSync()
+                            ? Image.file(File(imagePath), height: 220, fit: BoxFit.cover)
+                            : Container(height: 220, width: 150, color: Colors.black26, child: const Icon(Icons.movie, size: 60, color: Colors.white24)),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Text(anime.title, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: titleStyle.copyWith(shadows: [Shadow(color: Colors.black87, blurRadius: 10)])),
+                    const SizedBox(height: 12),
+                    if (genres.isNotEmpty)
+                      Wrap(
+                        alignment: WrapAlignment.center, spacing: 6, runSpacing: 6,
+                        children: genres.take(3).map((g) => Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(color: primaryColor.withOpacity(0.2), borderRadius: BorderRadius.circular(20), border: Border.all(color: primaryColor.withOpacity(0.5))),
+                          child: Text(g, style: const TextStyle(color: Colors.white, fontSize: 10)),
+                        )).toList(),
+                      ),
+                    const SizedBox(height: 20),
+                    Container(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white12)),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          if (anime.rating > 0) _cardStat(Icons.star, '${anime.rating.toStringAsFixed(1)}', 'تقييمك', const Color(0xFFFFC857)),
+                          if (anime.globalRating != null) _cardStat(Icons.public, '${anime.globalRating!.toStringAsFixed(1)}', 'عالمي', Colors.cyan),
+                          if (anime.releaseYear != null) _cardStat(Icons.calendar_today, '${anime.releaseYear}', 'السنة', Colors.white70),
+                          if (anime.episodes > 0) _cardStat(Icons.play_circle_outline, '${anime.episodes}', 'حلقة', primaryColor),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.shield, size: 16, color: primaryColor), const SizedBox(width: 6), Text('ذاكرة الأوتاكو', style: TextStyle(color: primaryColor, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.2))]),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _cardStat(IconData icon, String value, String label, Color color) {
+    return Column(
+      children: [
+        Icon(icon, color: color, size: 22),
+        const SizedBox(height: 4),
+        Text(value, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 16)),
+        Text(label, style: const TextStyle(color: Colors.white54, fontSize: 10)),
+      ],
+    );
+  }
+
+  void _showShareDialog() {
+    HapticFeedback.lightImpact();
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return Dialog(
+          backgroundColor: Colors.transparent, insetPadding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildShareCard(),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: () { Navigator.pop(dialogContext); _shareCardImage(); },
+                    style: ElevatedButton.styleFrom(backgroundColor: primaryColorNotifier.value, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                    icon: const Icon(Icons.share), label: const Text('مشاركة البطاقة', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                  const SizedBox(width: 12),
+                  IconButton(onPressed: () => Navigator.pop(dialogContext), style: IconButton.styleFrom(backgroundColor: Colors.white12), icon: const Icon(Icons.close, color: Colors.white)),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -262,7 +409,13 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     return Scaffold(
       backgroundColor: background,
       appBar: AppBar(
-        backgroundColor: background, title: const Text('تفاصيل الأنمي'), centerTitle: true,
+        backgroundColor: background, 
+        title: const Text('تفاصيل الأنمي'), 
+        centerTitle: true,
+        actions: [
+          // 🔥 زر المشاركة
+          IconButton(tooltip: 'صنع بطاقة للمشاركة', icon: const Icon(Icons.dashboard_customize_outlined, color: Colors.cyan), onPressed: _showShareDialog),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
