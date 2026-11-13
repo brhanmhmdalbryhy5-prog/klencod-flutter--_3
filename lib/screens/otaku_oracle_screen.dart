@@ -76,17 +76,45 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
     return scores;
   }
 
+  // 🔥 الإنجازات الـ 100
   Widget _buildAchievements() {
     int totalCount = animes.length;
-    final achievements = [
-      {'count': 10, 'title': 'مبتدئ', 'icon': Icons.star_border, 'color': const Color(0xFFCD7F32)},
-      {'count': 30, 'title': 'مستكشف', 'icon': Icons.explore, 'color': const Color(0xFFC0C0C0)},
-      {'count': 50, 'title': 'متذوق', 'icon': Icons.local_cafe, 'color': const Color(0xFFFFD700)},
-      {'count': 100, 'title': 'خبير', 'icon': Icons.psychology, 'color': const Color(0xFF00E5FF)},
-      {'count': 200, 'title': 'أسطورة', 'icon': Icons.auto_awesome, 'color': const Color(0xFFE040FB)},
-      {'count': 500, 'title': 'أوتاكو حقيقي', 'icon': Icons.verified, 'color': const Color(0xFFFF5252)},
-      {'count': 1000, 'title': 'إمبراطور الأوتاكو', 'icon': Icons.workspace_premium, 'color': const Color(0xFFFFC857)},
+    
+    final List<Color> colors = [
+      const Color(0xFFCD7F32), const Color(0xFFC0C0C0), const Color(0xFFFFD700), 
+      const Color(0xFF00E5FF), const Color(0xFFE040FB), const Color(0xFFFF5252), 
+      const Color(0xFF69F0AE), const Color(0xFFFFAB40), const Color(0xFF448AFF), 
+      const Color(0xFFFF4081)
     ];
+    
+    final List<IconData> icons = [
+      Icons.star_border, Icons.explore, Icons.local_cafe, Icons.psychology,
+      Icons.auto_awesome, Icons.verified, Icons.workspace_premium, Icons.military_tech,
+      Icons.diamond, Icons.emoji_events
+    ];
+
+    final List<String> titles = [
+      'البداية', 'المستكشف', 'الباحث', 'المتذوق', 'الهاوي', 'المشجع', 'المحلل', 'الناقد', 'الأسطورة الصاعدة', 'الخبير',
+      'المبتدئ المعتمد', 'المغامر', 'جامع القصص', 'عاشق الأنمي', 'صائد الجواهر', 'المتابع', 'المراجع', 'المستشار', 'الأسطورة الشابة', 'الأسطورة',
+      'الجيل الثاني', 'الفارس', 'الحارس', 'المحارب', 'المنقذ', 'الساحر', 'العبقري', 'الوحش', 'الشيطان', 'الملاك',
+      'الأسطورة الملكية', 'الأسطورة الذهبية', 'الأسطورة الماسية', 'الأسطورة البلاتينية', 'الأسطورة النخبوية', 'الأسطورة النادرة', 'الأسطورة الفريدة', 'الأسطورة الأعظم', 'الأسطورة الأقوى', 'الأسطورة المطلقة',
+      'الحكيم', 'الفيلسوف', 'المعلم', 'المرشد', 'القائد', 'الزعيم', 'الملك', 'الإمبراطور', 'القيصر', 'الفرعون',
+      'بطل العالم', 'بطل الكون', 'بطل المجرة', 'بطل الأكوان', 'بطل الأبعاد', 'بطل الزمن', 'بطل الفضاء', 'بطل اللانهاية', 'بطل الخيال', 'بطل الواقع',
+      'التنين', 'الفينيق', 'العنقاء', 'الغول', 'الشيطان الأكبر', 'الملاك الأكبر', 'الإله', 'الخالد', 'الأبدي', 'اللامحدود',
+      'التيتان', 'العملاق', 'الجبار', 'الطاغية', 'المدمر', 'المحطم', 'الفاتح', 'الغازي', 'المنتصر', 'القاهر',
+      'المستنير', 'المتنور', 'المبدع', 'المبتكر', 'الرائد', 'السباق', 'الأول', 'الفريد', 'النادر', 'الأسطوري',
+      'الأسطورة الخالدة', 'الأسطورة الأبدية', 'الأسطورة اللامحدودة', 'الأسطورة الكونية', 'الأسطورة المجرية', 'الأسطورة الأبعادية', 'الأسطورة الزمنية', 'الأسطورة الفضائية', 'الأسطورة اللانهائية', 'إمبراطور الأوتاكو'
+    ];
+
+    final List<Map<String, dynamic>> achievements = [];
+    for (int i = 1; i <= 100; i++) {
+      achievements.add({
+        'count': i * 10,
+        'title': titles[i - 1],
+        'icon': icons[i % icons.length],
+        'color': colors[i % colors.length],
+      });
+    }
 
     return Container(
       padding: const EdgeInsets.all(16),
