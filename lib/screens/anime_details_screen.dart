@@ -162,6 +162,35 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     }
   }
 
+  // 🔥 دالة جديدة لعرض صورة الشخصية وتكبيرها
+  void _showCharacterImageZoom(String? imagePath, String? imageUrl) {
+    HapticFeedback.lightImpact();
+    
+    Widget? imageWidget;
+    if (imagePath != null && File(imagePath).existsSync()) {
+      imageWidget = Image.file(File(imagePath), fit: BoxFit.contain);
+    } else if (imageUrl != null && imageUrl.isNotEmpty) {
+      imageWidget = Image.network(imageUrl, fit: BoxFit.contain);
+    }
+
+    if (imageWidget == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لا توجد صورة لعرضها.')));
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.transparent, 
+        insetPadding: const EdgeInsets.all(10),
+        child: InteractiveViewer(
+          panEnabled: true, minScale: 1.0, maxScale: 5.0,
+          child: imageWidget!,
+        ),
+      ),
+    );
+  }
+
   Future<void> _editAnimeDetails() async {
     HapticFeedback.lightImpact();
     final titleController = TextEditingController(text: currentAnime.title);
@@ -465,7 +494,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     if (index != -1) { allAnimes[index] = currentAnime; await storage.saveAnimes(allAnimes); }
   }
 
-  // 🔥 تم تعديل هذه الدالة لتحميل الصور محلياً
   Future<void> _fetchDataManually() async {
     if (currentAnime.title.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الأنمي لا يملك اسماً، لا يمكن البحث عنه.')));
@@ -473,7 +501,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     }
     showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator()));
     
-    // نمرر downloadImages: true لتحميل الصور محلياً
     final data = await apiService.fetchAnimeData(currentAnime.title, downloadImages: true);
     
     if (!mounted) return;
@@ -612,21 +639,28 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
               itemBuilder: (context, index) {
                 final char = currentAnime.characters[index];
                 final imgPath = char['imagePath'] as String?;
+                final imgUrl = char['imageUrl'] as String?;
                 
                 ImageProvider? imageProvider;
                 if (imgPath != null && File(imgPath).existsSync()) {
                   imageProvider = FileImage(File(imgPath));
+                } else if (imgUrl != null && imgUrl.isNotEmpty) {
+                  imageProvider = NetworkImage(imgUrl);
                 }
 
                 return Padding(
                   padding: const EdgeInsets.only(left: 10),
                   child: Column(
                     children: [
-                      CircleAvatar(
-                        radius: 38,
-                        backgroundColor: Colors.white10,
-                        backgroundImage: imageProvider,
-                        child: imageProvider == null ? const Icon(Icons.person, color: Colors.white54, size: 30) : null,
+                      // 🔥 تغليف الدائرة بـ GestureDetector للتكبير
+                      GestureDetector(
+                        onTap: () => _showCharacterImageZoom(imgPath, imgUrl),
+                        child: CircleAvatar(
+                          radius: 38,
+                          backgroundColor: Colors.white10,
+                          backgroundImage: imageProvider,
+                          child: imageProvider == null ? const Icon(Icons.person, color: Colors.white54, size: 30) : null,
+                        ),
                       ),
                       const SizedBox(height: 6),
                       SizedBox(
