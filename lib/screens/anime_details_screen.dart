@@ -128,16 +128,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
   void _showImageZoom() {
     HapticFeedback.lightImpact();
     if (currentAnime.imagePath == null || !File(currentAnime.imagePath!).existsSync()) {
-      if (currentAnime.imageUrl != null) {
-         showDialog(
-          context: context,
-          builder: (_) => Dialog(
-            backgroundColor: Colors.transparent, insetPadding: EdgeInsets.zero,
-            child: InteractiveViewer(panEnabled: true, minScale: 1.0, maxScale: 5.0, child: Image.network(currentAnime.imageUrl!, fit: BoxFit.contain)),
-          ),
-        );
-      }
-      return;
+      return; // 🔥 لا يوجد تكبير لصورة الإنترنت (لأن الأنمي الأصلي لا يملك صورة إنترنت)
     }
     
     showDialog(
@@ -190,9 +181,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                         decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(12), border: Border.all(color: primaryColorNotifier.value)),
                         child: newImagePath != null && File(newImagePath!).existsSync()
                             ? ClipRRect(borderRadius: BorderRadius.circular(11), child: Image.file(File(newImagePath!), fit: BoxFit.cover))
-                            : currentAnime.imageUrl != null 
-                                ? ClipRRect(borderRadius: BorderRadius.circular(11), child: Image.network(currentAnime.imageUrl!, fit: BoxFit.cover))
-                                : const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.add_photo_alternate, size: 30), Text('إضافة صورة محلية')])),
+                            : const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.add_photo_alternate, size: 30), Text('إضافة صورة')])),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -242,7 +231,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     }
   }
 
-  // 🔥 دالة حذف الموسم
   Future<void> _deleteSubAnime(Anime sub) async {
     HapticFeedback.mediumImpact();
     final confirm = await showDialog<bool>(
@@ -265,9 +253,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     if (confirm != true) return;
 
     final allAnimes = await storage.loadAnimes();
-    // استخدام دالة الحذف النهائي الموجودة في StorageService
     await storage.permanentDelete(sub); 
-    // حذف من القائمة المحلية
     allAnimes.removeWhere((a) => a.id == sub.id);
     await storage.saveAnimes(allAnimes);
     await _loadData();
@@ -450,7 +436,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     final int episodes = data['episodes'];
     final double? globalRating = data['globalRating'];
     final int? releaseYear = data['releaseYear'];
-    final String? imageUrl = data['imageUrl'];
     final List<Map<String, dynamic>> subData = data['subAnimes'];
 
     setState(() {
@@ -459,7 +444,11 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
       if (episodes > 0) currentAnime.episodes = episodes;
       if (globalRating != null) currentAnime.globalRating = globalRating;
       if (releaseYear != null) currentAnime.releaseYear = releaseYear;
-      if (imageUrl != null) currentAnime.imageUrl = imageUrl;
+      
+      // 🔥 التأكد من إزالة صورة الإنترنت للأنمي الأصلي إذا كانت موجودة
+      if (currentAnime.parentId == null) {
+        currentAnime.imageUrl = null;
+      }
     });
 
     final allAnimes = await storage.loadAnimes();
@@ -480,7 +469,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
             genre: sub['genre'] ?? '',
             globalRating: sub['globalRating'],
             releaseYear: sub['releaseYear'],
-            imageUrl: sub['imageUrl'],
+            imageUrl: sub['imageUrl'], // 🔥 المواسم تجلب صورها
           );
           allAnimes.add(newSub);
         }
@@ -491,7 +480,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     await _loadData();
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم جلب البيانات والصور بنجاح!')));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم جلب البيانات والصور للمواسم بنجاح!')));
   }
 
   void _addSubAnime() {
@@ -648,7 +637,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                     ),
                     title: Text(sub.partName ?? 'موسم', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
                     subtitle: Text(sub.episodes > 0 ? '${sub.episodes} حلقة' : 'غير محدد', style: const TextStyle(color: Colors.white54)),
-                    // 🔥 تمت إضافة زر الحذف هنا
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
