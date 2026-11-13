@@ -36,7 +36,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
   final StorageService storage = StorageService();
   final GlobalKey _cardKey = GlobalKey();
 
-  // 🔥 متغير محلي للأنمي يمكننا تعديله
   late Anime currentAnime;
 
   String? _characterImagePath;
@@ -52,7 +51,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
   @override
   void initState() {
     super.initState();
-    currentAnime = widget.anime; // نسخ أولي
+    currentAnime = widget.anime;
     _loadData();
   }
 
@@ -62,13 +61,11 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     
     final allAnimes = await storage.loadAnimes();
     
-    // تحديث بيانات الأنمي الحالي من قاعدة البيانات لضمان أحدث البيانات
     final index = allAnimes.indexWhere((a) => a.id == currentAnime.id);
     if (index != -1) {
       currentAnime = allAnimes[index];
     }
 
-    // جلب المواسم المرتبطة
     final children = allAnimes.where((a) => a.parentId == currentAnime.id).toList();
 
     if (!mounted) return;
@@ -240,9 +237,40 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
           ..rating = rating
           ..imagePath = newImagePath;
         await storage.saveAnimes(allAnimes);
-        await _loadData(); // 🔥 هنا نقوم بتحديث البيانات من جديد دون أخطاء
+        await _loadData();
       }
     }
+  }
+
+  // 🔥 دالة حذف الموسم
+  Future<void> _deleteSubAnime(Anime sub) async {
+    HapticFeedback.mediumImpact();
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: panel,
+        title: const Text('حذف الموسم/الفيلم؟'),
+        content: Text('هل أنت متأكد من حذف "${sub.partName}" نهائياً؟'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('حذف'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    final allAnimes = await storage.loadAnimes();
+    // استخدام دالة الحذف النهائي الموجودة في StorageService
+    await storage.permanentDelete(sub); 
+    // حذف من القائمة المحلية
+    allAnimes.removeWhere((a) => a.id == sub.id);
+    await storage.saveAnimes(allAnimes);
+    await _loadData();
   }
 
   Future<void> _shareCardImage() async {
@@ -620,7 +648,17 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                     ),
                     title: Text(sub.partName ?? 'موسم', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
                     subtitle: Text(sub.episodes > 0 ? '${sub.episodes} حلقة' : 'غير محدد', style: const TextStyle(color: Colors.white54)),
-                    trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white38),
+                    // 🔥 تمت إضافة زر الحذف هنا
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                          onPressed: () => _deleteSubAnime(sub),
+                        ),
+                        const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white38),
+                      ],
+                    ),
                     onTap: () async {
                       await Navigator.push(context, MaterialPageRoute(builder: (_) => AnimeDetailsScreen(anime: sub)));
                       await _loadData();
