@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // 🔥
 
 import '../main.dart';
 import '../models/anime.dart';
@@ -41,7 +42,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _initialLoad() async {
     await loadData();
-    _autoFetchMissingData();
+    
+    // 🔥 أوقفنا الجلب التلقائي - التطبيق لا يعمل إلا بأمر المستخدم
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool('auto_fetch_enabled') ?? false) {
+      _autoFetchMissingData();
+    }
   }
 
   Future<void> loadData() async {
@@ -59,6 +65,7 @@ class _HomeScreenState extends State<HomeScreen> {
     bool hasChanges = false;
 
     for (var anime in missingData) {
+      // لاحظنا أننا لا نمرر downloadImages هنا لتوفير الإنترنت، لأن المستخدم يمكنه فعل ذلك من الإعدادات
       final data = await apiService.fetchAnimeData(anime.title);
       if (data['genres'].isNotEmpty && anime.genre.trim().isEmpty) { anime.genre = data['genres'].join('، '); hasChanges = true; }
       if (data['summary'].isNotEmpty && anime.summary.trim().isEmpty) { anime.summary = data['summary']; hasChanges = true; }
@@ -273,7 +280,11 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(saved ? 'تم حفظ الأنمي في مكتبتك' : 'تعذر حفظ البيانات.')));
-      if (result.genre.isEmpty || result.summary.isEmpty || result.globalRating == null || result.releaseYear == null) { _autoFetchMissingData(); }
+      // لا نقوم بتشغيل الجلب التلقائي هنا إلا إذا كان مفعلاً
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool('auto_fetch_enabled') ?? false) {
+        if (result.genre.isEmpty || result.summary.isEmpty || result.globalRating == null || result.releaseYear == null) { _autoFetchMissingData(); }
+      }
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تعذر حفظ الصورة أو البيانات.')));
@@ -378,7 +389,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // 🔥 كارت الإنجاز الجديد
   Widget _buildLatestAchievementCard() {
     int totalCount = animes.length;
     if (totalCount < 10) return const SizedBox.shrink();
@@ -450,7 +460,13 @@ class _HomeScreenState extends State<HomeScreen> {
     final primaryColor = primaryColorNotifier.value;
 
     return RefreshIndicator(
-      onRefresh: () async { await loadData(); await _autoFetchMissingData(); },
+      onRefresh: () async { 
+        await loadData(); 
+        final prefs = await SharedPreferences.getInstance();
+        if (prefs.getBool('auto_fetch_enabled') ?? false) {
+          await _autoFetchMissingData(); 
+        }
+      },
       child: ListView(
         padding: const EdgeInsets.fromLTRB(18, 16, 18, 28),
         children: [
@@ -495,7 +511,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           
-          _buildLatestAchievementCard(), // 🔥 استدعاء الكارت هنا
+          _buildLatestAchievementCard(),
 
           const SizedBox(height: 25),
           const Text('إحصائياتك', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
