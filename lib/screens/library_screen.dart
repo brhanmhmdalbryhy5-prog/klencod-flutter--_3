@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // 🔥 للاهتزاز
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
@@ -45,7 +46,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
   double selectedRatingFilter = 0;
   String searchText = '';
   String sortMode = 'newest';
-  int viewMode = 0; // 0: قائمة، 1: شبكة 2، 2: شبكة 3، 3: سينمائي، 4: مضغوط
+  int viewMode = 0;
   bool loading = true;
 
   final List<Color> colors = const [
@@ -187,6 +188,26 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
+  // 🔥 إضافة Hero Animation للصور
+  Widget _animeImage(Anime anime, Color color, {bool compact = false}) {
+    final path = anime.imagePath;
+    Widget imageWidget;
+
+    if (path != null && path.isNotEmpty) {
+      imageWidget = Image.file(File(path), width: compact ? double.infinity : 76, height: compact ? 160 : 96, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _imagePlaceholder(color, compact: compact));
+    } else {
+      imageWidget = _imagePlaceholder(color, compact: compact);
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(13),
+      child: Hero(
+        tag: 'anime_image_${anime.id}', // 🔥 العلامة المميزة للصورة
+        child: imageWidget,
+      ),
+    );
+  }
+
   Widget _imagePlaceholder(Color color, {bool compact = false}) {
     return Container(
       width: compact ? double.infinity : 76,
@@ -196,45 +217,38 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
-  Widget _animeImage(Anime anime, Color color, {bool compact = false}) {
-    final path = anime.imagePath;
-    if (path != null && path.isNotEmpty) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(13),
-        child: Image.file(File(path), width: compact ? double.infinity : 76, height: compact ? 160 : 96, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _imagePlaceholder(color, compact: compact)),
-      );
-    }
-    return _imagePlaceholder(color, compact: compact);
-  }
-
   Future<void> openAnimeDetails(Anime anime) async {
+    HapticFeedback.lightImpact(); // 🔥 اهتزاز خفيف
     await Navigator.push(context, MaterialPageRoute(builder: (_) => AnimeDetailsScreen(anime: anime)));
     if (mounted) await loadAnimes();
   }
 
-  Future<void> deleteAnime(Anime anime) async {
+  // 🔥 تغيير الحذف إلى نقل لسلة المهملات
+  Future<void> moveToTrash(Anime anime) async {
+    HapticFeedback.mediumImpact(); // 🔥 اهتزاز متوسط
     final confirm = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: const Color(0xFF1B1F28),
-        title: const Text('حذف الأنمي؟'),
-        content: Text('هل تريد حذف "${anime.title.isEmpty ? 'أنمي بدون اسم' : anime.title}" من مكتبتك؟'),
+        title: const Text('نقل إلى سلة المهملات؟'),
+        content: Text('هل تريد نقل "${anime.title.isEmpty ? 'أنمي بدون اسم' : anime.title}" إلى سلة المهملات؟'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
-          FilledButton(style: FilledButton.styleFrom(backgroundColor: primaryColorNotifier.value), onPressed: () => Navigator.pop(dialogContext, true), child: const Text('حذف')),
+          FilledButton(style: FilledButton.styleFrom(backgroundColor: primaryColorNotifier.value), onPressed: () => Navigator.pop(dialogContext, true), child: const Text('نقل')),
         ],
       ),
     );
 
     if (confirm != true) return;
 
-    final saved = await storage.deleteAnime(animes, anime.id);
+    final saved = await storage.moveToTrash(animes, anime.id);
     if (!mounted) return;
     if (saved) await loadAnimes();
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(saved ? 'تم حذف الأنمي' : 'تعذر حفظ عملية الحذف')));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(saved ? 'تم نقل الأنمي إلى السلة' : 'تعذر حفظ العملية')));
   }
 
   Future<void> toggleFavorite(Anime anime) async {
+    HapticFeedback.selectionClick(); // 🔥 اهتزاز خفيف جداً
     final oldValue = anime.favorite;
     setState(() => anime.favorite = !oldValue);
     final saved = await storage.saveAnimes(animes);
@@ -335,6 +349,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   Future<void> editAnime(Anime anime) async {
+    HapticFeedback.lightImpact();
     final titleController = TextEditingController(text: anime.title);
     final characterController = TextEditingController(text: anime.character);
     final episodesController = TextEditingController(text: anime.episodes == 0 ? '' : '${anime.episodes}');
@@ -424,15 +439,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
                           children: [
                             Text('تقييمك: ${rating.toStringAsFixed(1)} / 10', style: TextStyle(fontWeight: FontWeight.bold, color: primaryColorNotifier.value, fontSize: 16)),
                             Slider(
-                              value: rating,
-                              min: 0,
-                              max: 10,
-                              divisions: 20,
-                              label: rating.toStringAsFixed(1),
-                              activeColor: const Color(0xFFFFC857),
-                              onChanged: (value) {
-                                setDialogState(() => rating = value);
-                              },
+                              value: rating, min: 0, max: 10, divisions: 20, label: rating.toStringAsFixed(1), activeColor: const Color(0xFFFFC857),
+                              onChanged: (value) { setDialogState(() => rating = value); },
                             ),
                           ],
                         ),
@@ -446,7 +454,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 ),
                 actions: [
                   TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
-                  FilledButton(style: FilledButton.styleFrom(backgroundColor: primaryColorNotifier.value), onPressed: () => Navigator.pop(dialogContext, true), child: const Text('حفظ التعديلات')),
+                  FilledButton(
+                    style: FilledButton.styleFrom(backgroundColor: primaryColorNotifier.value),
+                    onPressed: () { HapticFeedback.lightImpact(); Navigator.pop(dialogContext, true); },
+                    child: const Text('حفظ التعديلات')
+                  ),
                 ],
               );
             },
@@ -491,7 +503,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
       titleController.dispose();
       characterController.dispose();
       episodesController.dispose();
-      watchedController.dispose();
       summaryController.dispose();
       memoryController.dispose();
       yearController.dispose();
@@ -513,9 +524,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       title.trim().isEmpty ? 'أنمي بدون اسم' : title,
       maxLines: 2,
       overflow: TextOverflow.ellipsis,
-      style: textStyle.copyWith(
-        shadows: [Shadow(color: Colors.black87, blurRadius: 10)],
-      ),
+      style: textStyle.copyWith(shadows: [Shadow(color: Colors.black87, blurRadius: 10)]),
     );
   }
 
@@ -548,7 +557,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
-  // 1. عرض القائمة (List)
+  // 🔥 1. عرض القائمة (List)
   Widget _buildRowCard(Anime anime) {
     final color = colors[anime.colorIndex.abs() % colors.length];
     final details = [
@@ -617,7 +626,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
-  // 2. عرض شبكي 2 (Grid)
+  // 🔥 2. عرض شبكي 2 (Grid)
   Widget _buildGridCard(Anime anime) {
     final color = colors[anime.colorIndex.abs() % colors.length];
     return Container(
@@ -663,7 +672,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
-  // 3. عرض شبكي 3 (Compact Grid)
+  // 🔥 3. عرض شبكي 3 (Compact Grid)
   Widget _buildCompactGridCard(Anime anime) {
     final color = colors[anime.colorIndex.abs() % colors.length];
     return Container(
@@ -691,7 +700,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
-  // 🔥 4. عرض سينمائي (Cinematic) - الصورة كخلفية والتفاصيل فوقها
+  // 🔥 4. عرض سينمائي (Cinematic)
   Widget _buildCinematicCard(Anime anime) {
     final imagePath = anime.imagePath;
     
@@ -707,12 +716,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // الصورة كخلفية
-            imagePath != null && File(imagePath).existsSync()
-                ? Image.file(File(imagePath), fit: BoxFit.cover)
-                : Container(color: Colors.black26, child: const Icon(Icons.movie, size: 50, color: Colors.white24)),
+            // استخدام Hero هنا أيضاً
+            if (imagePath != null && File(imagePath).existsSync())
+                Hero(tag: 'anime_image_${anime.id}', child: Image.file(File(imagePath), fit: BoxFit.cover))
+            else
+                Container(color: Colors.black26, child: const Icon(Icons.movie, size: 50, color: Colors.white24)),
             
-            // تدرج لوني من الأسود لضمان وضوح النص
             Container(
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
@@ -724,7 +733,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
               ),
             ),
             
-            // النصوص والأزرار
             Positioned(
               bottom: 15, left: 15, right: 15,
               child: Column(
@@ -746,13 +754,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
               ),
             ),
             
-            // زر الخيارات أعلى اليمين
             Positioned(
               top: 10, right: 10,
               child: Material(color: Colors.black54, borderRadius: BorderRadius.circular(30), child: SizedBox(width: 38, height: 38, child: _animeMenu(anime, light: true))),
             ),
             
-            // شارة المفضلة
             if (anime.favorite) const Positioned(left: 10, top: 10, child: Icon(Icons.favorite, color: Color(0xFFFF5364), size: 22)),
           ],
         ),
@@ -760,7 +766,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
-  // 🔥 5. عرض قائمة مضغوطة جداً (Compact List) - صورة صغيرة جداً
+  // 🔥 5. عرض قائمة مضغوطة جداً (Compact List)
   Widget _buildCompactListCard(Anime anime) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -772,11 +778,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
           padding: const EdgeInsets.all(8),
           child: Row(
             children: [
+              // استخدام Hero هنا
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
-                child: anime.imagePath != null && File(anime.imagePath!).existsSync()
-                    ? Image.file(File(anime.imagePath!), width: 45, height: 45, fit: BoxFit.cover)
-                    : Container(width: 45, height: 45, color: Colors.black26, child: const Icon(Icons.movie, size: 20, color: Colors.white24)),
+                child: Hero(
+                  tag: 'anime_image_${anime.id}',
+                  child: anime.imagePath != null && File(anime.imagePath!).existsSync()
+                      ? Image.file(File(anime.imagePath!), width: 45, height: 45, fit: BoxFit.cover)
+                      : Container(width: 45, height: 45, color: Colors.black26, child: const Icon(Icons.movie, size: 20, color: Colors.white24)),
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -813,7 +823,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         switch (value) {
           case 'edit': await editAnime(anime); break;
           case 'favorite': await toggleFavorite(anime); break;
-          case 'delete': await deleteAnime(anime); break;
+          case 'trash': await moveToTrash(anime); break; // 🔥 تغيير الاسم
           case 'fetch_data': await _fetchDataManually(anime); break;
         }
       },
@@ -821,20 +831,20 @@ class _LibraryScreenState extends State<LibraryScreen> {
         const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit_outlined), SizedBox(width: 10), Text('تعديل بيانات الأنمي')])),
         const PopupMenuItem(value: 'fetch_data', child: Row(children: [Icon(Icons.cloud_download_outlined, color: Colors.cyan), SizedBox(width: 10), Text('جلب البيانات من الإنترنت')])),
         PopupMenuItem(value: 'favorite', child: Row(children: [const Icon(Icons.favorite_border, color: Color(0xFFFF5364)), const SizedBox(width: 10), Text(anime.favorite ? 'إزالة من المفضلة' : 'إضافة إلى المفضلة')])),
-        const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete_outline, color: Color(0xFFFF6B72)), SizedBox(width: 10), Text('حذف الأنمي')])),
+        // 🔥 تغيير النص إلى "نقل للسلة"
+        const PopupMenuItem(value: 'trash', child: Row(children: [Icon(Icons.delete_outline, color: Color(0xFFFF6B72)), SizedBox(width: 10), Text('نقل إلى سلة المهملات')])),
       ],
     );
   }
 
   Widget _buildToolbar() {
-    // 🔥 تحديث الأيقونة لتشمل 5 أشكال
     IconData getViewIcon() {
       switch (viewMode) {
         case 0: return Icons.view_agenda_outlined;
         case 1: return Icons.grid_view_rounded;
         case 2: return Icons.apps;
-        case 3: return Icons.view_carousel_outlined; // سينمائي
-        case 4: return Icons.view_headline; // مضغوط
+        case 3: return Icons.view_carousel_outlined;
+        case 4: return Icons.view_headline;
         default: return Icons.view_agenda_outlined;
       }
     }
@@ -843,7 +853,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       children: [
         Expanded(
           child: PopupMenuButton<String>(
-            onSelected: (value) { setState(() => sortMode = value); _saveLibraryPreferences(); },
+            onSelected: (value) { HapticFeedback.selectionClick(); setState(() => sortMode = value); _saveLibraryPreferences(); },
             itemBuilder: (context) => const [
               PopupMenuItem(value: 'newest', child: Text('الأحدث إضافة')),
               PopupMenuItem(value: 'oldest', child: Text('الأقدم إضافة')),
@@ -865,9 +875,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
           child: IconButton(
             tooltip: 'تغيير العرض',
             onPressed: () { 
-              setState(() { 
-                viewMode = (viewMode + 1) % 5; // 🔥 التبديل بين 5 أشكال
-              }); 
+              HapticFeedback.lightImpact(); // 🔥
+              setState(() { viewMode = (viewMode + 1) % 5; }); 
               _saveLibraryPreferences(); 
             },
             icon: Icon(getViewIcon(), color: const Color(0xFFFFC857)),
@@ -877,15 +886,50 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
+  // 🔥 هيكل التحميل الوهمي (Skeleton Loader)
+  Widget _buildSkeletonLoader() {
+    return Column(
+      children: List.generate(5, (index) => 
+        Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          height: 120,
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 76, height: 96,
+                margin: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(13)),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(width: 150, height: 16, color: Colors.white.withOpacity(0.1)),
+                    const SizedBox(height: 10),
+                    Container(width: 100, height: 12, color: Colors.white.withOpacity(0.05)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        )
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final items = filteredAnimes;
     final primaryColor = primaryColorNotifier.value;
 
     Widget buildContent() {
-      if (loading) {
-        return const Center(child: Padding(padding: EdgeInsets.all(30), child: CircularProgressIndicator()));
-      }
+      if (loading) return _buildSkeletonLoader(); // 🔥 استخدام الهيكل
+      
       if (items.isEmpty) {
         return Container(
           margin: const EdgeInsets.only(top: 20),
@@ -903,7 +947,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
         );
       }
       
-      // 🔥 التبديل بين التقسيمات الخمسة
       switch (viewMode) {
         case 1:
           return GridView.builder(
@@ -918,12 +961,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
             itemBuilder: (context, index) => _buildCompactGridCard(items[index]),
           );
         case 3:
-          return Column(children: items.map(_buildCinematicCard).toList()); // سينمائي
+          return Column(children: items.map(_buildCinematicCard).toList());
         case 4:
-          return Column(children: items.map(_buildCompactListCard).toList()); // مضغوط
+          return Column(children: items.map(_buildCompactListCard).toList());
         case 0:
         default:
-          return Column(children: items.map(_buildRowCard).toList()); // قائمة عادية
+          return Column(children: items.map(_buildRowCard).toList());
       }
     }
 
@@ -932,7 +975,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       floatingActionButton: _showBackToTop
           ? FloatingActionButton(
               mini: true, backgroundColor: primaryColor,
-              onPressed: () { _scrollController.animateTo(0, duration: const Duration(milliseconds: 500), curve: Curves.easeInOut); },
+              onPressed: () { HapticFeedback.lightImpact(); _scrollController.animateTo(0, duration: const Duration(milliseconds: 500), curve: Curves.easeInOut); },
               child: const Icon(Icons.keyboard_arrow_up, color: Colors.white),
             )
           : null,
@@ -963,7 +1006,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     final selected = selectedStatus == status;
                     return Padding(
                       padding: const EdgeInsets.only(left: 8),
-                      child: ChoiceChip(label: Text(status), selected: selected, selectedColor: primaryColor, backgroundColor: const Color(0xFF1B1F28), side: BorderSide(color: selected ? primaryColor : Colors.white12), onSelected: (_) => setState(() => selectedStatus = status)),
+                      child: ChoiceChip(label: Text(status), selected: selected, selectedColor: primaryColor, backgroundColor: const Color(0xFF1B1F28), side: BorderSide(color: selected ? primaryColor : Colors.white12), onSelected: (_) { HapticFeedback.selectionClick(); setState(() => selectedStatus = status); }),
                     );
                   }).toList(),
                 ),
@@ -978,7 +1021,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     final selected = selectedRatingFilter == val;
                     return Padding(
                       padding: const EdgeInsets.only(left: 8),
-                      child: ChoiceChip(label: Text(rate), selected: selected, selectedColor: const Color(0xFFFFC857), backgroundColor: const Color(0xFF1B1F28), side: BorderSide(color: selected ? const Color(0xFFFFC857) : Colors.white12), labelStyle: TextStyle(color: selected ? Colors.black : Colors.white), onSelected: (_) => setState(() => selectedRatingFilter = val)),
+                      child: ChoiceChip(label: Text(rate), selected: selected, selectedColor: const Color(0xFFFFC857), backgroundColor: const Color(0xFF1B1F28), side: BorderSide(color: selected ? const Color(0xFFFFC857) : Colors.white12), labelStyle: TextStyle(color: selected ? Colors.black : Colors.white), onSelected: (_) { HapticFeedback.selectionClick(); setState(() => selectedRatingFilter = val); }),
                     );
                   }).toList(),
                 ),
