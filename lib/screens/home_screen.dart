@@ -1,7 +1,8 @@
 import 'dart:io';
-import 'dart:math'; // 🔥 لاستخدام العشوائية
+import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // 🔥 للاهتزاز
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
@@ -11,7 +12,7 @@ import '../models/anime.dart';
 import '../services/storage_service.dart';
 import '../services/anime_api_service.dart';
 import 'otaku_oracle_screen.dart';
-import 'anime_details_screen.dart'; // 🔥 لاستخدامها في الانتقال للأنمي المختار
+import 'anime_details_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -129,6 +130,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> addAnime() async {
+    HapticFeedback.lightImpact(); // 🔥 اهتزاز
     final titleController = TextEditingController();
     final episodesController = TextEditingController();
     final yearController = TextEditingController();
@@ -212,12 +214,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         children: [
                           Text('تقييمك: ${rating.toStringAsFixed(1)} / 10', style: TextStyle(fontWeight: FontWeight.bold, color: primaryColorNotifier.value, fontSize: 16)),
                           Slider(
-                            value: rating,
-                            min: 0,
-                            max: 10,
-                            divisions: 20,
-                            label: rating.toStringAsFixed(1),
-                            activeColor: const Color(0xFFFFC857),
+                            value: rating, min: 0, max: 10, divisions: 20, label: rating.toStringAsFixed(1), activeColor: const Color(0xFFFFC857),
                             onChanged: (value) { setDialogState(() => rating = value); },
                           ),
                         ],
@@ -309,7 +306,10 @@ class _HomeScreenState extends State<HomeScreen> {
         borderRadius: BorderRadius.circular(20),
         child: InkWell(
           borderRadius: BorderRadius.circular(20),
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OtakuOracleScreen())),
+          onTap: () {
+            HapticFeedback.lightImpact(); // 🔥
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const OtakuOracleScreen()));
+          },
           child: const Padding(
             padding: EdgeInsets.all(17),
             child: Row(
@@ -326,7 +326,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // 🔥 زر القرعة
   Widget _randomPickerButton() {
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
@@ -358,8 +357,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // 🔥 دالة القرعة
   void _showRandomPicker() {
+    HapticFeedback.heavyImpact(); // 🔥 اهتزاز قوي
     final watchingAnimes = animes.where((a) => a.status == 'أتابعه').toList();
     if (watchingAnimes.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ليس لديك أنميات في قائمة "أتابعه" لعمل قرعة.')));
@@ -400,6 +399,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       width: double.infinity,
                       child: ElevatedButton.icon(
                         onPressed: () {
+                          HapticFeedback.mediumImpact(); // 🔥
                           setDialogState(() {
                             selected = candidates[Random().nextInt(candidates.length)];
                           });
@@ -420,6 +420,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 if (selected != null)
                   TextButton(
                     onPressed: () {
+                      HapticFeedback.lightImpact(); // 🔥
                       Navigator.pop(dialogContext);
                       Navigator.push(context, MaterialPageRoute(builder: (_) => AnimeDetailsScreen(anime: selected!))).then((_) => loadData());
                     },
@@ -430,6 +431,33 @@ class _HomeScreenState extends State<HomeScreen> {
           },
         );
       },
+    );
+  }
+
+  // 🔥 هيكل التحميل الوهمي (Skeleton Loader)
+  Widget _buildSkeletonLoader() {
+    return Column(
+      children: List.generate(5, (index) => 
+        Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          height: 70,
+          decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(17)),
+          child: Row(
+            children: [
+              Container(width: 50, height: 50, margin: const EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(13))),
+              Expanded(child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(width: 150, height: 14, color: Colors.white.withOpacity(0.1)),
+                  const SizedBox(height: 8),
+                  Container(width: 80, height: 10, color: Colors.white.withOpacity(0.05)),
+                ],
+              )),
+            ],
+          ),
+        )
+      ),
     );
   }
 
@@ -451,7 +479,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
           const SizedBox(height: 20),
-          // 🔥 وضعت الزرين جنباً إلى جنب
           Row(
             children: [
               Expanded(child: _oracleButton()),
@@ -504,7 +531,7 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 27),
           Row(children: [const Expanded(child: Text('أضيفت مؤخرًا', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800))), Text('${animes.length} أنمي', style: const TextStyle(color: Colors.white54))]),
           const SizedBox(height: 13),
-          if (loading) const Center(child: Padding(padding: EdgeInsets.all(25), child: CircularProgressIndicator()))
+          if (loading) _buildSkeletonLoader() // 🔥 استخدام الهيكل الوهمي
           else if (animes.isEmpty)
             Container(
               padding: const EdgeInsets.all(25),
