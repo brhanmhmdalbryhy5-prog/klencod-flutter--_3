@@ -4,7 +4,8 @@ import '../main.dart';
 import '../services/backup_service.dart';
 import '../services/theme_service.dart';
 import '../services/anime_api_service.dart';
-import 'trash_screen.dart'; // 🔥 استيراد شاشة سلة المهملات
+import '../services/bulk_download_service.dart';
+import 'trash_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -16,10 +17,12 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool darkMode = true;
   bool backupBusy = false;
+  bool autoFetchEnabled = false;
   bool isUpdatingGenres = false;
 
   final BackupService backupService = BackupService();
   final AnimeApiService apiService = AnimeApiService();
+  final BulkDownloadService bulkService = BulkDownloadService();
 
   @override
   void initState() {
@@ -30,7 +33,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadThemePreference() async {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
-    setState(() { darkMode = prefs.getBool('isDarkMode') ?? true; });
+    setState(() {
+      darkMode = prefs.getBool('isDarkMode') ?? true;
+      autoFetchEnabled = prefs.getBool('auto_fetch_enabled') ?? false;
+    });
+  }
+
+  Future<void> _toggleAutoFetch(bool value) async {
+    setState(() => autoFetchEnabled = value);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('auto_fetch_enabled', value);
   }
 
   Future<void> _toggleTheme(bool value) async {
@@ -89,7 +101,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             mainAxisSize: MainAxisSize.min,
             children: fonts.map((font) {
               return ListTile(
-                title: Text(font, style: TextStyle(fontFamily: font == 'Cairo' ? 'Cairo' : font == 'Tajawal' ? 'Tajawal' : font == 'Almarai' ? 'Almarai' : 'Changa', color: Colors.white)),
+                title: Text(font, style: TextStyle(fontFamily: font, color: Colors.white)),
                 trailing: fontNotifier.value == font ? const Icon(Icons.check, color: Colors.green) : null,
                 onTap: () => Navigator.pop(dialogContext, font),
               );
@@ -137,43 +149,71 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<void> _autoUpdateGenres() async {
-    if (isUpdatingGenres) return;
+  // 🔥 زر التحميل الشامل
+  Future<void> _startBulkDownload() async {
+    if (bulkService.isRunning) return;
+    
     final confirm = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: const Color(0xFF1B1F28),
-        title: const Text('تحديث البيانات تلقائياً'),
-        content: const Text('سيقوم التطبيق بالبحث في الإنترنت عن تصنيفات، قصص، حلقات، وتقييمات الأنميات التي لا تحتوي عليها.\n\nقد تستغرق العملية بعض الوقت. هل تريد المتابعة؟'),
+        title: const Text('تحميل البيانات الكاملة'),
+        content: const Text(
+          'سيقوم التطبيق بجلب جميع البيانات والصور والمواسم والشخصيات لكل الأنميات في مكتبتك وحفظها محلياً.\n\n'
+          'تحذير: العملية قد تستغرق وقتاً طويلاً، ويُفضّل استخدامها مع اتصال إنترنت قوي. يمكنك الاستمرار في استخدام التطبيق أثناء التحميل.',
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
-          FilledButton(style: FilledButton.styleFrom(backgroundColor: primaryColorNotifier.value), onPressed: () => Navigator.pop(dialogContext, true), child: const Text('متابعة')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: primaryColorNotifier.value),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('ابدأ التحميل'),
+          ),
         ],
       ),
     );
-
-    if (confirm != true || !mounted) return;
-    setState(() => isUpdatingGenres = true);
-    final result = await apiService.autoUpdateLibraryData();
-    if (!mounted) return;
-    setState(() => isUpdatingGenres = false);
-
-    final updated = result['updated'] ?? 0;
-    final failed = result['failed'] ?? 0;
     
-    String message = (updated == 0 && failed == 0)
-        ? 'كل الأنميات لديها بيانات بالفعل! لا حاجة للتحديث.'
-        : 'تم تحديث $updated أنمي بنجاح.\nفشل تحديث $failed أنمي.\n\nملاحظة: فشل التحديث غالباً بسبب أن اسم الأنمي مكتوب بالعربية. يرجى تعديل الأسماء إلى الإنجليزية.';
+    if (confirm != true || !mounted) return;
 
-    await showDialog<void>(
+    bulkService.downloadAllData().then((result) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('اكتمل: ${result['updated']} ناجح | ${result['failed']} فشل')),
+      );
+    });
+  }
+
+  // 🔥 زر تحميل الصور فقط
+  Future<void> _startImagesDownload() async {
+    if (bulkService.isRunning) return;
+    
+    final confirm = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: const Color(0xFF1B1F28),
-        title: const Text('نتيجة التحديث'),
-        content: Text(message),
-        actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('حسنًا'))],
+        title: const Text('تحميل الصور المفقودة'),
+        content: const Text(
+          'سيقوم التطبيق بتحميل جميع الصور (الأغلفة والشخصيات) التي لم تُحفظ محلياً بعد، دون جلب بيانات جديدة من الإنترنت.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: primaryColorNotifier.value),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('ابدأ'),
+          ),
+        ],
       ),
     );
+    
+    if (confirm != true || !mounted) return;
+
+    bulkService.downloadImagesOnly().then((result) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('اكتمل تحميل الصور: ${result['updated']} ناجح | ${result['failed']} فشل')),
+      );
+    });
   }
 
   Future<void> _clearAllGenres() async {
@@ -264,57 +304,138 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     final primaryColor = primaryColorNotifier.value;
 
-    return ListView(
-      padding: const EdgeInsets.all(18),
-      children: [
-        const Text('الإعدادات', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900)),
-        const SizedBox(height: 7),
-        const Text('تحكّم في تطبيقك وبياناتك.', style: TextStyle(color: Colors.white60)),
-        const SizedBox(height: 24),
-        Container(
-          padding: const EdgeInsets.all(19),
-          decoration: BoxDecoration(gradient: LinearGradient(colors: [primaryColor, primaryColor.withOpacity(0.3), const Color(0xFF202431)], begin: Alignment.topRight, end: Alignment.bottomLeft), borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: primaryColor.withOpacity(0.3), blurRadius: 20, spreadRadius: 3)]),
-          child: const Row(
-            children: [
-              Icon(Icons.shield_outlined, size: 46, color: Colors.white),
-              SizedBox(width: 14),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('ذاكرة الأوتاكو', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900)), SizedBox(height: 5), Text('إصدار 1.0.0', style: TextStyle(color: Colors.white70))])),
+    return ValueListenableBuilder<BulkDownloadProgress?>(
+      valueListenable: bulkService.progress,
+      builder: (context, progress, _) {
+        final isDownloading = bulkService.isRunning && progress != null && !progress.isCompleted;
+
+        return ListView(
+          padding: const EdgeInsets.all(18),
+          children: [
+            const Text('الإعدادات', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900)),
+            const SizedBox(height: 7),
+            const Text('تحكّم في تطبيقك وبياناتك.', style: TextStyle(color: Colors.white60)),
+            const SizedBox(height: 24),
+            Container(
+              padding: const EdgeInsets.all(19),
+              decoration: BoxDecoration(gradient: LinearGradient(colors: [primaryColor, primaryColor.withOpacity(0.3), const Color(0xFF202431)], begin: Alignment.topRight, end: Alignment.bottomLeft), borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: primaryColor.withOpacity(0.3), blurRadius: 20, spreadRadius: 3)]),
+              child: const Row(
+                children: [
+                  Icon(Icons.shield_outlined, size: 46, color: Colors.white),
+                  SizedBox(width: 14),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('ذاكرة الأوتاكو', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900)), SizedBox(height: 5), Text('إصدار 1.0.0', style: TextStyle(color: Colors.white70))])),
+                ],
+              ),
+            ),
+            
+            // 🔥 شريط التقدم (يظهر فقط أثناء التحميل)
+            if (isDownloading) ...[
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.all(15),
+                decoration: BoxDecoration(color: const Color(0xFF1B1F28), borderRadius: BorderRadius.circular(16), border: Border.all(color: primaryColor.withOpacity(0.5))),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.cloud_download, color: Colors.cyan, size: 24),
+                        const SizedBox(width: 10),
+                        Expanded(child: Text(progress.status, style: const TextStyle(fontWeight: FontWeight.bold))),
+                        Text('${progress.current}/${progress.total}', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Text(progress.currentTitle, style: const TextStyle(color: Colors.white70, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 10),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: LinearProgressIndicator(value: progress.percentage, minHeight: 8, backgroundColor: Colors.white12, valueColor: AlwaysStoppedAnimation<Color>(primaryColor)),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () => bulkService.cancel(),
+                        style: OutlinedButton.styleFrom(foregroundColor: Colors.redAccent, side: const BorderSide(color: Colors.redAccent)),
+                        icon: const Icon(Icons.stop_circle_outlined),
+                        label: const Text('إيقاف العملية'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ],
-          ),
-        ),
-        const SizedBox(height: 25),
-        const Text('التخصيص', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-        const SizedBox(height: 12),
-        _settingsTile(icon: Icons.palette_outlined, color: primaryColor, title: 'المظهر', subtitle: darkMode ? 'الوضع الداكن' : 'الوضع الفاتح', trailing: Switch(value: darkMode, activeColor: primaryColor, onChanged: _toggleTheme), onTap: null),
-        const SizedBox(height: 10),
-        _settingsTile(icon: Icons.color_lens_outlined, color: primaryColor, title: 'لون التطبيق', subtitle: 'تغيير اللون الأساسي للتطبيق (18 لوناً)', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: _showColorPicker),
-        const SizedBox(height: 10),
-        _settingsTile(icon: Icons.font_download_outlined, color: primaryColor, title: 'خط اسم الأنمي', subtitle: 'اختيار الخط المفضل (Cairo, Tajawal...)', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: _showFontPicker),
-        const SizedBox(height: 10),
-        _settingsTile(icon: Icons.format_color_text, color: titleColorNotifier.value, title: 'لون اسم الأنمي', subtitle: 'تغيير لون النص في البطاقات', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: _showTitleColorPicker),
-        const SizedBox(height: 24),
-        const Text('إدارة البيانات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-        const SizedBox(height: 12),
-        _settingsTile(icon: Icons.sync_alt, color: const Color(0xFF3A91B5), title: 'تحديث البيانات تلقائياً', subtitle: 'جلب التصنيفات، القصص، الحلقات، والتقييمات', trailing: isUpdatingGenres ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.chevron_left, color: Colors.white38), onTap: isUpdatingGenres ? null : _autoUpdateGenres),
-        const SizedBox(height: 10),
-        _settingsTile(icon: Icons.delete_sweep_outlined, color: const Color(0xFFFF5A65), title: 'مسح جميع التصنيفات', subtitle: 'حذف التصنيفات من جميع الأنميات', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: _clearAllGenres),
-        const SizedBox(height: 10),
-        // 🔥 زر سلة المهملات الجديد
-        _settingsTile(icon: Icons.delete_outline, color: const Color(0xFFFFB74D), title: 'سلة المهملات', subtitle: 'استعادة الأنميات المحذوفة', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: () { Navigator.push(context, MaterialPageRoute(builder: (_) => const TrashScreen())); }),
-        const SizedBox(height: 24),
-        const Text('النسخ الاحتياطي', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-        const SizedBox(height: 12),
-        _settingsTile(icon: Icons.backup_outlined, color: const Color(0xFF35B77A), title: 'إنشاء نسخة احتياطية', subtitle: 'حفظ بياناتك في ملف ZIP', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: backupBusy ? null : () => runBackupAction(restore: false)),
-        const SizedBox(height: 10),
-        _settingsTile(icon: Icons.settings_backup_restore, color: const Color(0xFFFFC857), title: 'استعادة نسخة احتياطية', subtitle: 'استرجاع بياناتك من ملف ZIP', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: backupBusy ? null : () => runBackupAction(restore: true)),
-        if (backupBusy) ...[const SizedBox(height: 16), const Center(child: CircularProgressIndicator()), const SizedBox(height: 8), const Center(child: Text('جارٍ تجهيز البيانات...', style: TextStyle(color: Colors.white60)))],
-        const SizedBox(height: 24),
-        const Text('حول التطبيق', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-        const SizedBox(height: 12),
-        _settingsTile(icon: Icons.info_outline, color: const Color(0xFFFFC857), title: 'عن ذاكرة الأوتاكو', subtitle: 'معلومات عن التطبيق', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: showAbout),
-        const SizedBox(height: 28),
-        const Center(child: Text('صُنع للأوتاكو، ليحفظ كل ذكرى.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 12))),
-      ],
+
+            const SizedBox(height: 25),
+            const Text('التخصيص', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 12),
+            _settingsTile(icon: Icons.palette_outlined, color: primaryColor, title: 'المظهر', subtitle: darkMode ? 'الوضع الداكن' : 'الوضع الفاتح', trailing: Switch(value: darkMode, activeColor: primaryColor, onChanged: _toggleTheme), onTap: null),
+            const SizedBox(height: 10),
+            _settingsTile(icon: Icons.color_lens_outlined, color: primaryColor, title: 'لون التطبيق', subtitle: 'تغيير اللون الأساسي للتطبيق', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: _showColorPicker),
+            const SizedBox(height: 10),
+            _settingsTile(icon: Icons.font_download_outlined, color: primaryColor, title: 'خط اسم الأنمي', subtitle: 'اختيار الخط المفضل', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: _showFontPicker),
+            const SizedBox(height: 10),
+            _settingsTile(icon: Icons.format_color_text, color: titleColorNotifier.value, title: 'لون اسم الأنمي', subtitle: 'تغيير لون النص في البطاقات', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: _showTitleColorPicker),
+            
+            const SizedBox(height: 24),
+            const Text('التحميل والتحديث', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 12),
+            
+            // 🔥 التحديث التلقائي (معطل افتراضياً)
+            _settingsTile(
+              icon: Icons.sync,
+              color: const Color(0xFFFF9F43),
+              title: 'التحديث التلقائي عند فتح التطبيق',
+              subtitle: autoFetchEnabled ? 'مُفعّل (يستهلك إنترنت)' : 'معطّل (التطبيق لا يعمل إلا بأمرك)',
+              trailing: Switch(value: autoFetchEnabled, activeColor: primaryColor, onChanged: _toggleAutoFetch),
+              onTap: null,
+            ),
+            const SizedBox(height: 10),
+            
+            // 🔥 زر التحميل الشامل
+            _settingsTile(
+              icon: Icons.cloud_download_outlined,
+              color: const Color(0xFF3A91B5),
+              title: 'تحميل شامل (بيانات + صور + مواسم)',
+              subtitle: 'يجلب كل شيء لكل الأنميات ويحفظه محلياً',
+              trailing: const Icon(Icons.chevron_left, color: Colors.white38),
+              onTap: isDownloading ? null : _startBulkDownload,
+            ),
+            const SizedBox(height: 10),
+            
+            // 🔥 زر تحميل الصور فقط
+            _settingsTile(
+              icon: Icons.image_outlined,
+              color: const Color(0xFF9B59B6),
+              title: 'تحميل الصور المفقودة فقط',
+              subtitle: 'يحمل الصور غير المحفوظة دون جلب بيانات جديدة',
+              trailing: const Icon(Icons.chevron_left, color: Colors.white38),
+              onTap: isDownloading ? null : _startImagesDownload,
+            ),
+            const SizedBox(height: 10),
+            
+            _settingsTile(icon: Icons.delete_sweep_outlined, color: const Color(0xFFFF5A65), title: 'مسح جميع التصنيفات', subtitle: 'حذف التصنيفات من جميع الأنميات', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: _clearAllGenres),
+            const SizedBox(height: 10),
+            _settingsTile(icon: Icons.delete_outline, color: const Color(0xFFFFB74D), title: 'سلة المهملات', subtitle: 'استعادة الأنميات المحذوفة', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: () { Navigator.push(context, MaterialPageRoute(builder: (_) => const TrashScreen())); }),
+            
+            const SizedBox(height: 24),
+            const Text('النسخ الاحتياطي', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 12),
+            _settingsTile(icon: Icons.backup_outlined, color: const Color(0xFF35B77A), title: 'إنشاء نسخة احتياطية', subtitle: 'حفظ بياناتك (مع الصور والفيديوهات)', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: backupBusy ? null : () => runBackupAction(restore: false)),
+            const SizedBox(height: 10),
+            _settingsTile(icon: Icons.settings_backup_restore, color: const Color(0xFFFFC857), title: 'استعادة نسخة احتياطية', subtitle: 'استرجاع بياناتك من ملف ZIP', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: backupBusy ? null : () => runBackupAction(restore: true)),
+            if (backupBusy) ...[const SizedBox(height: 16), const Center(child: CircularProgressIndicator()), const SizedBox(height: 8), const Center(child: Text('جارٍ تجهيز البيانات...', style: TextStyle(color: Colors.white60)))],
+            
+            const SizedBox(height: 24),
+            const Text('حول التطبيق', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 12),
+            _settingsTile(icon: Icons.info_outline, color: const Color(0xFFFFC857), title: 'عن ذاكرة الأوتاكو', subtitle: 'معلومات عن التطبيق', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: showAbout),
+            const SizedBox(height: 28),
+            const Center(child: Text('صُنع للأوتاكو، ليحفظ كل ذكرى.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 12))),
+          ],
+        );
+      },
     );
   }
 
