@@ -3,7 +3,7 @@ import 'dart:math';
 import 'package:http/http.dart' as http;
 import '../models/anime.dart';
 import 'storage_service.dart';
-import 'image_service.dart'; // 🔥 جديد
+import 'image_service.dart';
 
 class AnimeApiService {
   final StorageService _storage = StorageService();
@@ -47,6 +47,12 @@ class AnimeApiService {
                       genres
                       coverImage { large }
                       format
+                      characters(sort: [ROLE, RELEVANCE, ID], perPage: 6) {
+                        nodes {
+                          name { full }
+                          image { large }
+                        }
+                      }
                     }
                   }
                 }
@@ -59,7 +65,7 @@ class AnimeApiService {
           Uri.parse(url),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({'query': query, 'variables': {'search': animeTitle.trim()}}),
-        ).timeout(const Duration(seconds: 15));
+        ).timeout(const Duration(seconds: 20));
 
         if (response.statusCode == 200) {
           final data = jsonDecode(response.body);
@@ -138,6 +144,21 @@ class AnimeApiService {
                       subImagePath = await ImageService.downloadImage(subImageUrl, prefix: 'sub');
                     }
                     
+                    // 🔥 جلب شخصيات الموسم
+                    List<Map<String, dynamic>> subCharacters = [];
+                    final subCharList = node['characters']?['nodes'] as List?;
+                    if (subCharList != null) {
+                      for (var c in subCharList) {
+                        final name = c['name']?['full'] ?? 'غير معروف';
+                        final imgUrl = c['image']?['large'] ?? '';
+                        String? charImagePath;
+                        if (downloadImages && imgUrl.toString().isNotEmpty) {
+                          charImagePath = await ImageService.downloadImage(imgUrl.toString(), prefix: 'char');
+                        }
+                        subCharacters.add({'name': name, 'imageUrl': imgUrl, 'imagePath': charImagePath});
+                      }
+                    }
+                    
                     String partName = 'جزء إضافي';
                     if (format == 'MOVIE') partName = 'فيلم';
                     else if (relationType == 'PREQUEL') partName = 'موسم سابق';
@@ -153,14 +174,14 @@ class AnimeApiService {
                       'globalRating': subScore != null ? subScore / 10.0 : null,
                       'releaseYear': node['startDate']?['year'] as int?,
                       'imageUrl': subImageUrl,
-                      'imagePath': subImagePath, // 🔥
+                      'imagePath': subImagePath,
+                      'characters': subCharacters, // 🔥 إضافة شخصيات الموسم
                     });
                   }
                 }
               }
             }
             
-            // تحميل صورة الغلاف الرئيسي (فقط إذا طُلب)
             String? mainImagePath;
             if (downloadImages && imageUrl != null) {
               mainImagePath = await ImageService.downloadImage(imageUrl, prefix: 'cover');
@@ -202,9 +223,8 @@ class AnimeApiService {
     return text; 
   }
 
-  // دالة autoUpdateLibraryData بقيت للتوافق - لكن الأفضل استخدام BulkDownloadService الآن
   Future<Map<String, int>> autoUpdateLibraryData() async {
-    // ... يمكن تركها كما هي، لكن لن نستخدمها من الشاشات
+    // ... يمكن تركها كما هي
     return {'updated': 0, 'failed': 0};
   }
 
