@@ -12,7 +12,7 @@ import '../models/anime.dart';
 import '../services/storage_service.dart';
 import '../services/anime_api_service.dart';
 import 'otaku_oracle_screen.dart';
-import 'random_picker_screen.dart'; // 🔥 استيراد شاشة القرعة
+import 'random_picker_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -47,7 +47,6 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> loadData() async {
     final result = await storage.loadAnimes();
     if (!mounted) return;
-    // 🔥 فلترة لعرض الأنميات الأصلية فقط في الرئيسية
     setState(() { animes = result.where((a) => a.parentId == null).toList(); loading = false; });
   }
 
@@ -379,7 +378,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // 🔥 كارت الإنجاز المفتوح
   Widget _buildLatestAchievementCard() {
     int count = animes.length;
     String title = '';
@@ -470,7 +468,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           
-          _buildLatestAchievementCard(), // 🔥 كارت الإنجاز هنا
+          _buildLatestAchievementCard(),
 
           const SizedBox(height: 25),
           const Text('إحصائياتك', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
