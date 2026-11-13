@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math'; // 🔥 لاستخدام العشوائية
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -10,6 +11,7 @@ import '../models/anime.dart';
 import '../services/storage_service.dart';
 import '../services/anime_api_service.dart';
 import 'otaku_oracle_screen.dart';
+import 'anime_details_screen.dart'; // 🔥 لاستخدامها في الانتقال للأنمي المختار
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -76,7 +78,7 @@ class _HomeScreenState extends State<HomeScreen> {
   double get averageRating {
     final rated = animes.where((a) => a.rating > 0).toList();
     if (rated.isEmpty) return 0;
-    return rated.fold<double>(0, (sum, a) => sum + a.rating) / rated.length; // 🔥 sum double
+    return rated.fold<double>(0, (sum, a) => sum + a.rating) / rated.length;
   }
 
   Future<String> _saveImageLocally(String sourcePath) async {
@@ -135,7 +137,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final memoryController = TextEditingController();
 
     String status = '';
-    double rating = 0.0; // 🔥
+    double rating = 0.0;
     XFile? selectedImage;
     List<String> selectedGenres = [];
 
@@ -206,7 +208,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         onChanged: (value) { if (value != null) setDialogState(() => status = value); },
                       ),
                       const SizedBox(height: 16),
-                      // 🔥 استخدام Slider
                       Column(
                         children: [
                           Text('تقييمك: ${rating.toStringAsFixed(1)} / 10', style: TextStyle(fontWeight: FontWeight.bold, color: primaryColorNotifier.value, fontSize: 16)),
@@ -325,6 +326,113 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // 🔥 زر القرعة
+  Widget _randomPickerButton() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        gradient: const LinearGradient(colors: [Color(0xFF247BA0), Color(0xFF27866F), Color(0xFF202431)], begin: Alignment.topRight, end: Alignment.bottomLeft),
+        border: Border.all(color: Colors.cyan.withOpacity(0.6), width: 1.5),
+        boxShadow: [BoxShadow(color: Colors.cyan.withOpacity(0.5), blurRadius: 25, spreadRadius: 5)],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(20),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: _showRandomPicker,
+          child: const Padding(
+            padding: EdgeInsets.all(17),
+            child: Row(
+              children: [
+                CircleAvatar(radius: 25, backgroundColor: Colors.white24, child: Icon(Icons.casino, color: Colors.white, size: 29)),
+                SizedBox(width: 13),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('قرعة الأنمي 🎲', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900)), SizedBox(height: 5), Text('ماذا أشاهد الآن؟', style: TextStyle(color: Colors.white70, fontSize: 12))])),
+                Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 18),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // 🔥 دالة القرعة
+  void _showRandomPicker() {
+    final watchingAnimes = animes.where((a) => a.status == 'أتابعه').toList();
+    if (watchingAnimes.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ليس لديك أنميات في قائمة "أتابعه" لعمل قرعة.')));
+      return;
+    }
+
+    watchingAnimes.shuffle();
+    final candidates = watchingAnimes.take(5).toList();
+    Anime? selected;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF1B1F28),
+              title: const Text('قرعة الأنمي 🎲', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white), textAlign: TextAlign.center),
+              content: SizedBox(
+                width: 300,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (selected == null)
+                      const Text('اضغط على الزر لاختيار أنمي من قائمتك!', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60)),
+                    if (selected != null) ...[
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: selected!.imagePath != null
+                            ? Image.file(File(selected!.imagePath!), height: 150, width: double.infinity, fit: BoxFit.cover)
+                            : Container(height: 150, color: Colors.black26, child: const Icon(Icons.movie, size: 50, color: Colors.white24)),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(selected!.title, style: GoogleFonts.cairo(fontSize: 20, fontWeight: FontWeight.bold, color: const Color(0xFFFFD700)), textAlign: TextAlign.center),
+                    ],
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          setDialogState(() {
+                            selected = candidates[Random().nextInt(candidates.length)];
+                          });
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryColorNotifier.value,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        icon: const Icon(Icons.casino, color: Colors.white),
+                        label: const Text('اختر لي الآن!', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إغلاق')),
+                if (selected != null)
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(dialogContext);
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => AnimeDetailsScreen(anime: selected!))).then((_) => loadData());
+                    },
+                    child: const Text('شاهد هذا!', style: TextStyle(color: Colors.cyan)),
+                  ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final primaryColor = primaryColorNotifier.value;
@@ -343,7 +451,14 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
           const SizedBox(height: 20),
-          _oracleButton(),
+          // 🔥 وضعت الزرين جنباً إلى جنب
+          Row(
+            children: [
+              Expanded(child: _oracleButton()),
+              const SizedBox(width: 10),
+              Expanded(child: _randomPickerButton()),
+            ],
+          ),
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(gradient: LinearGradient(colors: [primaryColor, primaryColor.withOpacity(0.3), const Color(0xFF202431)], begin: Alignment.topRight, end: Alignment.bottomLeft), borderRadius: BorderRadius.circular(22), border: Border.all(color: primaryColor.withOpacity(0.4), width: 1.5), boxShadow: [BoxShadow(color: primaryColor.withOpacity(0.3), blurRadius: 20, spreadRadius: 3)]),
