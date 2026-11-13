@@ -15,7 +15,12 @@ dependencies:
   archive: ^3.6.1
   file_picker: ^8.1.7
   http: ^1.2.0
-  google_fonts: ^6.2.1 # 🔥 هذه هي الحزمة الجديدة التي أضفناها
+  google_fonts: ^6.2.1
+  
+  # 🔥 الحزم الجديدة للميزات الثلاث:
+  fl_chart: ^0.68.0       # للرسوم البيانية (Pie Chart) في المرآة
+  screenshot: ^3.0.0      # لأخذ لقطة شاشة للبطاقة
+  share_plus: ^10.1.2     # لمشاركة الصورة
 
 dev_dependencies:
   flutter_test:
