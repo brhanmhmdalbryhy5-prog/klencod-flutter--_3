@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:math'; // 🔥 ضروري لتوليد أرقام عشوائية للمواسم
+import 'dart:math';
 import 'package:http/http.dart' as http;
 import '../models/anime.dart';
 import 'storage_service.dart';
@@ -26,7 +26,6 @@ class AnimeApiService {
                 episodes
                 averageScore
                 startDate { year }
-                coverImage { large }
                 relations {
                   edges {
                     relationType
@@ -76,7 +75,6 @@ class AnimeApiService {
             final int? averageScore = media['averageScore'] as int?;
             final double? globalRating = averageScore != null ? averageScore / 10.0 : null;
             final int? releaseYear = media['startDate']?['year'] as int?;
-            final String? imageUrl = media['coverImage']?['large'] as String?;
 
             String summary = '';
             if (!hasAdultContent) {
@@ -123,7 +121,7 @@ class AnimeApiService {
                       'genre': subGenres.join('، '),
                       'globalRating': subScore != null ? subScore / 10.0 : null,
                       'releaseYear': node['startDate']?['year'] as int?,
-                      'imageUrl': node['coverImage']?['large'] as String?,
+                      'imageUrl': node['coverImage']?['large'] as String?, // 🔥 الصورة للمواسم فقط
                     });
                   }
                 }
@@ -136,7 +134,7 @@ class AnimeApiService {
               'episodes': episodes,
               'globalRating': globalRating,
               'releaseYear': releaseYear,
-              'imageUrl': imageUrl,
+              'imageUrl': null, // 🔥 الأنمي الأصلي لا يجلب صورة
               'subAnimes': subAnimes,
             };
           }
@@ -170,7 +168,6 @@ class AnimeApiService {
     return text; 
   }
 
-  // 🔥 دالة التحديث الشامل (تمت إضافة إنشاء المواسم هنا)
   Future<Map<String, int>> autoUpdateLibraryData() async {
     final animes = await _storage.loadAnimes();
     int updatedCount = 0;
@@ -178,24 +175,19 @@ class AnimeApiService {
 
     for (int i = 0; i < animes.length; i++) {
       final anime = animes[i];
-      // تخطي المواسم (لأنها لا تحتوي على مواسم بداخلها)
       if (anime.parentId != null) continue;
 
-      // إذا كان الأنمي يملك كل البيانات، تخطاه
-      if (anime.genre.trim().isNotEmpty && anime.summary.trim().isNotEmpty && anime.episodes > 0 && anime.globalRating != null && anime.releaseYear != null && anime.imageUrl != null) continue;
+      if (anime.genre.trim().isNotEmpty && anime.summary.trim().isNotEmpty && anime.episodes > 0 && anime.globalRating != null && anime.releaseYear != null) continue;
 
       final data = await fetchAnimeData(anime.title);
       bool changed = false;
 
-      // تحديث بيانات الأنمي الأصلي
       if (anime.genre.trim().isEmpty && (data['genres'] as List).isNotEmpty) { anime.genre = (data['genres'] as List).join('، '); changed = true; }
       if (anime.summary.trim().isEmpty && data['summary'].isNotEmpty) { anime.summary = data['summary']; changed = true; }
       if (anime.episodes == 0 && data['episodes'] > 0) { anime.episodes = data['episodes']; changed = true; }
       if (anime.globalRating == null && data['globalRating'] != null) { anime.globalRating = data['globalRating']; changed = true; }
       if (anime.releaseYear == null && data['releaseYear'] != null) { anime.releaseYear = data['releaseYear']; changed = true; }
-      if (anime.imageUrl == null && data['imageUrl'] != null) { anime.imageUrl = data['imageUrl']; changed = true; }
 
-      // 🔥 إنشاء قوالب المواسم والأفلام إذا وجدت
       final List<Map<String, dynamic>> subData = data['subAnimes'];
       if (subData.isNotEmpty) {
         for (var sub in subData) {
@@ -214,13 +206,13 @@ class AnimeApiService {
               imageUrl: sub['imageUrl'],
             );
             animes.add(newSub);
-            changed = true; // نعتبرها تغييراً حتى يتم الحفظ
+            changed = true;
           }
         }
       }
 
       if (changed) updatedCount++; else failedCount++;
-      await Future.delayed(const Duration(milliseconds: 1500)); // تأخير لتفادي الحظر
+      await Future.delayed(const Duration(milliseconds: 1500));
     }
 
     if (updatedCount > 0) await _storage.saveAnimes(animes);
