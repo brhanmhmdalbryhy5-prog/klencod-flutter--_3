@@ -12,13 +12,16 @@ class Anime {
   bool favorite;
   int colorIndex;
   String date;
-  String? imagePath; // مسار الصورة المحلية
-  String? imageUrl;  // 🔥 رابط الصورة من الإنترنت
+  String? imagePath;
+  String? imageUrl;
   double? globalRating;
   int? releaseYear;
   String? parentId;
   String? partName;
   String? videoPath;
+  
+  // 🔥 حقل جديد للشخصيات الرئيسية
+  List<Map<String, dynamic>> characters;
 
   Anime({
     required this.id,
@@ -41,6 +44,7 @@ class Anime {
     this.parentId,
     this.partName,
     this.videoPath,
+    this.characters = const [], // القيمة الافتراضية
   });
 
   Map<String, dynamic> toJson() {
@@ -52,6 +56,7 @@ class Anime {
       'date': date, 'imagePath': imagePath, 'imageUrl': imageUrl,
       'globalRating': globalRating, 'releaseYear': releaseYear, 
       'parentId': parentId, 'partName': partName, 'videoPath': videoPath,
+      'characters': characters, // 🔥
     };
   }
 
@@ -77,6 +82,7 @@ class Anime {
       parentId: json['parentId'] as String?,
       partName: json['partName'] as String?,
       videoPath: json['videoPath'] as String?,
+      characters: (json['characters'] as List?)?.map((e) => Map<String, dynamic>.from(e)).toList() ?? [],
     );
   }
 }
