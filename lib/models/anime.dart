@@ -15,11 +15,9 @@ class Anime {
   String? imagePath;
   double? globalRating;
   int? releaseYear;
-  
-  // 🔥 الحقول الجديدة للمواسم والأفلام والفيديو
-  String? parentId; // إذا كان هذا الأنمي موسم، فهذا الحقل يحتوي على ID الأنمي الأصلي
-  String? partName; // اسم الموسم أو الفيلم (مثل: "الموسم الأول")
-  String? videoPath; // مسار فيديو التذكار
+  String? parentId; // للمواسم
+  String? partName; // اسم الموسم
+  String? videoPath; // مسار الفيديو
 
   Anime({
     required this.id,
