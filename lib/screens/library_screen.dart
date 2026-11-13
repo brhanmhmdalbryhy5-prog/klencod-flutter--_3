@@ -42,7 +42,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   List<Anime> animes = [];
   String selectedStatus = 'الكل';
-  double selectedRatingFilter = 0; // 🔥 أصبح double
+  double selectedRatingFilter = 0;
   String searchText = '';
   String sortMode = 'newest';
   int viewMode = 0;
@@ -344,7 +344,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     final yearController = TextEditingController(text: anime.releaseYear?.toString() ?? '');
 
     String status = anime.status;
-    double rating = anime.rating; // 🔥
+    double rating = anime.rating;
     String? imagePath = anime.imagePath;
     bool imageChanged = false;
     List<String> selectedGenres = anime.genre.split('،').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
@@ -420,7 +420,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
                           onChanged: (value) { if (value != null) setDialogState(() => status = value); },
                         ),
                         const SizedBox(height: 14),
-                        // 🔥 استخدام Slider للتقييم
                         Column(
                           children: [
                             Text('تقييمك: ${rating.toStringAsFixed(1)} / 10', style: TextStyle(fontWeight: FontWeight.bold, color: primaryColorNotifier.value, fontSize: 16)),
@@ -428,7 +427,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                               value: rating,
                               min: 0,
                               max: 10,
-                              divisions: 20, // يسمح بـ 0.5
+                              divisions: 20,
                               label: rating.toStringAsFixed(1),
                               activeColor: const Color(0xFFFFC857),
                               onChanged: (value) {
@@ -471,7 +470,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         ..watchedEpisodes = int.tryParse(watchedController.text) ?? 0
         ..releaseYear = int.tryParse(yearController.text)
         ..status = status
-        ..rating = rating // 🔥
+        ..rating = rating
         ..summary = summaryController.text.trim()
         ..memory = memoryController.text.trim()
         ..imagePath = imagePath;
@@ -499,7 +498,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
-  // 🔥 دالة بناء الاسم بالخط واللون المختارين
   Widget _buildAnimeTitle(String title, {double fontSize = 16}) {
     final fontName = fontNotifier.value;
     final titleColor = titleColorNotifier.value;
@@ -521,10 +519,26 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
+  // 🔥 تعديل شريط التقدم ليظهر علامة صح عند الإكمال
   Widget _buildProgressBar(Anime anime) {
     if (anime.episodes <= 0 || anime.watchedEpisodes <= 0) return const SizedBox.shrink();
+
+    // إذا اكتملت جميع الحلقات
+    if (anime.watchedEpisodes >= anime.episodes) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Row(
+          children: [
+            const Icon(Icons.check_circle, color: Colors.greenAccent, size: 16),
+            const SizedBox(width: 4),
+            Text('مكتمل (${anime.episodes})', style: const TextStyle(color: Colors.greenAccent, fontSize: 11, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      );
+    }
+
+    // إذا لم تكتمل بعد
     double progress = anime.watchedEpisodes / anime.episodes;
-    if (progress > 1.0) progress = 1.0;
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -831,7 +845,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 ),
               ),
               const SizedBox(height: 10),
-              // 🔥 فلتر التقييم يدعم الآن الأنصاف
               SizedBox(
                 height: 42,
                 child: ListView(
