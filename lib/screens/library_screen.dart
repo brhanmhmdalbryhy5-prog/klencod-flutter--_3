@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart'; // 🔥 استيراد الخط
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -38,9 +39,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   List<Anime> animes = [];
   String selectedStatus = 'الكل';
+  int selectedRatingFilter = 0; // 🔥 0 = الكل، 10 = تقييم 10، إلخ
   String searchText = '';
   String sortMode = 'newest';
-  bool gridView = false;
+  int viewMode = 0; // 0: قائمة، 1: شبكة 2، 2: شبكة 3
   bool loading = true;
 
   final List<Color> colors = const [
@@ -67,7 +69,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       if (!mounted) return;
       setState(() {
         sortMode = prefs.getString(_sortKey) ?? 'newest';
-        gridView = prefs.getBool(_viewKey) ?? false;
+        viewMode = prefs.getInt(_viewKey) ?? 0;
       });
     } catch (_) {}
   }
@@ -76,7 +78,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_sortKey, sortMode);
-      await prefs.setBool(_viewKey, gridView);
+      await prefs.setInt(_viewKey, viewMode);
     } catch (_) {}
   }
 
@@ -112,7 +114,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
         matchesStatus = anime.status == selectedStatus;
       }
 
-      return matchesSearch && matchesStatus;
+      // 🔥 فلترة التقييم
+      bool matchesRating = true;
+      if (selectedRatingFilter > 0) {
+        matchesRating = anime.rating == selectedRatingFilter;
+      }
+
+      return matchesSearch && matchesStatus && matchesRating;
     }).toList();
 
     switch (sortMode) {
@@ -247,7 +255,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     final String summary = data['summary'];
     final int episodes = data['episodes'];
     final double? globalRating = data['globalRating'];
-    final int? releaseYear = data['releaseYear']; // 🔥
+    final int? releaseYear = data['releaseYear'];
 
     if (genres.isNotEmpty || summary.isNotEmpty || episodes > 0 || globalRating != null || releaseYear != null) {
       setState(() {
@@ -255,7 +263,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         if (summary.isNotEmpty) anime.summary = summary;
         if (episodes > 0) anime.episodes = episodes;
         if (globalRating != null) anime.globalRating = globalRating;
-        if (releaseYear != null) anime.releaseYear = releaseYear; // 🔥
+        if (releaseYear != null) anime.releaseYear = releaseYear;
       });
       await storage.saveAnimes(animes);
       if (!mounted) return;
@@ -326,7 +334,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     final episodesController = TextEditingController(text: anime.episodes == 0 ? '' : '${anime.episodes}');
     final summaryController = TextEditingController(text: anime.summary);
     final memoryController = TextEditingController(text: anime.memory);
-    final yearController = TextEditingController(text: anime.releaseYear?.toString() ?? ''); // 🔥
+    final yearController = TextEditingController(text: anime.releaseYear?.toString() ?? '');
 
     String status = anime.status;
     int rating = anime.rating;
@@ -385,7 +393,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
                           children: [
                             Expanded(child: TextField(controller: episodesController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'عدد الحلقات'))),
                             const SizedBox(width: 10),
-                            // 🔥 حقل سنة النزول
                             Expanded(child: TextField(controller: yearController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'سنة النزول'))),
                           ],
                         ),
@@ -456,7 +463,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         ..genre = selectedGenres.join('، ')
         ..character = characterController.text.trim()
         ..episodes = int.tryParse(episodesController.text) ?? 0
-        ..releaseYear = int.tryParse(yearController.text) // 🔥
+        ..releaseYear = int.tryParse(yearController.text)
         ..status = status
         ..rating = rating
         ..summary = summaryController.text.trim()
@@ -485,9 +492,28 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
+  // 🔥 تنسيق اسم الأنمي ليكون مميزاً (خط Cairo ولون ذهبي مع توهج)
+  Widget _buildAnimeTitle(String title, {double fontSize = 16}) {
+    return Text(
+      title.trim().isEmpty ? 'أنمي بدون اسم' : title,
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+      style: GoogleFonts.cairo(
+        fontSize: fontSize,
+        fontWeight: FontWeight.w900,
+        color: const Color(0xFFFFD700), // لون ذهبي
+        shadows: [
+          Shadow(
+            color: primaryColorNotifier.value.withOpacity(0.8),
+            blurRadius: 10,
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildRowCard(Anime anime) {
     final color = colors[anime.colorIndex.abs() % colors.length];
-    // 🔥 عرض السنة في التفاصيل
     final details = [
       if (anime.releaseYear != null) '${anime.releaseYear}', 
       if (anime.status.isNotEmpty) anime.status, 
@@ -518,7 +544,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(anime.title.trim().isEmpty ? 'أنمي بدون اسم' : anime.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                      _buildAnimeTitle(anime.title),
                       const SizedBox(height: 6),
                       Text(anime.genre.isEmpty ? 'بدون تصنيف' : anime.genre, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white54, fontSize: 12)),
                       if (details.isNotEmpty) ...[
@@ -558,7 +584,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
-  Widget _buildGridCard(Anime anime) {
+  Widget _buildGridCard(Anime anime, {bool isCompact = false}) {
     final color = colors[anime.colorIndex.abs() % colors.length];
 
     return Container(
@@ -589,7 +615,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(anime.title.trim().isEmpty ? 'أنمي بدون اسم' : anime.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+                  _buildAnimeTitle(anime.title, fontSize: isCompact ? 11 : 13),
                   const SizedBox(height: 4),
                   Text(anime.genre.isEmpty ? 'بدون تصنيف' : anime.genre, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white54, fontSize: 11)),
                   Row(
@@ -668,12 +694,21 @@ class _LibraryScreenState extends State<LibraryScreen> {
           ),
         ),
         const SizedBox(width: 10),
+        // 🔥 زر تغيير شكل العرض
         Container(
           decoration: BoxDecoration(color: const Color(0xFF1B1F28), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),
           child: IconButton(
-            tooltip: gridView ? 'عرض الصفوف' : 'عرض الأعمدة',
-            onPressed: () { setState(() => gridView = !gridView); _saveLibraryPreferences(); },
-            icon: Icon(gridView ? Icons.view_agenda_outlined : Icons.grid_view_rounded, color: const Color(0xFFFFC857)),
+            tooltip: 'تغيير العرض',
+            onPressed: () {
+              setState(() {
+                viewMode = (viewMode + 1) % 3; // 0 -> 1 -> 2 -> 0
+              });
+              _saveLibraryPreferences();
+            },
+            icon: Icon(
+              viewMode == 0 ? Icons.view_agenda_outlined : (viewMode == 1 ? Icons.grid_view_rounded : Icons.apps),
+              color: const Color(0xFFFFC857),
+            ),
           ),
         ),
       ],
@@ -704,6 +739,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
             ),
           ),
           const SizedBox(height: 16),
+          // فلاتر الحالة
           SizedBox(
             height: 42,
             child: ListView(
@@ -728,6 +764,32 @@ class _LibraryScreenState extends State<LibraryScreen> {
               }).toList(),
             ),
           ),
+          const SizedBox(height: 10),
+          // 🔥 فلاتر التقييم الجديدة
+          SizedBox(
+            height: 42,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                'كل التقييمات', '10', '9', '8', '7', '6', '5', '4', '3', '2', '1'
+              ].map((rate) {
+                final val = rate == 'كل التقييمات' ? 0 : int.parse(rate);
+                final selected = selectedRatingFilter == val;
+                return Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: ChoiceChip(
+                    label: Text(rate),
+                    selected: selected,
+                    selectedColor: const Color(0xFFFFC857),
+                    backgroundColor: const Color(0xFF1B1F28),
+                    side: BorderSide(color: selected ? const Color(0xFFFFC857) : Colors.white12),
+                    labelStyle: TextStyle(color: selected ? Colors.black : Colors.white),
+                    onSelected: (_) => setState(() => selectedRatingFilter = val),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
           const SizedBox(height: 14),
           _buildToolbar(),
           const SizedBox(height: 18),
@@ -747,7 +809,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 ],
               ),
             )
-          else if (gridView)
+          else if (viewMode == 1) // شبكة 2 أعمدة
             GridView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
@@ -755,7 +817,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 10, mainAxisSpacing: 12, childAspectRatio: 0.58),
               itemBuilder: (context, index) => _buildGridCard(items[index]),
             )
-          else
+          else if (viewMode == 2) // 🔥 شبكة 3 أعمدة (مضغوطة)
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: items.length,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, crossAxisSpacing: 8, mainAxisSpacing: 8, childAspectRatio: 0.6),
+              itemBuilder: (context, index) => _buildGridCard(items[index], isCompact: true),
+            )
+          else // قائمة
             ...items.map(_buildRowCard),
           const SizedBox(height: 20),
         ],
