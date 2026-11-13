@@ -378,21 +378,44 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // 🔥 كارت الإنجاز الجديد
   Widget _buildLatestAchievementCard() {
-    int count = animes.length;
-    String title = '';
-    IconData icon = Icons.emoji_events;
-    Color color = Colors.white54;
-    
-    if (count >= 1000) { title = 'إمبراطور الأوتاكو'; icon = Icons.workspace_premium; color = const Color(0xFFFFC857); }
-    else if (count >= 500) { title = 'أوتاكو حقيقي'; icon = Icons.verified; color = const Color(0xFFFF5252); }
-    else if (count >= 200) { title = 'أسطورة'; icon = Icons.auto_awesome; color = const Color(0xFFE040FB); }
-    else if (count >= 100) { title = 'خبير'; icon = Icons.psychology; color = const Color(0xFF00E5FF); }
-    else if (count >= 50) { title = 'متذوق'; icon = Icons.local_cafe; color = const Color(0xFFFFD700); }
-    else if (count >= 30) { title = 'مستكشف'; icon = Icons.explore; color = const Color(0xFFC0C0C0); }
-    else if (count >= 10) { title = 'مبتدئ'; icon = Icons.star_border; color = const Color(0xFFCD7F32); }
+    int totalCount = animes.length;
+    if (totalCount < 10) return const SizedBox.shrink();
 
-    if (title.isEmpty) return const SizedBox.shrink();
+    final List<Color> achColors = [
+      const Color(0xFFCD7F32), const Color(0xFFC0C0C0), const Color(0xFFFFD700), 
+      const Color(0xFF00E5FF), const Color(0xFFE040FB), const Color(0xFFFF5252), 
+      const Color(0xFF69F0AE), const Color(0xFFFFAB40), const Color(0xFF448AFF), 
+      const Color(0xFFFF4081)
+    ];
+    
+    final List<IconData> achIcons = [
+      Icons.star_border, Icons.explore, Icons.local_cafe, Icons.psychology,
+      Icons.auto_awesome, Icons.verified, Icons.workspace_premium, Icons.military_tech,
+      Icons.diamond, Icons.emoji_events
+    ];
+
+    final List<String> achTitles = [
+      'البداية', 'المستكشف', 'الباحث', 'المتذوق', 'الهاوي', 'المشجع', 'المحلل', 'الناقد', 'الأسطورة الصاعدة', 'الخبير',
+      'المبتدئ المعتمد', 'المغامر', 'جامع القصص', 'عاشق الأنمي', 'صائد الجواهر', 'المتابع', 'المراجع', 'المستشار', 'الأسطورة الشابة', 'الأسطورة',
+      'الجيل الثاني', 'الفارس', 'الحارس', 'المحارب', 'المنقذ', 'الساحر', 'العبقري', 'الوحش', 'الشيطان', 'الملاك',
+      'الأسطورة الملكية', 'الأسطورة الذهبية', 'الأسطورة الماسية', 'الأسطورة البلاتينية', 'الأسطورة النخبوية', 'الأسطورة النادرة', 'الأسطورة الفريدة', 'الأسطورة الأعظم', 'الأسطورة الأقوى', 'الأسطورة المطلقة',
+      'الحكيم', 'الفيلسوف', 'المعلم', 'المرشد', 'القائد', 'الزعيم', 'الملك', 'الإمبراطور', 'القيصر', 'الفرعون',
+      'بطل العالم', 'بطل الكون', 'بطل المجرة', 'بطل الأكوان', 'بطل الأبعاد', 'بطل الزمن', 'بطل الفضاء', 'بطل اللانهاية', 'بطل الخيال', 'بطل الواقع',
+      'التنين', 'الفينيق', 'العنقاء', 'الغول', 'الشيطان الأكبر', 'الملاك الأكبر', 'الإله', 'الخالد', 'الأبدي', 'اللامحدود',
+      'التيتان', 'العملاق', 'الجبار', 'الطاغية', 'المدمر', 'المحطم', 'الفاتح', 'الغازي', 'المنتصر', 'القاهر',
+      'المستنير', 'المتنور', 'المبدع', 'المبتكر', 'الرائد', 'السباق', 'الأول', 'الفريد', 'النادر', 'الأسطوري',
+      'الأسطورة الخالدة', 'الأسطورة الأبدية', 'الأسطورة اللامحدودة', 'الأسطورة الكونية', 'الأسطورة المجرية', 'الأسطورة الأبعادية', 'الأسطورة الزمنية', 'الأسطورة الفضائية', 'الأسطورة اللانهائية', 'إمبراطور الأوتاكو'
+    ];
+
+    int index = (totalCount / 10).floor() - 1;
+    if (index >= achTitles.length) index = achTitles.length - 1;
+    if (index < 0) index = 0;
+
+    String title = achTitles[index];
+    IconData icon = achIcons[index % achIcons.length];
+    Color color = achColors[index % achColors.length];
 
     return Container(
       margin: const EdgeInsets.only(top: 15),
@@ -404,7 +427,11 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       child: Row(
         children: [
-          Icon(icon, color: color, size: 30),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(shape: BoxShape.circle, color: color.withOpacity(0.2)),
+            child: Icon(icon, color: color, size: 30),
+          ),
           const SizedBox(width: 12),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -468,7 +495,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           
-          _buildLatestAchievementCard(),
+          _buildLatestAchievementCard(), // 🔥 استدعاء الكارت هنا
 
           const SizedBox(height: 25),
           const Text('إحصائياتك', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
