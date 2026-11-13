@@ -8,14 +8,13 @@ class AnimeApiService {
 
   Future<Map<String, dynamic>> fetchAnimeData(String animeTitle) async {
     if (animeTitle.trim().isEmpty) {
-      return {'genres': <String>[], 'summary': '', 'episodes': 0, 'globalRating': null, 'releaseYear': null, 'subAnimes': []};
+      return {'genres': <String>[], 'summary': '', 'episodes': 0, 'globalRating': null, 'releaseYear': null, 'imageUrl': null, 'subAnimes': []};
     }
 
     for (int attempt = 1; attempt <= 3; attempt++) {
       try {
         const String url = 'https://graphql.anilist.co';
 
-        // 🔥 تم إضافة حقول المواسم (description, averageScore, startDate, genres) للاستعلام
         final String query = '''
           query (\$search: String) {
             Page(perPage: 1) {
@@ -26,6 +25,7 @@ class AnimeApiService {
                 episodes
                 averageScore
                 startDate { year }
+                coverImage { large }
                 relations {
                   edges {
                     relationType
@@ -37,6 +37,7 @@ class AnimeApiService {
                       averageScore
                       startDate { year }
                       genres
+                      coverImage { large }
                       format
                     }
                   }
@@ -74,6 +75,7 @@ class AnimeApiService {
             final int? averageScore = media['averageScore'] as int?;
             final double? globalRating = averageScore != null ? averageScore / 10.0 : null;
             final int? releaseYear = media['startDate']?['year'] as int?;
+            final String? imageUrl = media['coverImage']?['large'] as String?;
 
             String summary = '';
             if (!hasAdultContent) {
@@ -84,7 +86,6 @@ class AnimeApiService {
               }
             }
 
-            // 🔥 استخراج تفاصيل المواسم كاملة
             List<Map<String, dynamic>> subAnimes = [];
             final relations = media['relations']?['edges'] as List?;
             if (relations != null) {
@@ -99,7 +100,6 @@ class AnimeApiService {
                   final displayTitle = titleRomaji.isNotEmpty ? titleRomaji : titleEnglish;
                   
                   if (displayTitle.isNotEmpty) {
-                    // جلب تفاصيل الموسم
                     final subGenresRaw = (node['genres'] as List?)?.map((e) => e.toString()).toList() ?? [];
                     final subHasAdult = subGenresRaw.any((g) => g == 'Ecchi' || g == 'Hentai');
                     final subGenres = subGenresRaw.where((g) => g != 'Ecchi' && g != 'Hentai').map((g) => _translateGenre(g)).toList();
@@ -109,7 +109,7 @@ class AnimeApiService {
                     if (subSummary.isNotEmpty && !subHasAdult) {
                       subSummary = await _translateToArabic(subSummary);
                     } else if (subHasAdult) {
-                      subSummary = ''; // إخفاء القصة إذا كان إباحياً
+                      subSummary = '';
                     }
 
                     final subScore = node['averageScore'] as int?;
@@ -122,6 +122,7 @@ class AnimeApiService {
                       'genre': subGenres.join('، '),
                       'globalRating': subScore != null ? subScore / 10.0 : null,
                       'releaseYear': node['startDate']?['year'] as int?,
+                      'imageUrl': node['coverImage']?['large'] as String?, // 🔥 جلب صورة الموسم
                     });
                   }
                 }
@@ -134,16 +135,17 @@ class AnimeApiService {
               'episodes': episodes,
               'globalRating': globalRating,
               'releaseYear': releaseYear,
+              'imageUrl': imageUrl, // 🔥 جلب صورة الأنمي الأصلي
               'subAnimes': subAnimes,
             };
           }
-          return {'genres': <String>[], 'summary': '', 'episodes': 0, 'globalRating': null, 'releaseYear': null, 'subAnimes': []};
+          return {'genres': <String>[], 'summary': '', 'episodes': 0, 'globalRating': null, 'releaseYear': null, 'imageUrl': null, 'subAnimes': []};
         }
       } catch (e) {
         if (attempt < 3) await Future.delayed(const Duration(seconds: 2));
       }
     }
-    return {'genres': <String>[], 'summary': '', 'episodes': 0, 'globalRating': null, 'releaseYear': null, 'subAnimes': []};
+    return {'genres': <String>[], 'summary': '', 'episodes': 0, 'globalRating': null, 'releaseYear': null, 'imageUrl': null, 'subAnimes': []};
   }
 
   Future<String> _translateToArabic(String text) async {
@@ -176,7 +178,7 @@ class AnimeApiService {
       final anime = animes[i];
       if (anime.parentId != null) continue;
 
-      if (anime.genre.trim().isNotEmpty && anime.summary.trim().isNotEmpty && anime.episodes > 0 && anime.globalRating != null && anime.releaseYear != null) continue;
+      if (anime.genre.trim().isNotEmpty && anime.summary.trim().isNotEmpty && anime.episodes > 0 && anime.globalRating != null && anime.releaseYear != null && anime.imageUrl != null) continue;
 
       final data = await fetchAnimeData(anime.title);
       bool changed = false;
@@ -186,6 +188,7 @@ class AnimeApiService {
       if (anime.episodes == 0 && data['episodes'] > 0) { anime.episodes = data['episodes']; changed = true; }
       if (anime.globalRating == null && data['globalRating'] != null) { anime.globalRating = data['globalRating']; changed = true; }
       if (anime.releaseYear == null && data['releaseYear'] != null) { anime.releaseYear = data['releaseYear']; changed = true; }
+      if (anime.imageUrl == null && data['imageUrl'] != null) { anime.imageUrl = data['imageUrl']; changed = true; }
 
       if (changed) updatedCount++; else failedCount++;
       await Future.delayed(const Duration(milliseconds: 1200));
