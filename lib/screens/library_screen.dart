@@ -25,7 +25,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
   final TextEditingController searchController = TextEditingController();
   final ImagePicker imagePicker = ImagePicker();
   
-  // 🔥 أدوات التحكم في التمرير
   final ScrollController _scrollController = ScrollController();
   bool _showBackToTop = false;
 
@@ -59,7 +58,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     super.initState();
     loadAnimes();
     _loadLibraryPreferences();
-    // 🔥 مراقبة التمرير
     _scrollController.addListener(() {
       if (_scrollController.offset > 300 && !_showBackToTop) {
         setState(() => _showBackToTop = true);
@@ -76,7 +74,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     super.dispose();
   }
 
-  // 🔥 البحث الفوري حرف بحرف
   void _onSearchChanged(String value) {
     setState(() => searchText = value);
   }
@@ -128,6 +125,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
         matchesStatus = anime.genre.isNotEmpty && !anime.genre.contains('، ');
       } else if (selectedStatus == 'بدون تصنيف') {
         matchesStatus = anime.genre.trim().isEmpty;
+      } else if (selectedStatus == 'قيد المشاهدة (تقدم)') { // 🔥 الفلتر الجديد
+        matchesStatus = anime.watchedEpisodes > 0 && (anime.episodes == 0 || anime.watchedEpisodes < anime.episodes);
       } else {
         matchesStatus = anime.status == selectedStatus;
       }
@@ -292,9 +291,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       if (globalRating != null) msg += 'والتقييم ';
       if (releaseYear != null) msg += 'والسنة ';
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg)),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('لم يتم العثور على بيانات. تأكد من كتابة الاسم بالإنجليزية.')),
@@ -349,6 +346,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     final titleController = TextEditingController(text: anime.title);
     final characterController = TextEditingController(text: anime.character);
     final episodesController = TextEditingController(text: anime.episodes == 0 ? '' : '${anime.episodes}');
+    final watchedController = TextEditingController(text: anime.watchedEpisodes == 0 ? '' : '${anime.watchedEpisodes}'); // 🔥
     final summaryController = TextEditingController(text: anime.summary);
     final memoryController = TextEditingController(text: anime.memory);
     final yearController = TextEditingController(text: anime.releaseYear?.toString() ?? '');
@@ -408,11 +406,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         const SizedBox(height: 10),
                         Row(
                           children: [
-                            Expanded(child: TextField(controller: episodesController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'عدد الحلقات'))),
+                            Expanded(child: TextField(controller: episodesController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'إجمالي الحلقات'))),
                             const SizedBox(width: 10),
-                            Expanded(child: TextField(controller: yearController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'سنة النزول'))),
+                            Expanded(child: TextField(controller: watchedController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'شاهدت منها', prefixIcon: Icon(Icons.play_arrow, size: 16)))), // 🔥
                           ],
                         ),
+                        const SizedBox(height: 10),
+                        TextField(controller: yearController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'سنة النزول')),
                         const SizedBox(height: 10),
                         DropdownButtonFormField<String>(
                           value: ['', 'مكتمل', 'أتابعه', 'مخطط له', 'متوقف'].contains(status) ? status : '',
@@ -480,6 +480,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         ..genre = selectedGenres.join('، ')
         ..character = characterController.text.trim()
         ..episodes = int.tryParse(episodesController.text) ?? 0
+        ..watchedEpisodes = int.tryParse(watchedController.text) ?? 0 // 🔥
         ..releaseYear = int.tryParse(yearController.text)
         ..status = status
         ..rating = rating
@@ -503,6 +504,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       titleController.dispose();
       characterController.dispose();
       episodesController.dispose();
+      watchedController.dispose();
       summaryController.dispose();
       memoryController.dispose();
       yearController.dispose();
@@ -522,6 +524,32 @@ class _LibraryScreenState extends State<LibraryScreen> {
           Shadow(color: primaryColorNotifier.value.withOpacity(0.8), blurRadius: 10),
         ],
       ),
+    );
+  }
+
+  // 🔥 بناء شريط التقدم
+  Widget _buildProgressBar(Anime anime) {
+    if (anime.episodes <= 0 || anime.watchedEpisodes <= 0) return const SizedBox.shrink();
+    double progress = anime.watchedEpisodes / anime.episodes;
+    if (progress > 1.0) progress = 1.0;
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 6),
+        LinearProgressIndicator(
+          value: progress,
+          minHeight: 6,
+          backgroundColor: Colors.white12,
+          valueColor: AlwaysStoppedAnimation<Color>(primaryColorNotifier.value),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'شاهدت ${anime.watchedEpisodes} من ${anime.episodes}',
+          style: const TextStyle(color: Colors.white54, fontSize: 10),
+        ),
+      ],
     );
   }
 
@@ -581,6 +609,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
                           ],
                         ],
                       ),
+                      // 🔥 شريط التقدم هنا
+                      _buildProgressBar(anime),
                       if (anime.favorite) ...[
                         const SizedBox(height: 5),
                         const Row(children: [Icon(Icons.favorite, size: 14, color: Color(0xFFFF5364)), SizedBox(width: 4), Text('في المفضلة', style: TextStyle(color: Color(0xFFFF5364), fontSize: 11))]),
@@ -653,6 +683,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       ],
                     ],
                   ),
+                  _buildProgressBar(anime), // 🔥
                 ],
               ),
             ),
@@ -809,7 +840,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
               const SizedBox(height: 22),
               TextField(
                 controller: searchController,
-                onChanged: _onSearchChanged, // 🔥 البحث الفوري حرف بحرف
+                onChanged: _onSearchChanged,
                 decoration: InputDecoration(
                   hintText: 'ابحث عن أنمي أو تصنيف...',
                   prefixIcon: const Icon(Icons.search),
@@ -824,7 +855,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   children: [
                     'الكل', 'مكتمل', 'أتابعه', 'مخطط له', 'متوقف', 'المفضلة', 
                     'جُلب تلقائياً', 
-                    'بدون تصنيف'
+                    'بدون تصنيف',
+                    'قيد المشاهدة (تقدم)' // 🔥 الفلتر الجديد هنا
                   ].map((status) {
                     final selected = selectedStatus == status;
                     return Padding(
@@ -870,7 +902,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
               _buildToolbar(),
               const SizedBox(height: 18),
               buildContent(),
-              const SizedBox(height: 80), // مساحة للـ FAB
+              const SizedBox(height: 80),
             ],
           ),
         ),
