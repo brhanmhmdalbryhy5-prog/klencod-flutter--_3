@@ -162,6 +162,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     }
   }
 
+  // 🔥 تصميم البطاقة الأنيقة الجديدة (Glassmorphism)
   Widget _buildShareCard() {
     final anime = widget.anime;
     final primaryColor = primaryColorNotifier.value;
@@ -176,49 +177,122 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     else if (fontName == 'Changa') titleStyle = GoogleFonts.changa(fontSize: 22, fontWeight: FontWeight.w900, color: titleColor);
     else titleStyle = TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: titleColor);
 
+    final genres = anime.genre.split('،').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+
     return RepaintBoundary(
       key: _cardKey,
       child: Container(
-        width: 320,
-        decoration: BoxDecoration(color: const Color(0xFF1B1F28), borderRadius: BorderRadius.circular(20), border: Border.all(color: primaryColor, width: 2), boxShadow: [BoxShadow(color: primaryColor.withOpacity(0.5), blurRadius: 20, spreadRadius: 5)]),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // 🔥 استخدام BoxFit.contain لعدم قص الصورة
-            Container(
-              color: Colors.black26,
-              constraints: const BoxConstraints(maxHeight: 250),
-              child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
-                child: imagePath != null && File(imagePath).existsSync()
-                    ? Image.file(File(imagePath), width: double.infinity, fit: BoxFit.contain)
-                    : Container(height: 180, width: double.infinity, color: Colors.black26, child: const Icon(Icons.movie, size: 60, color: Colors.white24)),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  Text(anime.title, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: titleStyle.copyWith(shadows: [Shadow(color: titleColor.withOpacity(0.6), blurRadius: 10)])),
-                  const SizedBox(height: 10),
-                  if (anime.genre.isNotEmpty) Text(anime.genre, textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white60, fontSize: 12)),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      if (anime.rating > 0) _cardStat(Icons.star, '${anime.rating.toStringAsFixed(1)}/10', 'تقييمك', const Color(0xFFFFC857)),
-                      if (anime.globalRating != null) _cardStat(Icons.public, '${anime.globalRating!.toStringAsFixed(1)}', 'عالمي', Colors.cyan),
-                      if (anime.releaseYear != null) _cardStat(Icons.calendar_today, '${anime.releaseYear}', 'السنة', Colors.white70),
-                    ],
+        width: 340,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(24),
+          color: const Color(0xFF1B1F28),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: Stack(
+            children: [
+              // 1. الخلفية الضبابية (Blur)
+              if (imagePath != null && File(imagePath).existsSync())
+                Positioned.fill(
+                  child: Image.file(File(imagePath), fit: BoxFit.cover),
+                ),
+              Positioned.fill(
+                child: BackdropFilter(
+                  filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                  child: Container(
+                    color: Colors.black.withOpacity(0.7), // تعتيم الخلفية
                   ),
-                  const SizedBox(height: 16),
-                  const Divider(color: Colors.white12),
-                  const SizedBox(height: 8),
-                  Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.shield, size: 16, color: primaryColor), const SizedBox(width: 6), Text('ذاكرة الأوتاكو', style: TextStyle(color: primaryColor, fontSize: 12, fontWeight: FontWeight.bold))]),
-                ],
+                ),
               ),
-            ),
-          ],
+
+              // 2. المحتوى
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // صورة الأنمي (في المنتصف)
+                    Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 15, spreadRadius: 2)],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: imagePath != null && File(imagePath).existsSync()
+                            ? Image.file(File(imagePath), height: 220, fit: BoxFit.cover)
+                            : Container(height: 220, width: 150, color: Colors.black26, child: const Icon(Icons.movie, size: 60, color: Colors.white24)),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // الاسم
+                    Text(
+                      anime.title,
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: titleStyle.copyWith(shadows: [Shadow(color: Colors.black87, blurRadius: 10)]),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // التصنيفات
+                    if (genres.isNotEmpty)
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: genres.take(3).map((g) => Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: primaryColor.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: primaryColor.withOpacity(0.5)),
+                          ),
+                          child: Text(g, style: const TextStyle(color: Colors.white, fontSize: 10)),
+                        )).toList(),
+                      ),
+                    const SizedBox(height: 20),
+
+                    // الإحصائيات (تقييمك، عالمي، السنة)
+                    Container(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.white12),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          if (anime.rating > 0)
+                            _cardStat(Icons.star, '${anime.rating.toStringAsFixed(1)}', 'تقييمك', const Color(0xFFFFC857)),
+                          if (anime.globalRating != null)
+                            _cardStat(Icons.public, '${anime.globalRating!.toStringAsFixed(1)}', 'عالمي', Colors.cyan),
+                          if (anime.releaseYear != null)
+                            _cardStat(Icons.calendar_today, '${anime.releaseYear}', 'السنة', Colors.white70),
+                          if (anime.episodes > 0)
+                            _cardStat(Icons.play_circle_outline, '${anime.episodes}', 'حلقة', primaryColor),
+                        ],
+                      ),
+                    ),
+                    
+                    const SizedBox(height: 16),
+                    
+                    // توقيع التطبيق
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.shield, size: 16, color: primaryColor),
+                        const SizedBox(width: 6),
+                        Text('ذاكرة الأوتاكو', style: TextStyle(color: primaryColor, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -227,7 +301,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
   Widget _cardStat(IconData icon, String value, String label, Color color) {
     return Column(
       children: [
-        Icon(icon, color: color, size: 24),
+        Icon(icon, color: color, size: 22),
         const SizedBox(height: 4),
         Text(value, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 16)),
         Text(label, style: const TextStyle(color: Colors.white54, fontSize: 10)),
@@ -286,12 +360,11 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     );
   }
 
-  // 🔥 استخدام BoxFit.contain لعرض الصورة كاملة
   Widget _cover() {
     final path = widget.anime.imagePath;
     if (path != null && path.isNotEmpty && File(path).existsSync()) {
       return Container(
-        color: Colors.black26, // خلفية للصورة
+        color: Colors.black26,
         constraints: const BoxConstraints(maxHeight: 350),
         child: Image.file(File(path), width: double.infinity, fit: BoxFit.contain, errorBuilder: (_, __, ___) => _coverPlaceholder()),
       );
