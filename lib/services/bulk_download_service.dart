@@ -11,7 +11,7 @@ class BulkDownloadProgress {
   final String currentTitle;
   final String status;
   final List<String> failedNames;
-  
+
   BulkDownloadProgress({
     required this.total, 
     required this.current, 
@@ -19,7 +19,7 @@ class BulkDownloadProgress {
     required this.status,
     this.failedNames = const [],
   });
-  
+
   double get percentage => total == 0 ? 0 : current / total;
   bool get isCompleted => total > 0 && current >= total;
 }
@@ -31,7 +31,7 @@ class BulkDownloadService {
 
   final StorageService storage = StorageService();
   final AnimeApiService apiService = AnimeApiService();
-  
+
   final ValueNotifier<BulkDownloadProgress?> progress = ValueNotifier(null);
   bool isRunning = false;
   bool _cancelRequested = false;
@@ -104,7 +104,11 @@ class BulkDownloadService {
         if (data['globalRating'] != null) anime.globalRating = data['globalRating'];
         if (data['releaseYear'] != null) anime.releaseYear = data['releaseYear'];
         if (data['studios'] != null) anime.studios = data['studios'];
-        if (data['imagePath'] != null) anime.imagePath = data['imagePath'];
+        // ✅ التعديل الرئيسي: لا نكتب فوق صورة الأنمي الأصلي إن كانت موجودة.
+        // لتغيير صورة الأنمي الأصلي استخدم زر "جلب صورة الغلاف" في شاشة التفاصيل.
+        if (anime.imagePath == null && data['imagePath'] != null) {
+          anime.imagePath = data['imagePath'];
+        }
         if ((data['characters'] as List).isNotEmpty) anime.characters = List<Map<String, dynamic>>.from(data['characters']);
 
         final subData = data['subAnimes'] as List? ?? [];
@@ -129,9 +133,13 @@ class BulkDownloadService {
             final existing = animes[idx];
             if (existing.globalRating == null && sub['globalRating'] != null) existing.globalRating = sub['globalRating'];
             if (existing.releaseYear == null && sub['releaseYear'] != null) existing.releaseYear = sub['releaseYear'];
-            if (existing.imagePath == null && sub['imagePath'] != null) existing.imagePath = sub['imagePath'];
+            // ✅ تحسين: أعد جلب صورة الموسم إذا كانت مفقودة أو الملف محذوف من الجهاز
+            final needsSubImage = existing.imagePath == null || !File(existing.imagePath!).existsSync();
+            if (needsSubImage && sub['imagePath'] != null) existing.imagePath = sub['imagePath'];
             if (existing.summary.isEmpty && (sub['summary'] ?? '').isNotEmpty) existing.summary = sub['summary'];
             if (existing.genre.isEmpty && (sub['genre'] ?? '').isNotEmpty) existing.genre = sub['genre'];
+            // ✅ تحسين: تحديث عدد حلقات الموسم إذا كان صفراً (كان ناقصاً)
+            if (existing.episodes == 0 && (sub['episodes'] ?? 0) > 0) existing.episodes = sub['episodes'];
             // 🔥 تحديث شخصيات الموسم إذا كانت فارغة
             if (existing.characters.isEmpty && (sub['characters'] as List?)?.isNotEmpty == true) {
               existing.characters = List<Map<String, dynamic>>.from(sub['characters']);
