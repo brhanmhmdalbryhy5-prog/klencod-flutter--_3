@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../main.dart';
 import '../services/backup_service.dart';
 import '../services/theme_service.dart';
 import '../services/anime_api_service.dart';
+import 'trash_screen.dart'; // 🔥 استيراد شاشة سلة المهملات
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -77,7 +77,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  // 🔥 اختيار خط الاسم
   Future<void> _showFontPicker() async {
     final fonts = ['Cairo', 'Tajawal', 'Almarai', 'Changa'];
     final selectedFont = await showDialog<String>(
@@ -90,7 +89,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             mainAxisSize: MainAxisSize.min,
             children: fonts.map((font) {
               return ListTile(
-                title: Text(font, style: TextStyle(fontFamily: font == 'Cairo' ? GoogleFonts.cairo().fontFamily : font == 'Tajawal' ? GoogleFonts.tajawal().fontFamily : font == 'Almarai' ? GoogleFonts.almarai().fontFamily : GoogleFonts.changa().fontFamily, color: Colors.white)),
+                title: Text(font, style: TextStyle(fontFamily: font == 'Cairo' ? 'Cairo' : font == 'Tajawal' ? 'Tajawal' : font == 'Almarai' ? 'Almarai' : 'Changa', color: Colors.white)),
                 trailing: fontNotifier.value == font ? const Icon(Icons.check, color: Colors.green) : null,
                 onTap: () => Navigator.pop(dialogContext, font),
               );
@@ -107,7 +106,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  // 🔥 اختيار لون اسم الأنمي
   Future<void> _showTitleColorPicker() async {
     final colors = [const Color(0xFFFFD700), Colors.white, Colors.cyan, Colors.greenAccent, Colors.pinkAccent, Colors.orangeAccent];
     final selectedColor = await showDialog<Color>(
@@ -163,12 +161,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final updated = result['updated'] ?? 0;
     final failed = result['failed'] ?? 0;
     
-    String message;
-    if (updated == 0 && failed == 0) {
-      message = 'كل الأنميات لديها بيانات بالفعل! لا حاجة للتحديث.';
-    } else {
-      message = 'تم تحديث $updated أنمي بنجاح.\nفشل تحديث $failed أنمي.\n\nملاحظة: فشل التحديث غالباً بسبب أن اسم الأنمي مكتوب بالعربية. يرجى تعديل الأسماء إلى الإنجليزية.';
-    }
+    String message = (updated == 0 && failed == 0)
+        ? 'كل الأنميات لديها بيانات بالفعل! لا حاجة للتحديث.'
+        : 'تم تحديث $updated أنمي بنجاح.\nفشل تحديث $failed أنمي.\n\nملاحظة: فشل التحديث غالباً بسبب أن اسم الأنمي مكتوب بالعربية. يرجى تعديل الأسماء إلى الإنجليزية.';
 
     await showDialog<void>(
       context: context,
@@ -294,7 +289,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const SizedBox(height: 10),
         _settingsTile(icon: Icons.color_lens_outlined, color: primaryColor, title: 'لون التطبيق', subtitle: 'تغيير اللون الأساسي للتطبيق (18 لوناً)', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: _showColorPicker),
         const SizedBox(height: 10),
-        // 🔥 أزرار الخط واللون
         _settingsTile(icon: Icons.font_download_outlined, color: primaryColor, title: 'خط اسم الأنمي', subtitle: 'اختيار الخط المفضل (Cairo, Tajawal...)', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: _showFontPicker),
         const SizedBox(height: 10),
         _settingsTile(icon: Icons.format_color_text, color: titleColorNotifier.value, title: 'لون اسم الأنمي', subtitle: 'تغيير لون النص في البطاقات', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: _showTitleColorPicker),
@@ -304,6 +298,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _settingsTile(icon: Icons.sync_alt, color: const Color(0xFF3A91B5), title: 'تحديث البيانات تلقائياً', subtitle: 'جلب التصنيفات، القصص، الحلقات، والتقييمات', trailing: isUpdatingGenres ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.chevron_left, color: Colors.white38), onTap: isUpdatingGenres ? null : _autoUpdateGenres),
         const SizedBox(height: 10),
         _settingsTile(icon: Icons.delete_sweep_outlined, color: const Color(0xFFFF5A65), title: 'مسح جميع التصنيفات', subtitle: 'حذف التصنيفات من جميع الأنميات', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: _clearAllGenres),
+        const SizedBox(height: 10),
+        // 🔥 زر سلة المهملات الجديد
+        _settingsTile(icon: Icons.delete_outline, color: const Color(0xFFFFB74D), title: 'سلة المهملات', subtitle: 'استعادة الأنميات المحذوفة', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: () { Navigator.push(context, MaterialPageRoute(builder: (_) => const TrashScreen())); }),
         const SizedBox(height: 24),
         const Text('النسخ الاحتياطي', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
         const SizedBox(height: 12),
