@@ -135,7 +135,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     );
   }
 
-  // 🔥 دالة تعديل الأنمي أو الموسم مباشرة من شاشة التفاصيل
   Future<void> _editAnimeDetails() async {
     HapticFeedback.lightImpact();
     final titleController = TextEditingController(text: widget.anime.title);
@@ -220,7 +219,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
           ..imagePath = newImagePath;
         await storage.saveAnimes(allAnimes);
         setState(() { widget.anime = allAnimes[index]; });
-        _loadData(); // تحديث الواجهة
+        _loadData();
       }
     }
   }
@@ -380,6 +379,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     if (index != -1) { allAnimes[index] = widget.anime; await storage.saveAnimes(allAnimes); }
   }
 
+  // 🔥 تم تعديل هذه الدالة لاستقبال تفاصيل المواسم كاملة
   Future<void> _fetchDataManually() async {
     if (widget.anime.title.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الأنمي لا يملك اسماً، لا يمكن البحث عنه.')));
@@ -418,9 +418,14 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
           final newSub = Anime(
             id: DateTime.now().microsecondsSinceEpoch.toString() + Random().nextInt(999).toString(),
             title: sub['title'],
-            partName: sub['type'],
+            partName: sub['partName'],
             parentId: widget.anime.id,
             episodes: sub['episodes'] ?? 0,
+            // 🔥 إضافة البيانات الكاملة التي تم جلبها
+            summary: sub['summary'] ?? '',
+            genre: sub['genre'] ?? '',
+            globalRating: sub['globalRating'],
+            releaseYear: sub['releaseYear'],
           );
           allAnimes.add(newSub);
         }
@@ -431,7 +436,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
     await _loadData();
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم جلب البيانات وإنشاء قوالب المواسم بنجاح!')));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم جلب بيانات الأنمي والمواسم بالكامل!')));
   }
 
   void _addSubAnime() {
@@ -500,9 +505,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
         title: Text(anime.parentId != null ? 'تفاصيل الموسم/الفيلم' : 'تفاصيل الأنمي'), 
         centerTitle: true,
         actions: [
-          // 🔥 زر التعديل الجديد (يسمح بتعديل الموسم من هنا)
           IconButton(tooltip: 'تعديل البيانات', icon: const Icon(Icons.edit, color: Colors.white70), onPressed: _editAnimeDetails),
-          // 🔥 زر البطاقة (موجود)
           IconButton(tooltip: 'صنع بطاقة للمشاركة', icon: const Icon(Icons.dashboard_customize_outlined, color: Colors.cyan), onPressed: _showShareDialog),
         ],
       ),
@@ -577,7 +580,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen> {
                     trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white38),
                     onTap: () async {
                       await Navigator.push(context, MaterialPageRoute(builder: (_) => AnimeDetailsScreen(anime: sub)));
-                      await _loadData(); // تحديث القائمة عند العودة لتحديث الصور
+                      await _loadData();
                     },
                   ),
                 );
