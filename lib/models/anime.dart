@@ -12,12 +12,13 @@ class Anime {
   bool favorite;
   int colorIndex;
   String date;
-  String? imagePath;
+  String? imagePath; // مسار الصورة المحلية
+  String? imageUrl;  // 🔥 رابط الصورة من الإنترنت
   double? globalRating;
   int? releaseYear;
-  String? parentId; // للمواسم
-  String? partName; // اسم الموسم
-  String? videoPath; // مسار الفيديو
+  String? parentId;
+  String? partName;
+  String? videoPath;
 
   Anime({
     required this.id,
@@ -34,6 +35,7 @@ class Anime {
     this.colorIndex = 0,
     this.date = '',
     this.imagePath,
+    this.imageUrl,
     this.globalRating,
     this.releaseYear,
     this.parentId,
@@ -47,9 +49,9 @@ class Anime {
       'character': character, 'summary': summary, 'memory': memory,
       'episodes': episodes, 'watchedEpisodes': watchedEpisodes,
       'rating': rating, 'favorite': favorite, 'colorIndex': colorIndex,
-      'date': date, 'imagePath': imagePath, 'globalRating': globalRating,
-      'releaseYear': releaseYear, 'parentId': parentId, 'partName': partName,
-      'videoPath': videoPath,
+      'date': date, 'imagePath': imagePath, 'imageUrl': imageUrl,
+      'globalRating': globalRating, 'releaseYear': releaseYear, 
+      'parentId': parentId, 'partName': partName, 'videoPath': videoPath,
     };
   }
 
@@ -69,6 +71,7 @@ class Anime {
       colorIndex: (json['colorIndex'] as num?)?.toInt() ?? 0,
       date: json['date'] as String? ?? '',
       imagePath: json['imagePath'] as String?,
+      imageUrl: json['imageUrl'] as String?,
       globalRating: (json['globalRating'] as num?)?.toDouble(),
       releaseYear: (json['releaseYear'] as num?)?.toInt(),
       parentId: json['parentId'] as String?,
