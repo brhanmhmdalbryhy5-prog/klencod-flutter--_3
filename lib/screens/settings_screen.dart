@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../main.dart';
+import '../models/anime.dart';
 import '../services/backup_service.dart';
 import '../services/theme_service.dart';
 import '../services/anime_api_service.dart';
 import '../services/bulk_download_service.dart';
+import '../services/storage_service.dart';
+import '../services/video_compression_service.dart';
 import 'trash_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -19,10 +22,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool backupBusy = false;
   bool autoFetchEnabled = false;
   bool isUpdatingGenres = false;
+  bool isCompressing = false;
 
   final BackupService backupService = BackupService();
   final AnimeApiService apiService = AnimeApiService();
   final BulkDownloadService bulkService = BulkDownloadService();
+  final StorageService storage = StorageService();
 
   @override
   void initState() {
@@ -267,7 +272,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  /// دالة مساعدة لتشغيل أي عملية (بدون طبقة عائمة)
   Future<void> _runAction({
     required Future<Map<String, dynamic>> Function() action,
   }) async {
@@ -431,6 +435,131 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await _runAction(action: () => bulkService.downloadAllScenes());
   }
 
+  // 🆕 ضغط جميع الفيديوهات
+  Future<void> _compressAllVideos() async {
+    if (isCompressing) return;
+
+    final animes = await storage.loadAnimes();
+    final videosCount = animes.where((a) => a.videoPath != null && a.videoPath!.isNotEmpty).length;
+
+    if (videosCount == 0) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا توجد فيديوهات لضغطها.')),
+      );
+      return;
+    }
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF1B1F28),
+        title: const Text('ضغط الفيديوهات التذكارية'),
+        content: Text(
+          'سيتم ضغط $videosCount فيديو بجودة متوسطة (720p) لتوفير مساحة التخزين.\n\n'
+          'ملاحظة: قد تقل الجودة قليلاً، لكن الحجم سينخفض بنسبة 50-70%.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: primaryColorNotifier.value),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('ابدأ الضغط'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+
+    setState(() => isCompressing = true);
+
+    // إظهار نافذة التقدم
+    final progressNotifier = ValueNotifier<String>('جاري التحضير...');
+    final percentNotifier = ValueNotifier<double>(0.0);
+    bool dialogClosed = false;
+
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => AlertDialog(
+          backgroundColor: const Color(0xFF1B1F28),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.compress, size: 50, color: Colors.purpleAccent),
+              const SizedBox(height: 16),
+              const Text('جاري ضغط الفيديوهات...',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              const SizedBox(height: 16),
+              ValueListenableBuilder<String>(
+                valueListenable: progressNotifier,
+                builder: (context, value, _) => Text(value,
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center),
+              ),
+              const SizedBox(height: 12),
+              ValueListenableBuilder<double>(
+                valueListenable: percentNotifier,
+                builder: (context, value, _) => ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: LinearProgressIndicator(
+                    value: value,
+                    minHeight: 10,
+                    backgroundColor: Colors.white12,
+                    valueColor: AlwaysStoppedAnimation<Color>(primaryColorNotifier.value),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    try {
+      final result = await VideoCompressionService().compressAllVideos(
+        animes: animes,
+        onSave: () => storage.saveAnimes(animes),
+        onProgress: (current, total, title) {
+          percentNotifier.value = current / total;
+          progressNotifier.value = '($current/$total) $title';
+        },
+      );
+
+      dialogClosed = true;
+      if (mounted) Navigator.pop(context);
+
+      if (!mounted) return;
+      await showDialog(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: const Color(0xFF1B1F28),
+          title: const Text('نتيجة الضغط'),
+          content: Text(
+            '✅ تم ضغط: ${result.compressed} فيديو\n'
+            '⏭️ تم تخطي: ${result.skipped} (لا يحتاج أو فشل)\n'
+            '❌ فشل: ${result.failed}\n\n'
+            '💾 تم توفير: ${result.savedFormatted}',
+            style: const TextStyle(height: 1.8),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('حسنًا'))],
+        ),
+      );
+    } catch (e) {
+      if (!dialogClosed && mounted) Navigator.pop(context);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('حدث خطأ: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => isCompressing = false);
+    }
+  }
+
   Future<void> _clearAllGenres() async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -584,41 +713,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
 
-            if (isDownloading) ...[
+            if (isDownloading || isCompressing) ...[
               const SizedBox(height: 20),
-              Container(
-                padding: const EdgeInsets.all(15),
-                decoration: BoxDecoration(color: const Color(0xFF1B1F28), borderRadius: BorderRadius.circular(16), border: Border.all(color: primaryColor.withOpacity(0.5))),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.cloud_download, color: Colors.cyan, size: 24),
-                        const SizedBox(width: 10),
-                        Expanded(child: Text(progress.status, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Text(progress.currentTitle, style: const TextStyle(color: Colors.white70, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
-                    const SizedBox(height: 10),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: LinearProgressIndicator(value: progress.percentage, minHeight: 8, backgroundColor: Colors.white12, valueColor: AlwaysStoppedAnimation<Color>(primaryColor)),
-                    ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: () => bulkService.cancel(),
-                        style: OutlinedButton.styleFrom(foregroundColor: Colors.redAccent, side: const BorderSide(color: Colors.redAccent)),
-                        icon: const Icon(Icons.stop_circle_outlined),
-                        label: const Text('إيقاف العملية'),
+              if (isDownloading && progress != null)
+                Container(
+                  padding: const EdgeInsets.all(15),
+                  decoration: BoxDecoration(color: const Color(0xFF1B1F28), borderRadius: BorderRadius.circular(16), border: Border.all(color: primaryColor.withOpacity(0.5))),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.cloud_download, color: Colors.cyan, size: 24),
+                          const SizedBox(width: 10),
+                          Expanded(child: Text(progress.status, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+                        ],
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 10),
+                      Text(progress.currentTitle, style: const TextStyle(color: Colors.white70, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      const SizedBox(height: 10),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: LinearProgressIndicator(value: progress.percentage, minHeight: 8, backgroundColor: Colors.white12, valueColor: AlwaysStoppedAnimation<Color>(primaryColor)),
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () => bulkService.cancel(),
+                          style: OutlinedButton.styleFrom(foregroundColor: Colors.redAccent, side: const BorderSide(color: Colors.redAccent)),
+                          icon: const Icon(Icons.stop_circle_outlined),
+                          label: const Text('إيقاف العملية'),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
             ],
 
             const SizedBox(height: 25),
@@ -705,6 +835,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
               subtitle: 'يجلب صور ترويجية (5-10 صور) لكل أنمي',
               trailing: const Icon(Icons.chevron_left, color: Colors.white38),
               onTap: isDownloading ? null : _startScenesDownload,
+            ),
+            const SizedBox(height: 10),
+            // 🆕 زر ضغط الفيديوهات
+            _settingsTile(
+              icon: Icons.compress,
+              color: const Color(0xFF9C27B0),
+              title: 'ضغط الفيديوهات التذكارية',
+              subtitle: 'يقلل حجم الفيديوهات 50-70% لتوفير المساحة',
+              trailing: isCompressing
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.chevron_left, color: Colors.white38),
+              onTap: (isCompressing || isDownloading) ? null : _compressAllVideos,
             ),
             const SizedBox(height: 10),
             _settingsTile(icon: Icons.delete_sweep_outlined, color: const Color(0xFFFF5A65), title: 'مسح جميع التصنيفات', subtitle: 'حذف التصنيفات من جميع الأنميات', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: _clearAllGenres),
