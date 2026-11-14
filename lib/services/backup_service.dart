@@ -10,13 +10,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/anime.dart';
 import 'storage_service.dart';
-import 'notification_service.dart'; // 🆕
+import 'notification_service.dart';
 
 class BackupService {
   static const String characterPrefix = 'anime_character_image_';
-  final NotificationService _notif = NotificationService(); // 🆕
+  final NotificationService _notif = NotificationService();
 
-  // 🆕 عدّادات التقدم
   int _processedItems = 0;
   int _totalItems = 1;
   DateTime _lastNotifyTime = DateTime.fromMillisecondsSinceEpoch(0);
@@ -52,7 +51,6 @@ class BackupService {
     final tempAnimeFile = File('${tempDir.path}/animes_$ts.json');
 
     try {
-      // 🆕 إشعار البداية
       try {
         await _notif.showProgress(
           title: 'جارٍ إنشاء النسخة الاحتياطية...',
@@ -65,13 +63,13 @@ class BackupService {
       final animes = await StorageService().loadAnimes();
       final prefs = await SharedPreferences.getInstance();
 
-      // 🆕 حساب الحجم التقريبي للتقدم
-      _resetProgress(animes.length * 4 + prefs.getKeys().length + 5);
+      _resetProgress(animes.length * 5 + prefs.getKeys().length + 5);
 
       final encoder = ziplib.ZipFileEncoder();
       encoder.create(tempZipPath);
 
       final coverAssets = <String, String>{};
+      final backCoverAssets = <String, String>{}; // 🆕
       final characterAssets = <String, String>{};
       final videoAssets = <String, String>{};
       final addedNames = <String>{};
@@ -89,17 +87,31 @@ class BackupService {
         final anime = animes[i];
         final item = anime.toJson();
 
-        // غلاف
+        // غلاف أمامي
         final path = anime.imagePath;
         if (path != null && path.isNotEmpty) {
           final file = File(path);
           if (await file.exists()) {
             final asset = 'covers/cover_$i.${_extension(path)}';
-            await addFile(file, asset, '${anime.title} — الغلاف');
+            await addFile(file, asset, '${anime.title} — الغلاف الأمامي');
             coverAssets[anime.id] = asset;
             item['imagePath'] = 'backup://$asset';
           } else {
             item['imagePath'] = null;
+          }
+        }
+
+        // 🆕 غلاف خلفي
+        final backPath = anime.backImagePath;
+        if (backPath != null && backPath.isNotEmpty) {
+          final file = File(backPath);
+          if (await file.exists()) {
+            final asset = 'covers/back_cover_$i.${_extension(backPath)}';
+            await addFile(file, asset, '${anime.title} — الغلاف الخلفي');
+            backCoverAssets[anime.id] = asset;
+            item['backImagePath'] = 'backup://$asset';
+          } else {
+            item['backImagePath'] = null;
           }
         }
 
@@ -182,9 +194,10 @@ class BackupService {
 
       final metadata = {
         'format': 'anime_memory_backup',
-        'version': 6,
+        'version': 7, // 🆕 رفع الإصدار لدعم الغلاف الخلفي
         'createdAt': DateTime.now().toIso8601String(),
         'coverAssets': coverAssets,
+        'backCoverAssets': backCoverAssets, // 🆕
         'characterAssets': characterAssets,
         'videoAssets': videoAssets,
       };
@@ -204,7 +217,6 @@ class BackupService {
       );
       try { await File(tempZipPath).delete(); } catch (_) {}
 
-      // 🆕 إشعار النجاح
       try {
         await _notif.showCompleted(body: 'تم إنشاء النسخة وحفظها بنجاح.');
       } catch (_) {}
@@ -215,7 +227,6 @@ class BackupService {
       try { await tempAnimeFile.delete(); } catch (_) {}
       try { await File(tempZipPath).delete(); } catch (_) {}
 
-      // 🆕 إشعار الفشل
       try {
         await _notif.showFailed(body: 'حدث خطأ: $e');
       } catch (_) {}
@@ -228,7 +239,6 @@ class BackupService {
     final createdFiles = <File>[];
 
     try {
-      // 🆕 إشعار البداية
       try {
         await _notif.showProgress(
           title: 'جارٍ استعادة النسخة...',
@@ -283,7 +293,6 @@ class BackupService {
       List<dynamic>? animeDecoded;
       final ts = DateTime.now().millisecondsSinceEpoch;
 
-      // 🆕 تقدير العدد الإجمالي
       _resetProgress(archive.length);
 
       for (final file in archive) {
@@ -354,12 +363,17 @@ class BackupService {
       final animes = animeDecoded.map((e) => Anime.fromJson(Map<String, dynamic>.from(e))).toList();
 
       final coverAssets = Map<String, dynamic>.from(metadataDecoded['coverAssets'] ?? {});
+      final backCoverAssets = Map<String, dynamic>.from(metadataDecoded['backCoverAssets'] ?? {}); // 🆕
       final characterAssets = Map<String, dynamic>.from(metadataDecoded['characterAssets'] ?? {});
       final videoAssets = Map<String, dynamic>.from(metadataDecoded['videoAssets'] ?? {});
 
       for (final anime in animes) {
         final c = coverAssets[anime.id];
         anime.imagePath = c is String ? restoredPaths[c] : null;
+
+        final bc = backCoverAssets[anime.id]; // 🆕
+        anime.backImagePath = bc is String ? restoredPaths[bc] : null; // 🆕
+
         final v = videoAssets[anime.id];
         anime.videoPath = v is String ? restoredPaths[v] : null;
 
@@ -396,12 +410,11 @@ class BackupService {
         if (p != null) await prefs.setString(entry.key, p);
       }
 
-      // 🆕 إشعار النجاح
       try {
         await _notif.showCompleted(body: 'تم استعادة ${animes.length} أنمي بنجاح.');
       } catch (_) {}
 
-      return '✅ تمت استعادة جميع البيانات (الأنميات + المواسم + الشخصيات + المشاهد + الفيديوهات) بنجاح.';
+      return '✅ تمت استعادة جميع البيانات بنجاح.';
     } catch (e) {
       await _cleanup(createdFiles);
       try { await _notif.showFailed(body: 'خطأ أثناء الاستعادة: $e'); } catch (_) {}
