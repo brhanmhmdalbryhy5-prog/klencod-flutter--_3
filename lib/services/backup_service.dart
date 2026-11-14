@@ -10,9 +10,39 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/anime.dart';
 import 'storage_service.dart';
+import 'notification_service.dart'; // 🆕
 
 class BackupService {
   static const String characterPrefix = 'anime_character_image_';
+  final NotificationService _notif = NotificationService(); // 🆕
+
+  // 🆕 عدّادات التقدم
+  int _processedItems = 0;
+  int _totalItems = 1;
+  DateTime _lastNotifyTime = DateTime.fromMillisecondsSinceEpoch(0);
+
+  void _resetProgress(int total) {
+    _processedItems = 0;
+    _totalItems = total < 1 ? 1 : total;
+    _lastNotifyTime = DateTime.fromMillisecondsSinceEpoch(0);
+  }
+
+  Future<void> _maybeNotify(String currentItem) async {
+    _processedItems++;
+    final now = DateTime.now();
+    if (now.difference(_lastNotifyTime).inMilliseconds > 700 ||
+        _processedItems == _totalItems) {
+      _lastNotifyTime = now;
+      try {
+        await _notif.showProgress(
+          title: 'جارٍ إنشاء النسخة الاحتياطية...',
+          body: currentItem,
+          progress: _processedItems,
+          total: _totalItems,
+        );
+      } catch (_) {}
+    }
+  }
 
   Future<String> createBackup() async {
     final tempDir = await getTemporaryDirectory();
@@ -22,8 +52,21 @@ class BackupService {
     final tempAnimeFile = File('${tempDir.path}/animes_$ts.json');
 
     try {
+      // 🆕 إشعار البداية
+      try {
+        await _notif.showProgress(
+          title: 'جارٍ إنشاء النسخة الاحتياطية...',
+          body: 'تجهيز البيانات...',
+          progress: 0,
+          total: 1,
+        );
+      } catch (_) {}
+
       final animes = await StorageService().loadAnimes();
       final prefs = await SharedPreferences.getInstance();
+
+      // 🆕 حساب الحجم التقريبي للتقدم
+      _resetProgress(animes.length * 4 + prefs.getKeys().length + 5);
 
       final encoder = ziplib.ZipFileEncoder();
       encoder.create(tempZipPath);
@@ -33,10 +76,11 @@ class BackupService {
       final videoAssets = <String, String>{};
       final addedNames = <String>{};
 
-      Future<void> addFile(File f, String archiveName) async {
+      Future<void> addFile(File f, String archiveName, String label) async {
         if (addedNames.contains(archiveName)) return;
         addedNames.add(archiveName);
         await encoder.addFile(f, archiveName);
+        await _maybeNotify(label);
       }
 
       final animeJson = <Map<String, dynamic>>[];
@@ -51,7 +95,7 @@ class BackupService {
           final file = File(path);
           if (await file.exists()) {
             final asset = 'covers/cover_$i.${_extension(path)}';
-            await addFile(file, asset);
+            await addFile(file, asset, '${anime.title} — الغلاف');
             coverAssets[anime.id] = asset;
             item['imagePath'] = 'backup://$asset';
           } else {
@@ -65,7 +109,7 @@ class BackupService {
           final file = File(videoPath);
           if (await file.exists()) {
             final asset = 'videos/video_$i.${_extension(videoPath)}';
-            await addFile(file, asset);
+            await addFile(file, asset, '${anime.title} — الفيديو');
             videoAssets[anime.id] = asset;
             item['videoPath'] = 'backup://$asset';
           } else {
@@ -82,7 +126,7 @@ class BackupService {
             final charFile = File(charPath);
             if (await charFile.exists()) {
               final asset = 'char_imgs/anime_${i}_char_$j.${_extension(charPath)}';
-              await addFile(charFile, asset);
+              await addFile(charFile, asset, '${anime.title} — شخصية');
               char['imagePath'] = 'backup://$asset';
             } else {
               char['imagePath'] = null;
@@ -92,7 +136,7 @@ class BackupService {
         }
         item['characters'] = updatedCharacters;
 
-        // 🆕 مشاهد
+        // مشاهد
         final updatedScenes = <Map<String, dynamic>>[];
         for (var k = 0; k < anime.scenes.length; k++) {
           final scene = Map<String, dynamic>.from(anime.scenes[k]);
@@ -101,7 +145,7 @@ class BackupService {
             final sceneFile = File(scenePath);
             if (await sceneFile.exists()) {
               final asset = 'scenes/anime_${i}_scene_$k.${_extension(scenePath)}';
-              await addFile(sceneFile, asset);
+              await addFile(sceneFile, asset, '${anime.title} — مشهد');
               scene['imagePath'] = 'backup://$asset';
             } else {
               scene['imagePath'] = null;
@@ -122,8 +166,7 @@ class BackupService {
         final file = File(path);
         if (!await file.exists()) continue;
         final asset = 'characters/${Uri.encodeComponent(key)}.${_extension(path)}';
-        await addFile(file, asset);
-        characterAssets[key] = asset;
+        await addFile(file, asset, 'صورة شخصية محفوظة');
       }
 
       // صور الذكريات
@@ -133,13 +176,13 @@ class BackupService {
         await for (final entity in memoriesDir.list()) {
           if (entity is! File) continue;
           final name = entity.uri.pathSegments.last;
-          await addFile(entity, 'memories/${Uri.encodeComponent(name)}');
+          await addFile(entity, 'memories/${Uri.encodeComponent(name)}', 'صورة ذكرى');
         }
       }
 
       final metadata = {
         'format': 'anime_memory_backup',
-        'version': 6, // 🆕 رفع الإصدار لدعم المشاهد
+        'version': 6,
         'createdAt': DateTime.now().toIso8601String(),
         'coverAssets': coverAssets,
         'characterAssets': characterAssets,
@@ -160,11 +203,23 @@ class BackupService {
         'anime_memory_backup_$ts.zip',
       );
       try { await File(tempZipPath).delete(); } catch (_) {}
+
+      // 🆕 إشعار النجاح
+      try {
+        await _notif.showCompleted(body: 'تم إنشاء النسخة وحفظها بنجاح.');
+      } catch (_) {}
+
       return saveResult;
     } catch (e) {
       try { await tempMetaFile.delete(); } catch (_) {}
       try { await tempAnimeFile.delete(); } catch (_) {}
       try { await File(tempZipPath).delete(); } catch (_) {}
+
+      // 🆕 إشعار الفشل
+      try {
+        await _notif.showFailed(body: 'حدث خطأ: $e');
+      } catch (_) {}
+
       return 'فشل إنشاء النسخة الاحتياطية: $e';
     }
   }
@@ -173,6 +228,16 @@ class BackupService {
     final createdFiles = <File>[];
 
     try {
+      // 🆕 إشعار البداية
+      try {
+        await _notif.showProgress(
+          title: 'جارٍ استعادة النسخة...',
+          body: 'اختيار الملف...',
+          progress: 0,
+          total: 1,
+        );
+      } catch (_) {}
+
       final selection = await FilePicker.platform.pickFiles(
         dialogTitle: 'اختر نسخة ذاكرة الأوتاكو',
         type: FileType.custom,
@@ -181,12 +246,19 @@ class BackupService {
         allowMultiple: false,
       );
       if (selection == null || selection.files.isEmpty) {
+        try { await _notif.cancelProgress(); } catch (_) {}
         return 'تم إلغاء الاستعادة.';
       }
 
       final sourcePath = selection.files.single.path;
-      if (sourcePath == null) return 'تعذر الوصول إلى الملف.';
-      if (!await File(sourcePath).exists()) return 'الملف غير موجود.';
+      if (sourcePath == null) {
+        try { await _notif.cancelProgress(); } catch (_) {}
+        return 'تعذر الوصول إلى الملف.';
+      }
+      if (!await File(sourcePath).exists()) {
+        try { await _notif.cancelProgress(); } catch (_) {}
+        return 'الملف غير موجود.';
+      }
 
       final inputStream = ziplib.InputFileStream(sourcePath);
       final archive = ziplib.ZipDecoder().decodeStream(inputStream);
@@ -196,20 +268,23 @@ class BackupService {
       final videosDir = Directory('${appDir.path}/anime_videos');
       final charsDir = Directory('${appDir.path}/anime_characters');
       final charImgsDir = Directory('${appDir.path}/character_images');
-      final scenesDir = Directory('${appDir.path}/anime_scenes'); // 🆕
+      final scenesDir = Directory('${appDir.path}/anime_scenes');
       final memoriesDir = Directory('${appDir.path}/anime_memory_photos');
 
       await coversDir.create(recursive: true);
       await videosDir.create(recursive: true);
       await charsDir.create(recursive: true);
       await charImgsDir.create(recursive: true);
-      await scenesDir.create(recursive: true); // 🆕
+      await scenesDir.create(recursive: true);
       await memoriesDir.create(recursive: true);
 
       final restoredPaths = <String, String>{};
       Map<String, dynamic>? metadataDecoded;
       List<dynamic>? animeDecoded;
       final ts = DateTime.now().millisecondsSinceEpoch;
+
+      // 🆕 تقدير العدد الإجمالي
+      _resetProgress(archive.length);
 
       for (final file in archive) {
         if (!file.isFile) continue;
@@ -230,23 +305,32 @@ class BackupService {
           } else {
             animeDecoded = jsonDecode(utf8.decode(bytes));
           }
+          await _maybeNotify('قراءة البيانات الوصفية');
           continue;
         }
 
         String? targetPath;
+        String label = 'استعادة ملف';
+
         if (name.startsWith('covers/')) {
           targetPath = '${coversDir.path}/restored_${ts}_${_sanitize(name.split('/').last)}';
+          label = 'استعادة غلاف';
         } else if (name.startsWith('videos/')) {
           targetPath = '${videosDir.path}/restored_${ts}_${_sanitize(name.split('/').last)}';
+          label = 'استعادة فيديو';
         } else if (name.startsWith('char_imgs/')) {
           targetPath = '${charImgsDir.path}/restored_${ts}_${_sanitize(name.split('/').last)}';
+          label = 'استعادة صورة شخصية';
         } else if (name.startsWith('characters/')) {
           targetPath = '${charsDir.path}/restored_${ts}_${_sanitize(name.split('/').last)}';
-        } else if (name.startsWith('scenes/')) { // 🆕
+          label = 'استعادة صورة شخصية';
+        } else if (name.startsWith('scenes/')) {
           targetPath = '${scenesDir.path}/restored_${ts}_${_sanitize(name.split('/').last)}';
+          label = 'استعادة مشهد';
         } else if (name.startsWith('memories/')) {
           final decodedName = Uri.decodeComponent(name.split('/').last);
           targetPath = '${memoriesDir.path}/restored_${ts}_$decodedName';
+          label = 'استعادة صورة ذكرى';
         }
 
         if (targetPath != null) {
@@ -255,6 +339,7 @@ class BackupService {
           await outputStream.close();
           restoredPaths[name] = targetPath;
           createdFiles.add(File(targetPath));
+          await _maybeNotify(label);
         }
       }
 
@@ -262,6 +347,7 @@ class BackupService {
 
       if (metadataDecoded == null || animeDecoded == null) {
         await _cleanup(createdFiles);
+        try { await _notif.showFailed(body: 'النسخة غير مكتملة.'); } catch (_) {}
         return 'النسخة غير مكتملة (metadata أو animes مفقود).';
       }
 
@@ -277,7 +363,6 @@ class BackupService {
         final v = videoAssets[anime.id];
         anime.videoPath = v is String ? restoredPaths[v] : null;
 
-        // صور شخصيات الأنمي
         for (final ch in anime.characters) {
           final chPath = ch['imagePath'] as String?;
           if (chPath != null && chPath.startsWith('backup://')) {
@@ -286,7 +371,6 @@ class BackupService {
           }
         }
 
-        // 🆕 صور المشاهد
         for (final scene in anime.scenes) {
           final sPath = scene['imagePath'] as String?;
           if (sPath != null && sPath.startsWith('backup://')) {
@@ -299,6 +383,7 @@ class BackupService {
       final saved = await StorageService().saveAnimes(animes);
       if (!saved) {
         await _cleanup(createdFiles);
+        try { await _notif.showFailed(body: 'تعذر حفظ البيانات.'); } catch (_) {}
         return 'تعذر حفظ بيانات الأنميات.';
       }
 
@@ -311,9 +396,15 @@ class BackupService {
         if (p != null) await prefs.setString(entry.key, p);
       }
 
+      // 🆕 إشعار النجاح
+      try {
+        await _notif.showCompleted(body: 'تم استعادة ${animes.length} أنمي بنجاح.');
+      } catch (_) {}
+
       return '✅ تمت استعادة جميع البيانات (الأنميات + المواسم + الشخصيات + المشاهد + الفيديوهات) بنجاح.';
     } catch (e) {
       await _cleanup(createdFiles);
+      try { await _notif.showFailed(body: 'خطأ أثناء الاستعادة: $e'); } catch (_) {}
       return 'فشلت الاستعادة: $e';
     }
   }
