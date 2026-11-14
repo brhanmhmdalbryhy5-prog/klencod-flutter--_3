@@ -14,7 +14,7 @@ final ValueNotifier<String> fontNotifier = ValueNotifier('Cairo');
 final ValueNotifier<Color> titleColorNotifier = ValueNotifier(const Color(0xFFFFD700));
 
 // ══════════════════════════════════════════════════════════════
-// 🆕 الطبقة العائمة (يجب أن تكون هنا في main.dart حصراً)
+// 🆕 الطبقة العائمة (مع زر النقاط الثلاث)
 // ══════════════════════════════════════════════════════════════
 @pragma("vm:entry-point")
 void overlayMain() {
@@ -63,7 +63,7 @@ class _OverlayWidgetState extends State<OverlayWidget> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Material(
-        color: Colors.transparent, 
+        color: Colors.transparent,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
           child: Container(
@@ -82,42 +82,86 @@ class _OverlayWidgetState extends State<OverlayWidget> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Icon(Icons.cloud_download, color: Colors.cyan, size: 28),
-                    const SizedBox(width: 12),
                     Expanded(
-                      child: Text(
-                        _title, 
-                        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold), 
-                        maxLines: 1, 
-                        overflow: TextOverflow.ellipsis
+                      child: Row(
+                        children: [
+                          const Icon(Icons.cloud_download, color: Colors.cyan, size: 28),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              _title,
+                              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
+                    ),
+                    // 🆕 زر النقاط الثلاث
+                    PopupMenuButton<String>(
+                      icon: const Icon(Icons.more_vert, color: Colors.white70),
+                      padding: EdgeInsets.zero,
+                      onSelected: (value) async {
+                        if (value == 'cancel') {
+                          // إرسال أمر إلغاء للتطبيق الأساسي
+                          await FlutterOverlayWindow.shareData({'action': 'cancel'});
+                          await FlutterOverlayWindow.closeOverlay();
+                        } else if (value == 'hide') {
+                          // إخفاء النافذة فقط (العملية تستمر في الخلفية)
+                          await FlutterOverlayWindow.closeOverlay();
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(
+                          value: 'cancel',
+                          child: Row(
+                            children: [
+                              Icon(Icons.cancel, color: Colors.redAccent),
+                              SizedBox(width: 8),
+                              Text('إلغاء العملية'),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'hide',
+                          child: Row(
+                            children: [
+                              Icon(Icons.close, color: Colors.white70),
+                              SizedBox(width: 8),
+                              Text('إخفاء النافذة فقط'),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 Text(
-                  _status, 
-                  style: const TextStyle(color: Colors.white70, fontSize: 13), 
-                  maxLines: 2, 
-                  overflow: TextOverflow.ellipsis
+                  _status,
+                  style: const TextStyle(color: Colors.white70, fontSize: 13),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 16),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
                   child: LinearProgressIndicator(
-                    value: _progress, 
-                    minHeight: 10, 
-                    backgroundColor: Colors.white12, 
-                    valueColor: const AlwaysStoppedAnimation<Color>(Colors.cyan)
+                    value: _progress,
+                    minHeight: 10,
+                    backgroundColor: Colors.white12,
+                    valueColor: const AlwaysStoppedAnimation<Color>(Colors.cyan),
                   ),
                 ),
                 const SizedBox(height: 8),
                 Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    '${(_progress * 100).toInt()}%', 
-                    style: const TextStyle(color: Colors.cyan, fontSize: 13, fontWeight: FontWeight.bold)
+                    '${(_progress * 100).toInt()}%',
+                    style: const TextStyle(color: Colors.cyan, fontSize: 13, fontWeight: FontWeight.bold),
                   ),
                 ),
               ],
