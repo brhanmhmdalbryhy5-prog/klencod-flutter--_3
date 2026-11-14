@@ -26,7 +26,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
   final AnimeApiService apiService = AnimeApiService();
   final TextEditingController searchController = TextEditingController();
   final ImagePicker imagePicker = ImagePicker();
-  
+
   final ScrollController _scrollController = ScrollController();
   bool _showBackToTop = false;
 
@@ -44,6 +44,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   List<Anime> animes = [];
   String selectedStatus = 'الكل';
+  String selectedType = 'الكل'; // 🆕 فلتر النوع (الكل / مسلسلات / أفلام)
   double selectedRatingFilter = 0;
   String searchText = '';
   String sortMode = 'newest';
@@ -103,9 +104,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
     try {
       final data = await storage.loadAnimes();
       if (!mounted) return;
-      setState(() { 
-        animes = data.where((a) => a.parentId == null).toList(); 
-        loading = false; 
+      setState(() {
+        animes = data.where((a) => a.parentId == null).toList();
+        loading = false;
       });
     } catch (_) {
       if (!mounted) return;
@@ -117,10 +118,18 @@ class _LibraryScreenState extends State<LibraryScreen> {
   List<Anime> get filteredAnimes {
     final query = searchText.trim().toLowerCase();
     final result = animes.where((anime) {
-      final matchesSearch = anime.title.toLowerCase().contains(query) || 
-                            anime.genre.toLowerCase().contains(query) || 
-                            anime.character.toLowerCase().contains(query);
-      
+      final matchesSearch = anime.title.toLowerCase().contains(query) ||
+          anime.genre.toLowerCase().contains(query) ||
+          anime.character.toLowerCase().contains(query);
+
+      // 🆕 فلترة النوع
+      bool matchesType = true;
+      if (selectedType == 'أفلام') {
+        matchesType = anime.format == 'MOVIE';
+      } else if (selectedType == 'مسلسلات') {
+        matchesType = anime.format != 'MOVIE';
+      }
+
       bool matchesStatus = false;
       if (selectedStatus == 'الكل') {
         matchesStatus = true;
@@ -141,7 +150,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         matchesRating = anime.rating == selectedRatingFilter;
       }
 
-      return matchesSearch && matchesStatus && matchesRating;
+      return matchesSearch && matchesType && matchesStatus && matchesRating;
     }).toList();
 
     switch (sortMode) {
@@ -266,7 +275,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
-  // 🔥 تم تعديل هذه الدالة لتحميل الصور محلياً
   Future<void> _fetchDataManually(Anime anime) async {
     if (anime.title.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الأنمي لا يملك اسماً، لا يمكن البحث عنه.')));
@@ -275,7 +283,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
     showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator()));
 
-    // نمرر downloadImages: true لتحميل الصور محلياً
     final data = await apiService.fetchAnimeData(anime.title, downloadImages: true);
 
     if (!mounted) return;
@@ -287,6 +294,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     final double? globalRating = data['globalRating'];
     final int? releaseYear = data['releaseYear'];
     final String? imagePath = data['imagePath'];
+    final String? fetchedFormat = data['format']; // 🆕
 
     if (genres.isNotEmpty || summary.isNotEmpty || episodes > 0 || globalRating != null || releaseYear != null || imagePath != null) {
       setState(() {
@@ -295,7 +303,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
         if (episodes > 0) anime.episodes = episodes;
         if (globalRating != null) anime.globalRating = globalRating;
         if (releaseYear != null) anime.releaseYear = releaseYear;
-        if (imagePath != null) anime.imagePath = imagePath; // 🔥 حفظ مسار الصورة المحلي
+        if (imagePath != null) anime.imagePath = imagePath;
+        if (fetchedFormat != null) anime.format = fetchedFormat; // 🆕
         if ((data['characters'] as List).isNotEmpty) {
           anime.characters = List<Map<String, dynamic>>.from(data['characters']);
         }
@@ -516,7 +525,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
   Widget _buildAnimeTitle(String title, {double fontSize = 16, bool lightText = false}) {
     final fontName = fontNotifier.value;
     final titleColor = titleColorNotifier.value;
-    
+
     TextStyle textStyle;
     if (fontName == 'Cairo') textStyle = GoogleFonts.cairo(fontSize: fontSize, fontWeight: FontWeight.w900, color: lightText ? Colors.white : titleColor);
     else if (fontName == 'Tajawal') textStyle = GoogleFonts.tajawal(fontSize: fontSize, fontWeight: FontWeight.w900, color: lightText ? Colors.white : titleColor);
@@ -549,7 +558,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
 
     double progress = anime.watchedEpisodes / anime.episodes;
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -886,7 +895,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
     Widget buildContent() {
       if (loading) return _buildSkeletonLoader();
-      
+
       if (items.isEmpty) {
         return Container(
           margin: const EdgeInsets.only(top: 20), padding: const EdgeInsets.all(30),
@@ -902,7 +911,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
           ),
         );
       }
-      
+
       switch (viewMode) {
         case 1: return GridView.builder(shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), itemCount: items.length, gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 10, mainAxisSpacing: 12, childAspectRatio: 0.58), itemBuilder: (context, index) => _buildGridCard(items[index]));
         case 2: return GridView.builder(shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), itemCount: items.length, gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, crossAxisSpacing: 8, mainAxisSpacing: 8, childAspectRatio: 0.6), itemBuilder: (context, index) => _buildCompactGridCard(items[index]));
@@ -940,6 +949,32 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 ),
               ),
               const SizedBox(height: 16),
+              // 🆕 فلتر النوع (الكل / مسلسلات / أفلام)
+              SizedBox(
+                height: 42,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: ['الكل', 'مسلسلات', 'أفلام'].map((type) {
+                    final selected = selectedType == type;
+                    return Padding(
+                      padding: const EdgeInsets.only(left: 8),
+                      child: ChoiceChip(
+                        label: Text(type),
+                        selected: selected,
+                        selectedColor: Colors.orangeAccent,
+                        backgroundColor: const Color(0xFF1B1F28),
+                        side: BorderSide(color: selected ? Colors.orangeAccent : Colors.white12),
+                        onSelected: (_) {
+                          HapticFeedback.selectionClick();
+                          setState(() => selectedType = type);
+                        },
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+              const SizedBox(height: 10),
+              // قائمة الحالة (كانت موجودة)
               SizedBox(
                 height: 42,
                 child: ListView(
