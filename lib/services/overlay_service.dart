@@ -9,27 +9,39 @@ class OverlayService {
 
   Future<bool> ensurePermission() async {
     if (_isPermissionGranted) return true;
-    bool granted = await FlutterOverlayWindow.isPermissionGranted();
-    if (!granted) {
-      granted = await FlutterOverlayWindow.requestPermission() ?? false;
+    try {
+      bool granted = await FlutterOverlayWindow.isPermissionGranted();
+      if (!granted) {
+        granted = await FlutterOverlayWindow.requestPermission() ?? false;
+      }
+      _isPermissionGranted = granted;
+      return granted;
+    } catch (_) {
+      return false;
     }
-    _isPermissionGranted = granted;
-    return granted;
   }
 
-  Future<void> showOverlay({String title = 'جاري المعالجة...'}) async {
-    if (!await ensurePermission()) return;
-    await FlutterOverlayWindow.showOverlay(
-      height: 160,
-      width: WindowSize.matchParent,
-      alignment: OverlayAlignment.topCenter, // ✅ تم الإصلاح
-      enableDrag: true,
-      overlayTitle: title,
-    );
+  /// إرجاع bool لمعرفة ما إذا نجح فتح النافذة أم لا
+  Future<bool> showOverlay({String title = 'جاري المعالجة...'}) async {
+    if (!await ensurePermission()) return false;
+    try {
+      await FlutterOverlayWindow.showOverlay(
+        height: 160,
+        width: WindowSize.matchParent,
+        alignment: OverlayAlignment.topCenter,
+        enableDrag: true,
+        overlayTitle: title,
+      );
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
   Future<void> closeOverlay() async {
-    await FlutterOverlayWindow.closeOverlay();
+    try {
+      await FlutterOverlayWindow.closeOverlay();
+    } catch (_) {}
   }
 
   Future<void> updateProgress({
@@ -37,10 +49,12 @@ class OverlayService {
     required String status,
     required double progress,
   }) async {
-    await FlutterOverlayWindow.shareData({
-      'title': title,
-      'status': status,
-      'progress': progress,
-    });
+    try {
+      await FlutterOverlayWindow.shareData({
+        'title': title,
+        'status': status,
+        'progress': progress,
+      });
+    } catch (_) {}
   }
 }
