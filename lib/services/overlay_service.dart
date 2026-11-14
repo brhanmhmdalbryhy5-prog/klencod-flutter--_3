@@ -26,9 +26,9 @@ class OverlayService {
     if (!await ensurePermission()) return false;
     try {
       await FlutterOverlayWindow.showOverlay(
-        height: 160,
-        width: WindowSize.matchParent,
-        alignment: OverlayAlignment.topCenter,
+        height: 200, // 🆕 زيادة الارتفاع لتتسع لكل المعلومات بوضوح
+        width: WindowSize.matchParent, 
+        alignment: OverlayAlignment.center, // 🆕 في منتصف الشاشة
         enableDrag: true,
         overlayTitle: title,
       );
