@@ -4,7 +4,7 @@ publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.4.0 <4.0.0'   # ← رُفع الحد الأدنى ليتوافق مع archive 4.x
+  sdk: '>=3.4.0 <4.0.0'
 
 dependencies:
   flutter:
@@ -12,13 +12,16 @@ dependencies:
   shared_preferences: ^2.2.2
   image_picker: ^1.1.2
   path_provider: ^2.1.5
-  archive: ^4.0.0          # ← الترقية الرئيسية
+  archive: ^4.0.0
   file_picker: ^8.1.7
   http: ^1.2.0
   google_fonts: ^6.2.1
   fl_chart: ^0.68.0
   screenshot: ^3.0.0
   share_plus: ^10.1.2
+
+  # 🆕 حزمة الإشعارات (لميزة النسخ الاحتياطي)
+  flutter_local_notifications: ^17.2.3
 
   # 🔥 تم تثبيت الإصدارات المتوافقة مع Flutter 3.22.0
   video_player: 2.9.3
