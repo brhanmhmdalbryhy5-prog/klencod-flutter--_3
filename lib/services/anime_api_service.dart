@@ -265,7 +265,7 @@ class AnimeApiService {
   }
 
   // ══════════════════════════════════════════════════════════════
-  // 🆕 جلب المشاهد (محسّن مع إعادة المحاولة 3 مرات)
+  // 🆕 جلب المشاهد (Kitsu أولاً، ثم AniList كاحتياطي)
   // ══════════════════════════════════════════════════════════════
   Future<Map<String, dynamic>> fetchAnimeScenes({
     required String animeTitle,
@@ -278,139 +278,100 @@ class AnimeApiService {
       'error': null,
     };
 
-    for (int attempt = 1; attempt <= 3; attempt++) {
-      try {
-        int? malId = idMal;
+    // المحاولة 1: استخدام Kitsu API (سريع وموثوق)
+    try {
+      final kitsuUrl = Uri.parse(
+        'https://kitsu.io/api/edge/anime?filter[text]=${Uri.encodeComponent(animeTitle)}&page[limit]=1',
+      );
+      final kitsuResp = await http.get(kitsuUrl).timeout(const Duration(seconds: 15));
 
-        // 1. إذا لم يكن هناك idMal، نطلبه من AniList أولاً
-        if (malId == null && animeTitle.trim().isNotEmpty) {
-          try {
-            final aniListQuery = '''
-              query (\$search: String) {
-                Media(search: \$search, type: ANIME) {
-                  idMal
-                }
+      if (kitsuResp.statusCode == 200) {
+        final kitsuData = jsonDecode(kitsuResp.body);
+        final data = kitsuData['data'] as List?;
+        if (data != null && data.isNotEmpty) {
+          final attributes = data[0]['attributes'];
+          final scenes = <Map<String, dynamic>>[];
+
+          // 1. صورة البوستر (posterImage)
+          final posterImage = attributes['posterImage'];
+          if (posterImage != null) {
+            final posterUrl = posterImage['original'] ?? posterImage['large'];
+            if (posterUrl != null) {
+              String? imagePath;
+              if (downloadImages) {
+                imagePath = await _downloadSceneImage(posterUrl);
               }
-            ''';
-            final aniListResp = await http.post(
-              Uri.parse('https://graphql.anilist.co'),
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({
-                'query': aniListQuery,
-                'variables': {'search': animeTitle.trim()}
-              }),
-            ).timeout(const Duration(seconds: 15));
+              scenes.add({'imageUrl': posterUrl, 'imagePath': imagePath});
+            }
+          }
 
-            if (aniListResp.statusCode == 200) {
-              final aniListData = jsonDecode(aniListResp.body);
-              final fetchedId =
-                  (aniListData['data']?['Media']?['idMal'] as num?)?.toInt();
-              if (fetchedId != null) {
-                malId = fetchedId;
-                result['idMal'] = malId;
+          // 2. صورة الغلاف (coverImage) إن وجدت
+          final coverImage = attributes['coverImage'];
+          if (coverImage != null) {
+            final coverUrl = coverImage['original'] ?? coverImage['large'];
+            if (coverUrl != null) {
+              String? imagePath;
+              if (downloadImages) {
+                imagePath = await _downloadSceneImage(coverUrl);
               }
+              scenes.add({'imageUrl': coverUrl, 'imagePath': imagePath});
             }
-          } catch (_) {}
-        }
+          }
 
-        // 2. إذا لم نجد idMal، نبحث في Jikan مباشرة
-        if (malId == null) {
-          final searchUrl = Uri.parse(
-            'https://api.jikan.moe/v4/anime?q=${Uri.encodeComponent(animeTitle)}&limit=1&sfw=true',
-          );
-          final searchResp =
-              await http.get(searchUrl).timeout(const Duration(seconds: 30));
-
-          if (searchResp.statusCode != 200) {
-            if (attempt < 3) {
-              await Future.delayed(Duration(seconds: attempt * 2));
-              continue;
-            }
-            result['error'] = 'فشل البحث في Jikan (كود ${searchResp.statusCode})';
+          if (scenes.isNotEmpty) {
+            result['scenes'] = scenes;
             return result;
           }
-          final searchData = jsonDecode(searchResp.body);
-          final dataList = searchData['data'] as List?;
-          if (dataList == null || dataList.isEmpty) {
-            result['error'] =
-                'لم يتم العثور على الأنمي. جرّب "تحميل شامل" أولاً للحصول على المعرف العالمي.';
-            return result;
-          }
-          malId = (dataList[0]['mal_id'] as num?)?.toInt();
-          result['idMal'] = malId;
-          if (malId == null) {
-            result['error'] = 'MAL ID غير متوفر';
-            return result;
-          }
-          await Future.delayed(const Duration(milliseconds: 400));
-        }
-
-        // 3. جلب صور المشاهد من Jikan
-        final picsUrl = Uri.parse('https://api.jikan.moe/v4/anime/$malId/pictures');
-        final picsResp =
-            await http.get(picsUrl).timeout(const Duration(seconds: 30));
-
-        if (picsResp.statusCode == 429) {
-          if (attempt < 3) {
-            await Future.delayed(Duration(seconds: attempt * 5));
-            continue;
-          }
-          result['error'] = 'تم تجاوز حد الطلبات المسموح به. حاول لاحقاً.';
-          return result;
-        }
-
-        if (picsResp.statusCode != 200) {
-          if (attempt < 3) {
-            await Future.delayed(Duration(seconds: attempt * 2));
-            continue;
-          }
-          result['error'] = 'فشل جلب الصور من Jikan (كود ${picsResp.statusCode})';
-          return result;
-        }
-
-        final picsData = jsonDecode(picsResp.body);
-        final data = picsData['data'] as List?;
-        if (data == null || data.isEmpty) {
-          result['error'] = 'لا توجد مشاهد متاحة لهذا الأنمي';
-          return result;
-        }
-
-        // 4. تنزيل كل صورة
-        final scenes = <Map<String, dynamic>>[];
-        for (var pic in data) {
-          final jpg = pic['jpg'];
-          if (jpg == null) continue;
-          final largeUrl = jpg['large_image_url'] as String?;
-          final normalUrl = jpg['image_url'] as String?;
-          final imageUrl = largeUrl ?? normalUrl;
-          if (imageUrl == null || imageUrl.isEmpty) continue;
-
-          String? imagePath;
-          if (downloadImages) {
-            imagePath = await _downloadSceneImage(imageUrl);
-          }
-          scenes.add({
-            'imageUrl': imageUrl,
-            'imagePath': imagePath,
-          });
-        }
-
-        result['scenes'] = scenes;
-        return result; 
-      } on TimeoutException {
-        if (attempt == 3) {
-          result['error'] = 'انتهت مهلة الاتصال بعد 3 محاولات. قد يكون خادم Jikan مشغولاً، حاول لاحقاً.';
-        } else {
-          await Future.delayed(Duration(seconds: attempt * 3));
-        }
-      } catch (e) {
-        if (attempt == 3) {
-          result['error'] = 'خطأ: $e';
-        } else {
-          await Future.delayed(Duration(seconds: attempt * 2));
         }
       }
+    } catch (_) {
+      // تجاهل خطأ Kitsu وننتقل للاحتياطي
     }
+
+    // المحاولة 2 (احتياطي): AniList لجلب bannerImage
+    try {
+      final aniListQuery = '''
+        query (\$search: String) {
+          Media(search: \$search, type: ANIME) {
+            bannerImage
+            coverImage { extraLarge }
+          }
+        }
+      ''';
+      final aniListResp = await http.post(
+        Uri.parse('https://graphql.anilist.co'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'query': aniListQuery, 'variables': {'search': animeTitle.trim()}}),
+      ).timeout(const Duration(seconds: 15));
+
+      if (aniListResp.statusCode == 200) {
+        final aniListData = jsonDecode(aniListResp.body);
+        final media = aniListData['data']?['Media'];
+        if (media != null) {
+          final scenes = <Map<String, dynamic>>[];
+          final bannerUrl = media['bannerImage'] as String?;
+          final coverUrl = media['coverImage']?['extraLarge'] as String?;
+
+          if (bannerUrl != null && bannerUrl.isNotEmpty) {
+            String? imagePath;
+            if (downloadImages) imagePath = await _downloadSceneImage(bannerUrl);
+            scenes.add({'imageUrl': bannerUrl, 'imagePath': imagePath});
+          }
+          if (coverUrl != null && coverUrl.isNotEmpty) {
+            String? imagePath;
+            if (downloadImages) imagePath = await _downloadSceneImage(coverUrl);
+            scenes.add({'imageUrl': coverUrl, 'imagePath': imagePath});
+          }
+
+          if (scenes.isNotEmpty) {
+            result['scenes'] = scenes;
+            return result;
+          }
+        }
+      }
+    } catch (_) {}
+
+    result['error'] = 'تعذر جلب المشاهد من جميع المصادر. حاول لاحقاً.';
     return result;
   }
 
