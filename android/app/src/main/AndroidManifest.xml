@@ -1,14 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- صلاحية الإنترنت لميزة جلب التصنيفات من الإنترنت -->
+    <!-- صلاحيات موجودة مسبقاً -->
     <uses-permission android:name="android.permission.INTERNET" />
-
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
-
-    <!-- 🆕 صلاحية الإشعارات (أندرويد 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+
+    <!-- 🆕 صلاحيات الطبقة العائمة (Overlay) -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <application
         android:requestLegacyExternalStorage="true"
@@ -28,10 +30,20 @@
             </intent-filter>
         </activity>
 
-        <!-- 🆕 Receiver لجدولة الإشعارات (متوافق مع flutter_local_notifications) -->
+        <!-- Receiver لجدولة الإشعارات (موجود مسبقاً) -->
         <receiver
             android:exported="false"
             android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
+
+        <!-- 🆕 خدمة الطبقة العائمة (OverlayService) -->
+        <service
+            android:name="flutter.overlay.window.flutter_overlay_window.OverlayService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="عرض تقدم العمليات فوق التطبيقات الأخرى" />
+        </service>
 
         <meta-data
             android:name="flutterEmbedding"
