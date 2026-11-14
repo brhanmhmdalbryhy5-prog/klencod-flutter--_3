@@ -58,21 +58,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (dialogContext) {
         return AlertDialog(
           backgroundColor: const Color(0xFF1B1F28),
-          title: const Text('اختر لون التطبيق'),
+          title: const Text('اختر لون التطبيق', style: TextStyle(fontSize: 18)),
           content: SizedBox(
             width: double.maxFinite,
+            height: 450, // ارتفاع ثابت مع Scroll
             child: GridView.builder(
-              shrinkWrap: true,
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 5, crossAxisSpacing: 10, mainAxisSpacing: 10),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 5,
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+              ),
               itemCount: appThemeColors.length,
               itemBuilder: (context, index) {
                 final colorItem = appThemeColors[index];
                 final isSelected = colorItem.color.value == primaryColorNotifier.value.value;
                 return GestureDetector(
                   onTap: () => Navigator.pop(dialogContext, colorItem.color),
-                  child: Container(
-                    decoration: BoxDecoration(color: colorItem.color, shape: BoxShape.circle, border: Border.all(color: isSelected ? Colors.white : Colors.transparent, width: 3), boxShadow: [BoxShadow(color: colorItem.color.withOpacity(0.6), blurRadius: 10, spreadRadius: 1)]),
-                    child: isSelected ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
+                  child: Tooltip(
+                    message: colorItem.name, // إظهار اسم اللون عند الضغط المطول
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: colorItem.color,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isSelected ? Colors.white : Colors.transparent,
+                          width: 3,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: colorItem.color.withOpacity(0.6),
+                            blurRadius: 10,
+                            spreadRadius: 1,
+                          )
+                        ],
+                      ),
+                      child: isSelected
+                          ? const Icon(Icons.check, color: Colors.white, size: 20)
+                          : null,
+                    ),
                   ),
                 );
               },
@@ -329,7 +352,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await _showDownloadResult(result);
   }
 
-  // 🆕 تنشيط صور الشخصيات والمواسم
   Future<void> _startMissingImagesDownload() async {
     if (bulkService.isRunning) return;
 
@@ -356,6 +378,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     if (confirm != true || !mounted) return;
     final result = await bulkService.downloadAllMissingImages();
+    if (!mounted) return;
+    await _showDownloadResult(result);
+  }
+
+  // 🆕 جلب المشاهد
+  Future<void> _startScenesDownload() async {
+    if (bulkService.isRunning) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF1B1F28),
+        title: const Text('جلب مشاهد الأنمي'),
+        content: const Text(
+          'سيقوم التطبيق بجلب صور مشاهد لكل الأنميات من Jikan API وحفظها محلياً.\n\n'
+          'ملاحظة: العملية قد تستغرق بضع دقائق.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: primaryColorNotifier.value),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('ابدأ'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+    final result = await bulkService.downloadAllScenes();
     if (!mounted) return;
     await _showDownloadResult(result);
   }
@@ -559,7 +611,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: isDownloading ? null : _startImagesDownload,
             ),
             const SizedBox(height: 10),
-            // 🆕 تنشيط صور الشخصيات والمواسم
             _settingsTile(
               icon: Icons.auto_fix_high,
               color: const Color(0xFF00BFA5),
@@ -567,6 +618,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
               subtitle: 'يجلب كل صورة مفقودة (أغلفة + شخصيات) لكل الأنميات والمواسم',
               trailing: const Icon(Icons.chevron_left, color: Colors.white38),
               onTap: isDownloading ? null : _startMissingImagesDownload,
+            ),
+            const SizedBox(height: 10),
+            // 🆕 جلب المشاهد
+            _settingsTile(
+              icon: Icons.collections,
+              color: const Color(0xFF00ACC1),
+              title: 'جلب مشاهد الأنمي',
+              subtitle: 'يجلب صور مشاهد من Jikan ويحفظها محلياً',
+              trailing: const Icon(Icons.chevron_left, color: Colors.white38),
+              onTap: isDownloading ? null : _startScenesDownload,
             ),
             const SizedBox(height: 10),
             _settingsTile(icon: Icons.delete_sweep_outlined, color: const Color(0xFFFF5A65), title: 'مسح جميع التصنيفات', subtitle: 'حذف التصنيفات من جميع الأنميات', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: _clearAllGenres),
