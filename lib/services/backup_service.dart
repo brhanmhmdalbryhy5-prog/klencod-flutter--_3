@@ -186,8 +186,15 @@ class BackupService {
 
         // ملفات صغيرة — نقرأها بالكامل
         if (name == 'metadata.json' || name == 'animes.json') {
-          final bytes = await file.readBytes();
+          final content = file.content;
+          Uint8List? bytes;
+          if (content is Uint8List) {
+            bytes = content;
+          } else if (content is List<int>) {
+            bytes = Uint8List.fromList(content);
+          }
           if (bytes == null) continue;
+
           if (name == 'metadata.json') {
             metadataDecoded = jsonDecode(utf8.decode(bytes));
           } else {
@@ -211,7 +218,8 @@ class BackupService {
 
         if (targetPath != null) {
           final outputStream = ziplib.OutputFileStream(targetPath);
-          await file.writeContent(outputStream);
+          // ✅ writeContent في archive 4.x متزامنة (sync) — بدون await
+          file.writeContent(outputStream);
           await outputStream.close();
           restoredPaths[name] = targetPath;
           createdFiles.add(File(targetPath));
