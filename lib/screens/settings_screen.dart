@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../main.dart';
@@ -277,24 +276,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }) async {
     if (bulkService.isRunning) return;
     await overlayService.showOverlay(title: title);
-    StreamSubscription? subscription;
-    if (action == bulkService.downloadAllData) {
-      subscription = bulkService.progress.listen((progress) {
-        if (progress != null) {
-          overlayService.updateProgress(
-            title: title,
-            status: progress.status,
-            progress: progress.percentage,
-          );
-        }
-      });
+
+    // استخدام addListener بدلاً من listen
+    void progressListener() {
+      final progress = bulkService.progress.value;
+      if (progress != null) {
+        overlayService.updateProgress(
+          title: title,
+          status: progress.status,
+          progress: progress.percentage,
+        );
+      }
     }
+
+    bulkService.progress.addListener(progressListener);
+
     try {
       final result = await action();
       await overlayService.closeOverlay();
       if (mounted) await _showDownloadResult(result);
     } finally {
-      subscription?.cancel();
+      bulkService.progress.removeListener(progressListener);
       await overlayService.closeOverlay();
     }
   }
