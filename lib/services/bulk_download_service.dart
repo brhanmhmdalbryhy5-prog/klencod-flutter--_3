@@ -67,7 +67,7 @@ class BulkDownloadService {
         characters.isNotEmpty;
   }
 
-  /// ✅ حفظ آمن مع إعادة محاولة واحدة
+  /// حفظ آمن مع إعادة محاولة واحدة
   Future<bool> _safeSave(List<Anime> animes, String animeTitle) async {
     final saved = await storage.saveAnimes(animes);
     if (saved) return true;
@@ -82,7 +82,7 @@ class BulkDownloadService {
   }
 
   // ══════════════════════════════════════════════════════════════
-  // 1️⃣ الجلب الشامل الكامل (بيانات + صور + مواسم + شخصيات)
+  // 1️⃣ الجلب الشامل الكامل
   // ══════════════════════════════════════════════════════════════
   Future<Map<String, dynamic>> downloadAllData() async {
     if (isRunning) return {'updated': 0, 'failed': 0, 'failedNames': <String>[]};
@@ -142,7 +142,7 @@ class BulkDownloadService {
         if (data['releaseYear'] != null) anime.releaseYear = data['releaseYear'];
         if (data['studios'] != null) anime.studios = data['studios'];
 
-        // ✅ لا نكتب فوق صورة الأنمي الأصلي إن كانت موجودة
+        // لا نكتب فوق صورة الأنمي الأصلي إن كانت موجودة
         if (anime.imagePath == null && data['imagePath'] != null) {
           anime.imagePath = data['imagePath'];
         }
@@ -150,14 +150,13 @@ class BulkDownloadService {
         if ((data['characters'] as List).isNotEmpty)
           anime.characters = List<Map<String, dynamic>>.from(data['characters']);
 
-        // ═══ المواسم والأفلام ═══
+        // المواسم والأفلام
         final subData = data['subAnimes'] as List? ?? [];
         for (var sub in subData) {
           final idx = animes.indexWhere(
               (a) => a.title == sub['title'] && a.parentId == anime.id);
 
           if (idx == -1) {
-            // موسم جديد
             animes.add(Anime(
               id: '${DateTime.now().microsecondsSinceEpoch}_${sub['title'].hashCode.abs()}',
               title: sub['title'],
@@ -182,7 +181,6 @@ class BulkDownloadService {
             if (existing.releaseYear == null && sub['releaseYear'] != null)
               existing.releaseYear = sub['releaseYear'];
 
-            // ✅ إعادة جلب صورة الموسم إذا كانت مفقودة أو الملف محذوف
             final needsSubImage = existing.imagePath == null ||
                 !File(existing.imagePath!).existsSync();
             if (needsSubImage && sub['imagePath'] != null)
@@ -195,7 +193,6 @@ class BulkDownloadService {
             if (existing.episodes == 0 && (sub['episodes'] ?? 0) > 0)
               existing.episodes = sub['episodes'];
 
-            // ✅ دمج شخصيات الموسم
             if (existing.characters.isEmpty &&
                 (sub['characters'] as List?)?.isNotEmpty == true) {
               existing.characters =
@@ -204,7 +201,6 @@ class BulkDownloadService {
           }
         }
 
-        // ✅ حفظ آمن مع تحقق
         final saved = await _safeSave(animes, anime.title);
         if (saved) {
           updated++;
@@ -231,7 +227,7 @@ class BulkDownloadService {
   }
 
   // ══════════════════════════════════════════════════════════════
-  // 2️⃣ تحميل الصور المفقودة فقط
+  // 2️⃣ تحميل الصور المفقودة فقط (النسخة القديمة السريعة)
   // ══════════════════════════════════════════════════════════════
   Future<Map<String, dynamic>> downloadImagesOnly() async {
     if (isRunning) return {'updated': 0, 'failed': 0, 'failedNames': <String>[]};
@@ -315,10 +311,7 @@ class BulkDownloadService {
   }
 
   // ══════════════════════════════════════════════════════════════
-  // 3️⃣ تحميل المواسم والأفلام والشخصيات فقط
-  //     لا يلمس بيانات الأنمي الأصلي
-  //     skipTranslation يسرّع (لا يترجم ملخص الأنمي الأصلي)
-  //     المواسم تُترجم دائماً
+  // 3️⃣ تحميل المواسم والشخصيات فقط (بدون تعديل بيانات الأنمي)
   // ══════════════════════════════════════════════════════════════
   Future<Map<String, dynamic>> downloadSeasonsAndCharactersOnly() async {
     if (isRunning) return {'updated': 0, 'failed': 0, 'failedNames': <String>[]};
@@ -360,8 +353,6 @@ class BulkDownloadService {
           failedNames: failedNames);
 
       try {
-        // ✅ skipTranslation: true لتخطي ترجمة ملخص الأنمي الأصلي (أسرع)
-        //    ترجمة المواسم تبقى فعالة دائماً
         final data = await apiService.fetchAnimeData(
           anime.title,
           downloadImages: true,
@@ -373,9 +364,7 @@ class BulkDownloadService {
 
         bool anyChange = false;
 
-        // ─────────────────────────────────────────
-        // أ) شخصيات الأنمي الأصلي (دمج ذكي)
-        // ─────────────────────────────────────────
+        // شخصيات الأنمي الأصلي (دمج ذكي)
         if (charsData.isNotEmpty) {
           final existingNames = anime.characters
               .map((c) => c['name']?.toString() ?? '')
@@ -386,11 +375,9 @@ class BulkDownloadService {
             if (name.isEmpty) continue;
 
             if (!existingNames.contains(name)) {
-              // شخصية جديدة
               anime.characters.add(Map<String, dynamic>.from(newChar));
               anyChange = true;
             } else {
-              // شخصية موجودة → حدّث الناقص فقط
               final idx = anime.characters
                   .indexWhere((c) => c['name']?.toString() == name);
               if (idx != -1) {
@@ -411,15 +398,12 @@ class BulkDownloadService {
           }
         }
 
-        // ─────────────────────────────────────────
-        // ب) المواسم والأفلام المرتبطة
-        // ─────────────────────────────────────────
+        // المواسم والأفلام
         for (var sub in subData) {
           final idx = animes.indexWhere(
               (a) => a.title == sub['title'] && a.parentId == anime.id);
 
           if (idx == -1) {
-            // موسم جديد → أضفه بالكامل
             animes.add(Anime(
               id: '${DateTime.now().microsecondsSinceEpoch}_${sub['title'].hashCode.abs()}',
               title: sub['title'],
@@ -439,11 +423,9 @@ class BulkDownloadService {
             ));
             anyChange = true;
           } else {
-            // موسم موجود → حدّث الناقص فقط
             final existing = animes[idx];
             bool subChanged = false;
 
-            // صورة الغلاف (تحديث إذا مفقودة أو الملف محذوف)
             final needsSubImage = existing.imagePath == null ||
                 !File(existing.imagePath!).existsSync();
             if (needsSubImage && sub['imagePath'] != null) {
@@ -451,7 +433,6 @@ class BulkDownloadService {
               subChanged = true;
             }
 
-            // بيانات وصفية
             if (existing.globalRating == null && sub['globalRating'] != null) {
               existing.globalRating = sub['globalRating'];
               subChanged = true;
@@ -473,7 +454,6 @@ class BulkDownloadService {
               subChanged = true;
             }
 
-            // شخصيات الموسم (دمج ذكي)
             final newSubChars = sub['characters'] as List?;
             if (newSubChars != null && newSubChars.isNotEmpty) {
               if (existing.characters.isEmpty) {
@@ -500,10 +480,6 @@ class BulkDownloadService {
           }
         }
 
-        // ⚠️ لا نلمس بيانات الأنمي الأصلي إطلاقاً:
-        // summary, genre, episodes, globalRating, releaseYear, studios, imagePath
-
-        // ✅ حفظ آمن فقط إذا كان هناك تغيير
         if (anyChange) {
           final saved = await _safeSave(animes, anime.title);
           if (saved) {
@@ -513,7 +489,6 @@ class BulkDownloadService {
             failed++;
           }
         } else {
-          // لا تغيير → يُحسب "نجاح" لأنه لا يوجد ما يُفعل
           updated++;
         }
         processed++;
@@ -529,6 +504,143 @@ class BulkDownloadService {
         total: mainAnimes.length, current: mainAnimes.length,
         currentTitle: 'اكتمل',
         status: '✅ تم الانتهاء (نجح: $updated | فشل: $failed)',
+        failedNames: failedNames);
+    isRunning = false;
+    return {'updated': updated, 'failed': failed, 'failedNames': failedNames};
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // 4️⃣ 🆕 تنشيط صور الشخصيات والمواسم
+  // ══════════════════════════════════════════════════════════════
+  Future<Map<String, dynamic>> downloadAllMissingImages() async {
+    if (isRunning) return {'updated': 0, 'failed': 0, 'failedNames': <String>[]};
+    final hasNetAtStart = await _hasInternet();
+    if (!hasNetAtStart) {
+      progress.value = BulkDownloadProgress(
+          total: 0, current: 0,
+          currentTitle: 'لا يوجد إنترنت', status: '❌ تعذر الاتصال');
+      return {'updated': 0, 'failed': 0, 'failedNames': <String>[], 'error': 'no_internet'};
+    }
+
+    isRunning = true;
+    _cancelRequested = false;
+    final animes = await storage.loadAnimes();
+    int updated = 0;
+    int failed = 0;
+    int processed = 0;
+    List<String> failedNames = [];
+
+    for (int i = 0; i < animes.length; i++) {
+      if (_cancelRequested) break;
+      final hasNet = await _hasInternet();
+      if (!hasNet) {
+        progress.value = BulkDownloadProgress(
+            total: animes.length, current: processed,
+            currentTitle: 'انقطع الاتصال', status: '❌ انقطع الإنترنت',
+            failedNames: failedNames);
+        isRunning = false;
+        return {'updated': updated, 'failed': failed,
+                'failedNames': failedNames, 'error': 'connection_lost'};
+      }
+
+      final anime = animes[i];
+      progress.value = BulkDownloadProgress(
+          total: animes.length, current: processed,
+          currentTitle: anime.title,
+          status: 'جاري جلب الصور الناقصة (نجح: $updated | فشل: $failed)',
+          failedNames: failedNames);
+
+      bool changed = false;
+
+      try {
+        // 1. غلاف الأنمي/الموسم
+        final coverPath = anime.imagePath;
+        final coverNeeds = coverPath == null ||
+            coverPath.isEmpty ||
+            !File(coverPath).existsSync();
+
+        if (coverNeeds) {
+          if (anime.imageUrl != null && anime.imageUrl!.isNotEmpty) {
+            final path = await ImageService.downloadImage(
+                anime.imageUrl!, prefix: 'cover');
+            if (path != null) {
+              anime.imagePath = path;
+              changed = true;
+            }
+          } else {
+            // imageUrl فارغ — نستدعي AniList لجلب كل شيء
+            final data = await apiService.fetchAnimeData(
+              anime.title,
+              downloadImages: true,
+              skipTranslation: true,
+            );
+            final newUrl = data['imageUrl'] as String?;
+            final newPath = data['imagePath'] as String?;
+            if (newUrl != null) anime.imageUrl = newUrl;
+            if (newPath != null) {
+              anime.imagePath = newPath;
+              changed = true;
+            }
+          }
+        }
+
+        // 2. صور الشخصيات
+        if (anime.characters.isEmpty) {
+          // لا يوجد شخصيات — نجلبها من AniList
+          final data = await apiService.fetchAnimeData(
+            anime.title,
+            downloadImages: true,
+            skipTranslation: true,
+          );
+          final charsData = data['characters'] as List?;
+          if (charsData != null && charsData.isNotEmpty) {
+            anime.characters = List<Map<String, dynamic>>.from(charsData);
+            changed = true;
+          }
+        } else {
+          // نمر على كل شخصية
+          for (var j = 0; j < anime.characters.length; j++) {
+            final char = anime.characters[j];
+            final cPath = char['imagePath'] as String?;
+            final cUrl = char['imageUrl'] as String?;
+            final needsCharImage = cPath == null ||
+                cPath.isEmpty ||
+                !File(cPath).existsSync();
+
+            if (needsCharImage && cUrl != null && cUrl.isNotEmpty) {
+              final path = await ImageService.downloadImage(cUrl, prefix: 'char');
+              if (path != null) {
+                char['imagePath'] = path;
+                changed = true;
+              }
+            }
+          }
+        }
+
+        if (changed) {
+          final saved = await _safeSave(animes, anime.title);
+          if (saved) {
+            updated++;
+          } else {
+            failedNames.add(anime.title);
+            failed++;
+          }
+        } else {
+          updated++;
+        }
+        processed++;
+      } catch (e) {
+        failedNames.add(anime.title);
+        failed++;
+        processed++;
+      }
+      await Future.delayed(const Duration(milliseconds: 150));
+    }
+
+    progress.value = BulkDownloadProgress(
+        total: animes.length, current: animes.length,
+        currentTitle: 'اكتمل',
+        status: '✅ تم (نجح: $updated | فشل: $failed)',
         failedNames: failedNames);
     isRunning = false;
     return {'updated': updated, 'failed': failed, 'failedNames': failedNames};
