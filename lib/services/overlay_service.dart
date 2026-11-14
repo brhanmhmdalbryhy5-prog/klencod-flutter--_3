@@ -1,9 +1,23 @@
+import 'dart:async';
+import 'package:flutter/foundation.dart'; // 🆕 تم إضافة هذا الاستيراد لتعريف VoidCallback
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 
 class OverlayService {
   static final OverlayService _instance = OverlayService._internal();
   factory OverlayService() => _instance;
-  OverlayService._internal();
+  
+  StreamSubscription? _listener;
+  VoidCallback? onCancelRequested;
+
+  OverlayService._internal() {
+    // الاستماع للرسائل القادمة من النافذة العائمة
+    _listener = FlutterOverlayWindow.overlayListener.listen((event) {
+      if (event is Map && event['action'] == 'cancel') {
+        onCancelRequested?.call(); // تنفيذ دالة الإلغاء
+        onCancelRequested = null; // تصفير الدالة بعد الاستخدام
+      }
+    });
+  }
 
   bool _isPermissionGranted = false;
 
@@ -21,14 +35,13 @@ class OverlayService {
     }
   }
 
-  /// إرجاع bool لمعرفة ما إذا نجح فتح النافذة أم لا
   Future<bool> showOverlay({String title = 'جاري المعالجة...'}) async {
     if (!await ensurePermission()) return false;
     try {
       await FlutterOverlayWindow.showOverlay(
-        height: 200, // 🆕 زيادة الارتفاع لتتسع لكل المعلومات بوضوح
+        height: 200,
         width: WindowSize.matchParent, 
-        alignment: OverlayAlignment.center, // 🆕 في منتصف الشاشة
+        alignment: OverlayAlignment.center,
         enableDrag: true,
         overlayTitle: title,
       );
