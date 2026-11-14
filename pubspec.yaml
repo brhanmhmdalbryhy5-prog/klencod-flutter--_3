@@ -21,7 +21,9 @@ dependencies:
   share_plus: ^10.1.2
   flutter_local_notifications: ^17.2.3
 
-  # 🔥 تمت إزالة حزمة الطبقة العائمة
+  # 🆕 حزمة ضغط الفيديوهات
+  video_compress: ^3.1.2
+
   video_player: 2.9.3
   chewie: 1.8.5
 
