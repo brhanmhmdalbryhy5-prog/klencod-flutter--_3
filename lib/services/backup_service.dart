@@ -69,7 +69,7 @@ class BackupService {
       encoder.create(tempZipPath);
 
       final coverAssets = <String, String>{};
-      final backCoverAssets = <String, String>{}; // 🆕
+      final backCoverAssets = <String, String>{}; // 🆕 للصورة الخلفية
       final characterAssets = <String, String>{};
       final videoAssets = <String, String>{};
       final addedNames = <String>{};
@@ -194,7 +194,7 @@ class BackupService {
 
       final metadata = {
         'format': 'anime_memory_backup',
-        'version': 7, // 🆕 رفع الإصدار لدعم الغلاف الخلفي
+        'version': 7, // 🆕 رفع الإصدار لدعم الصورة الخلفية
         'createdAt': DateTime.now().toIso8601String(),
         'coverAssets': coverAssets,
         'backCoverAssets': backCoverAssets, // 🆕
@@ -370,7 +370,7 @@ class BackupService {
       for (final anime in animes) {
         final c = coverAssets[anime.id];
         anime.imagePath = c is String ? restoredPaths[c] : null;
-
+        
         final bc = backCoverAssets[anime.id]; // 🆕
         anime.backImagePath = bc is String ? restoredPaths[bc] : null; // 🆕
 
@@ -414,7 +414,7 @@ class BackupService {
         await _notif.showCompleted(body: 'تم استعادة ${animes.length} أنمي بنجاح.');
       } catch (_) {}
 
-      return '✅ تمت استعادة جميع البيانات بنجاح.';
+      return '✅ تمت استعادة جميع البيانات (الأنمي + المواسم + الشخصيات + المشاهد + الفيديوهات + الصور الخلفية) بنجاح.';
     } catch (e) {
       await _cleanup(createdFiles);
       try { await _notif.showFailed(body: 'خطأ أثناء الاستعادة: $e'); } catch (_) {}
