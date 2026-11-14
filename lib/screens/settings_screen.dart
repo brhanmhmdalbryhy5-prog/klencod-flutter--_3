@@ -149,7 +149,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  // 🔥 عرض نتيجة التحميل مع أسماء الفاشلة
   Future<void> _showDownloadResult(Map<String, dynamic> result) async {
     final updated = result['updated'] ?? 0;
     final failed = result['failed'] ?? 0;
@@ -195,7 +194,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return;
     }
 
-    // عرض النتيجة الكاملة
     if (failedNames.isNotEmpty) {
       await showDialog(
         context: context,
@@ -248,7 +246,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _startBulkDownload() async {
     if (bulkService.isRunning) return;
-    
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -268,16 +266,47 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
     );
-    
+
     if (confirm != true || !mounted) return;
     final result = await bulkService.downloadAllData();
     if (!mounted) return;
     await _showDownloadResult(result);
   }
 
+  // 🆕 تحميل المواسم والشخصيات فقط
+  Future<void> _startSeasonsAndCharactersDownload() async {
+    if (bulkService.isRunning) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF1B1F28),
+        title: const Text('تحميل المواسم والشخصيات فقط'),
+        content: const Text(
+          'سيقوم التطبيق بجلب المواسم والأفلام المرتبطة والشخصيات الرئيسية لكل الأنميات في مكتبتك.\n\n'
+          '✅ سريع (بدون ترجمة ملخص الأنمي الأصلي)\n'
+          '✅ لن يتم تعديل بيانات الأنمي الأصلية (القصة، التصنيفات، الصورة)',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: primaryColorNotifier.value),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('ابدأ التحميل'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+    final result = await bulkService.downloadSeasonsAndCharactersOnly();
+    if (!mounted) return;
+    await _showDownloadResult(result);
+  }
+
   Future<void> _startImagesDownload() async {
     if (bulkService.isRunning) return;
-    
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -294,7 +323,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
     );
-    
+
     if (confirm != true || !mounted) return;
     final result = await bulkService.downloadImagesOnly();
     if (!mounted) return;
@@ -412,7 +441,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
             ),
-            
+
             if (isDownloading) ...[
               const SizedBox(height: 20),
               Container(
@@ -460,7 +489,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _settingsTile(icon: Icons.font_download_outlined, color: primaryColor, title: 'خط اسم الأنمي', subtitle: 'اختيار الخط المفضل', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: _showFontPicker),
             const SizedBox(height: 10),
             _settingsTile(icon: Icons.format_color_text, color: titleColorNotifier.value, title: 'لون اسم الأنمي', subtitle: 'تغيير لون النص', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: _showTitleColorPicker),
-            
+
             const SizedBox(height: 24),
             const Text('التحميل والتحديث', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
             const SizedBox(height: 12),
@@ -482,6 +511,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: isDownloading ? null : _startBulkDownload,
             ),
             const SizedBox(height: 10),
+            // 🆕 الزر الجديد: تحميل المواسم والشخصيات فقط
+            _settingsTile(
+              icon: Icons.groups_outlined,
+              color: Colors.purpleAccent,
+              title: 'تحميل المواسم والشخصيات فقط',
+              subtitle: 'يجلب المواسم والأفلام دون تعديل بيانات الأنمي الأصلي',
+              trailing: const Icon(Icons.chevron_left, color: Colors.white38),
+              onTap: isDownloading ? null : _startSeasonsAndCharactersDownload,
+            ),
+            const SizedBox(height: 10),
             _settingsTile(
               icon: Icons.image_outlined,
               color: const Color(0xFF9B59B6),
@@ -494,7 +533,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _settingsTile(icon: Icons.delete_sweep_outlined, color: const Color(0xFFFF5A65), title: 'مسح جميع التصنيفات', subtitle: 'حذف التصنيفات من جميع الأنميات', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: _clearAllGenres),
             const SizedBox(height: 10),
             _settingsTile(icon: Icons.delete_outline, color: const Color(0xFFFFB74D), title: 'سلة المهملات', subtitle: 'استعادة الأنميات المحذوفة', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: () { Navigator.push(context, MaterialPageRoute(builder: (_) => const TrashScreen())); }),
-            
+
             const SizedBox(height: 24),
             const Text('النسخ الاحتياطي', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
             const SizedBox(height: 12),
@@ -502,7 +541,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 10),
             _settingsTile(icon: Icons.settings_backup_restore, color: const Color(0xFFFFC857), title: 'استعادة نسخة احتياطية', subtitle: 'استرجاع بياناتك', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: backupBusy ? null : () => runBackupAction(restore: true)),
             if (backupBusy) ...[const SizedBox(height: 16), const Center(child: CircularProgressIndicator()), const SizedBox(height: 8), const Center(child: Text('جارٍ تجهيز البيانات...', style: TextStyle(color: Colors.white60)))],
-            
+
             const SizedBox(height: 24),
             const Text('حول التطبيق', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
             const SizedBox(height: 12),
