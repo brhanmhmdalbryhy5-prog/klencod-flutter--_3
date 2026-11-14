@@ -61,7 +61,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           title: const Text('اختر لون التطبيق', style: TextStyle(fontSize: 18)),
           content: SizedBox(
             width: double.maxFinite,
-            height: 450, // ارتفاع ثابت مع Scroll
+            height: 450,
             child: GridView.builder(
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 5,
@@ -75,7 +75,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 return GestureDetector(
                   onTap: () => Navigator.pop(dialogContext, colorItem.color),
                   child: Tooltip(
-                    message: colorItem.name, // إظهار اسم اللون عند الضغط المطول
+                    message: colorItem.name,
                     child: Container(
                       decoration: BoxDecoration(
                         color: colorItem.color,
@@ -276,8 +276,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         backgroundColor: const Color(0xFF1B1F28),
         title: const Text('تحميل البيانات الكاملة'),
         content: const Text(
-          'سيقوم التطبيق بجلب جميع البيانات والصور والمواسم والشخصيات لكل الأنميات في مكتبتك وحفظها محلياً.\n\n'
-          'يمكنك الاستمرار في استخدام التطبيق أثناء التحميل.',
+          'سيقوم التطبيق بجلب جميع البيانات والصور والمواسم والشخصيات لكل الأنميات في مكتبتك وحفظها محلياً.',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
@@ -305,9 +304,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         backgroundColor: const Color(0xFF1B1F28),
         title: const Text('تحميل المواسم والشخصيات فقط'),
         content: const Text(
-          'سيقوم التطبيق بجلب المواسم والأفلام المرتبطة والشخصيات الرئيسية لكل الأنميات في مكتبتك.\n\n'
-          '✅ سريع (بدون ترجمة ملخص الأنمي الأصلي)\n'
-          '✅ لن يتم تعديل بيانات الأنمي الأصلية (القصة، التصنيفات، الصورة)',
+          'سيقوم التطبيق بجلب المواسم والأفلام المرتبطة والشخصيات الرئيسية لكل الأنميات في مكتبتك.',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
@@ -322,6 +319,60 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     if (confirm != true || !mounted) return;
     final result = await bulkService.downloadSeasonsAndCharactersOnly();
+    if (!mounted) return;
+    await _showDownloadResult(result);
+  }
+
+  // 🆕 المواسم فقط
+  Future<void> _startSeasonsOnlyDownload() async {
+    if (bulkService.isRunning) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF1B1F28),
+        title: const Text('جلب المواسم والأفلام فقط'),
+        content: const Text('سيجلب المواسم والأفلام المرتبطة بكل أنمي، دون المساس بالشخصيات أو بيانات الأنمي الأصلية.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: primaryColorNotifier.value),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('ابدأ'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+    final result = await bulkService.downloadSeasonsOnly();
+    if (!mounted) return;
+    await _showDownloadResult(result);
+  }
+
+  // 🆕 الشخصيات فقط
+  Future<void> _startCharactersOnlyDownload() async {
+    if (bulkService.isRunning) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF1B1F28),
+        title: const Text('جلب شخصيات الأنمي فقط'),
+        content: const Text('سيجلب شخصيات الأنمي الأصلي فقط، دون المساس بالمواسم أو بيانات الأنمي.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: primaryColorNotifier.value),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('ابدأ'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+    final result = await bulkService.downloadCharactersOnly();
     if (!mounted) return;
     await _showDownloadResult(result);
   }
@@ -361,9 +412,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         backgroundColor: const Color(0xFF1B1F28),
         title: const Text('تنشيط صور الشخصيات والمواسم'),
         content: const Text(
-          'سيتحقق التطبيق من كل صورة (أغلفة الأنمي والمواسم + صور الشخصيات) '
-          'لكل الأنميات والمواسم في مكتبتك.\n\n'
-          'إذا كانت الصورة مفقودة أو الملف محذوف من الجهاز، سيُعيد تحميلها تلقائياً.',
+          'سيتحقق التطبيق من كل صورة (أغلفة + شخصيات) لكل الأنميات والمواسم.',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
@@ -382,7 +431,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await _showDownloadResult(result);
   }
 
-  // 🆕 جلب المشاهد
   Future<void> _startScenesDownload() async {
     if (bulkService.isRunning) return;
 
@@ -392,8 +440,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         backgroundColor: const Color(0xFF1B1F28),
         title: const Text('جلب مشاهد الأنمي'),
         content: const Text(
-          'سيقوم التطبيق بجلب صور مشاهد لكل الأنميات من Jikan API وحفظها محلياً.\n\n'
-          'ملاحظة: العملية قد تستغرق بضع دقائق.',
+          'سيقوم التطبيق بجلب صور مشاهد لكل الأنميات من Jikan API وحفظها محلياً.',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
@@ -470,6 +517,52 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  // 🆕 النسخة الخفيفة
+  Future<void> _runLiteBackup({required bool restore}) async {
+    if (backupBusy) return;
+    if (restore) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: const Color(0xFF1B1F28),
+          title: const Text('استعادة النسخة الخفيفة'),
+          content: const Text(
+            'ستُستبدل بيانات الأنميات الحالية (الأغلفة والشخصيات).\n'
+            'الفيديوهات والمشاهد والذكريات ستبقى كما هي.\n\n'
+            'هل تريد المتابعة؟',
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: primaryColorNotifier.value, foregroundColor: Colors.white),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('متابعة'),
+            ),
+          ],
+        ),
+      );
+      if (ok != true || !mounted) return;
+    }
+    setState(() => backupBusy = true);
+    String result;
+    try {
+      result = restore ? await backupService.restoreLiteBackup() : await backupService.createLiteBackup();
+    } catch (e) {
+      result = 'حدث خطأ: $e';
+    }
+    if (!mounted) return;
+    setState(() => backupBusy = false);
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1B1F28),
+        title: Text(restore ? 'نتيجة استعادة النسخة الخفيفة' : 'نتيجة النسخة الخفيفة'),
+        content: Text(result),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('حسنًا'))],
+      ),
+    );
+  }
+
   void showAbout() {
     showAboutDialog(
       context: context,
@@ -490,7 +583,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (dialogContext) => AlertDialog(
         backgroundColor: const Color(0xFF1B1F28),
         title: const Text('التخزين المحلي'),
-        content: const Text('يحفظ التطبيق بياناتك محليًا على الهاتف. لكن عند حذف التطبيق قد تُحذف بياناته الداخلية أيضًا. استخدم النسخ الاحتياطي واحفظ ملف ZIP في مجلد التنزيلات أو مكان آمن خارج التطبيق.'),
+        content: const Text('يحفظ التطبيق بياناتك محليًا على الهاتف. استخدم النسخ الاحتياطي واحفظ ملف ZIP في مكان آمن.'),
         actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('حسنًا'))],
       ),
     );
@@ -602,6 +695,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: isDownloading ? null : _startSeasonsAndCharactersDownload,
             ),
             const SizedBox(height: 10),
+            // 🆕 المواسم فقط
+            _settingsTile(
+              icon: Icons.movie_filter_outlined,
+              color: const Color(0xFFE67E22),
+              title: 'جلب المواسم والأفلام فقط',
+              subtitle: 'يجلب المواسم والأفلام المرتبطة فقط (بدون شخصيات)',
+              trailing: const Icon(Icons.chevron_left, color: Colors.white38),
+              onTap: isDownloading ? null : _startSeasonsOnlyDownload,
+            ),
+            const SizedBox(height: 10),
+            // 🆕 الشخصيات فقط
+            _settingsTile(
+              icon: Icons.people_alt_outlined,
+              color: Colors.purpleAccent,
+              title: 'جلب شخصيات الأنمي فقط',
+              subtitle: 'يجلب شخصيات الأنمي الأصلي فقط (بدون مواسم)',
+              trailing: const Icon(Icons.chevron_left, color: Colors.white38),
+              onTap: isDownloading ? null : _startCharactersOnlyDownload,
+            ),
+            const SizedBox(height: 10),
             _settingsTile(
               icon: Icons.image_outlined,
               color: const Color(0xFF9B59B6),
@@ -620,7 +733,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: isDownloading ? null : _startMissingImagesDownload,
             ),
             const SizedBox(height: 10),
-            // 🆕 جلب المشاهد
             _settingsTile(
               icon: Icons.collections,
               color: const Color(0xFF00ACC1),
@@ -637,10 +749,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 24),
             const Text('النسخ الاحتياطي', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
             const SizedBox(height: 12),
-            _settingsTile(icon: Icons.backup_outlined, color: const Color(0xFF35B77A), title: 'إنشاء نسخة احتياطية', subtitle: 'حفظ كل شيء (بيانات + صور + شخصيات + فيديوهات)', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: backupBusy ? null : () => runBackupAction(restore: false)),
+            _settingsTile(icon: Icons.backup_outlined, color: const Color(0xFF35B77A), title: 'إنشاء نسخة احتياطية شاملة', subtitle: 'كل شيء (بيانات + صور + شخصيات + مشاهد + فيديوهات)', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: backupBusy ? null : () => runBackupAction(restore: false)),
             const SizedBox(height: 10),
-            _settingsTile(icon: Icons.settings_backup_restore, color: const Color(0xFFFFC857), title: 'استعادة نسخة احتياطية', subtitle: 'استرجاع بياناتك', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: backupBusy ? null : () => runBackupAction(restore: true)),
-            if (backupBusy) ...[const SizedBox(height: 16), const Center(child: CircularProgressIndicator()), const SizedBox(height: 8), const Center(child: Text('جارٍ تجهيز البيانات...', style: TextStyle(color: Colors.white60)))],
+            _settingsTile(icon: Icons.settings_backup_restore, color: const Color(0xFFFFC857), title: 'استعادة النسخة الشاملة', subtitle: 'استرجاع كل شيء', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: backupBusy ? null : () => runBackupAction(restore: true)),
+            const SizedBox(height: 10),
+            // 🆕 نسخة خفيفة
+            _settingsTile(
+              icon: Icons.backup_outlined,
+              color: const Color(0xFF2196F3),
+              title: 'نسخة خفيفة (بيانات + شخصيات + أغلفة)',
+              subtitle: 'بدون فيديوهات/مشاهد/ذكريات — أسرع وأصغر',
+              trailing: const Icon(Icons.chevron_left, color: Colors.white38),
+              onTap: backupBusy ? null : () => _runLiteBackup(restore: false),
+            ),
+            const SizedBox(height: 10),
+            // 🆕 استعادة النسخة الخفيفة
+            _settingsTile(
+              icon: Icons.restore,
+              color: const Color(0xFF03A9F4),
+              title: 'استعادة النسخة الخفيفة',
+              subtitle: 'استرجاع البيانات والأغلفة والشخصيات فقط',
+              trailing: const Icon(Icons.chevron_left, color: Colors.white38),
+              onTap: backupBusy ? null : () => _runLiteBackup(restore: true),
+            ),
+            if (backupBusy) ...[
+              const SizedBox(height: 16),
+              const Center(child: CircularProgressIndicator()),
+              const SizedBox(height: 8),
+              const Center(child: Text('جارٍ تجهيز البيانات...', style: TextStyle(color: Colors.white60))),
+            ],
 
             const SizedBox(height: 24),
             const Text('حول التطبيق', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
