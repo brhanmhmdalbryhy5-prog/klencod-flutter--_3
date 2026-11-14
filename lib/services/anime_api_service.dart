@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -22,7 +23,7 @@ class AnimeApiService {
       'globalRating': null, 'releaseYear': null,
       'imageUrl': null, 'imagePath': null,
       'subAnimes': [], 'characters': [], 'studios': null,
-      'format': null, 'idMal': null, // 🆕
+      'format': null, 'idMal': null,
     };
     if (animeTitle.trim().isEmpty) return emptyReturn;
 
@@ -30,7 +31,6 @@ class AnimeApiService {
       try {
         const String url = 'https://graphql.anilist.co';
 
-        // ✅ تمت إضافة idMal و format للأنمي الأساسي، و idMal للمواسم
         final String query = '''
           query (\$search: String) {
             Page(perPage: 1) {
@@ -106,8 +106,8 @@ class AnimeApiService {
             final double? globalRating = averageScore != null ? averageScore / 10.0 : null;
             final int? releaseYear = media['startDate']?['year'] as int?;
             final String? imageUrl = media['coverImage']?['large'] as String?;
-            final String? format = media['format'] as String?;      // 🆕
-            final int? idMal = (media['idMal'] as num?)?.toInt();   // 🆕
+            final String? format = media['format'] as String?;
+            final int? idMal = (media['idMal'] as num?)?.toInt();
 
             String? studios;
             final studiosList = media['studios']?['nodes'] as List?;
@@ -183,7 +183,7 @@ class AnimeApiService {
 
                     final subScore = node['averageScore'] as int?;
                     final String? subImageUrl = node['coverImage']?['large'] as String?;
-                    final int? subIdMal = (node['idMal'] as num?)?.toInt(); // 🆕
+                    final int? subIdMal = (node['idMal'] as num?)?.toInt();
 
                     String? subImagePath;
                     if (downloadImages && subImageUrl != null) {
@@ -227,8 +227,8 @@ class AnimeApiService {
                       'imageUrl': subImageUrl,
                       'imagePath': subImagePath,
                       'characters': subCharacters,
-                      'format': subFormat, // 🆕
-                      'idMal': subIdMal,   // 🆕
+                      'format': subFormat,
+                      'idMal': subIdMal,
                     });
                   }
                 }
@@ -251,8 +251,8 @@ class AnimeApiService {
               'subAnimes': subAnimes,
               'characters': characters,
               'studios': studios,
-              'format': format,   // 🆕
-              'idMal': idMal,     // 🆕
+              'format': format,
+              'idMal': idMal,
             };
           }
           return emptyReturn;
@@ -265,7 +265,7 @@ class AnimeApiService {
   }
 
   // ══════════════════════════════════════════════════════════════
-  // 🆕 جلب المشاهد (من Jikan API)
+  // 🆕 جلب المشاهد (محسّن ضد Timeout)
   // ══════════════════════════════════════════════════════════════
   Future<Map<String, dynamic>> fetchAnimeScenes({
     required String animeTitle,
@@ -277,23 +277,58 @@ class AnimeApiService {
       'idMal': idMal,
       'error': null,
     };
+
     try {
       int? malId = idMal;
 
-      // 1. البحث عن MAL ID إذا لم يكن موجوداً
+      // 1. إذا لم يكن هناك idMal، نطلبه من AniList أولاً (أسرع وأوثق)
+      if (malId == null && animeTitle.trim().isNotEmpty) {
+        try {
+          final aniListQuery = '''
+            query (\$search: String) {
+              Media(search: \$search, type: ANIME) {
+                idMal
+              }
+            }
+          ''';
+          final aniListResp = await http.post(
+            Uri.parse('https://graphql.anilist.co'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'query': aniListQuery,
+              'variables': {'search': animeTitle.trim()}
+            }),
+          ).timeout(const Duration(seconds: 15));
+
+          if (aniListResp.statusCode == 200) {
+            final aniListData = jsonDecode(aniListResp.body);
+            final fetchedId =
+                (aniListData['data']?['Media']?['idMal'] as num?)?.toInt();
+            if (fetchedId != null) {
+              malId = fetchedId;
+              result['idMal'] = malId;
+            }
+          }
+        } catch (_) {}
+      }
+
+      // 2. إذا لم نجد idMal، نبحث في Jikan مباشرة
       if (malId == null) {
         final searchUrl = Uri.parse(
           'https://api.jikan.moe/v4/anime?q=${Uri.encodeComponent(animeTitle)}&limit=1&sfw=true',
         );
-        final searchResp = await http.get(searchUrl).timeout(const Duration(seconds: 15));
+        final searchResp =
+            await http.get(searchUrl).timeout(const Duration(seconds: 30));
+
         if (searchResp.statusCode != 200) {
-          result['error'] = 'فشل البحث';
+          result['error'] = 'فشل البحث في Jikan';
           return result;
         }
         final searchData = jsonDecode(searchResp.body);
         final dataList = searchData['data'] as List?;
         if (dataList == null || dataList.isEmpty) {
-          result['error'] = 'لم يتم العثور على الأنمي';
+          result['error'] =
+              'لم يتم العثور على الأنمي. جرّب "تحميل شامل" أولاً للحصول على المعرف العالمي.';
           return result;
         }
         malId = (dataList[0]['mal_id'] as num?)?.toInt();
@@ -305,21 +340,24 @@ class AnimeApiService {
         await Future.delayed(const Duration(milliseconds: 400));
       }
 
-      // 2. جلب الصور
+      // 3. جلب صور المشاهد من Jikan
       final picsUrl = Uri.parse('https://api.jikan.moe/v4/anime/$malId/pictures');
-      final picsResp = await http.get(picsUrl).timeout(const Duration(seconds: 20));
+      final picsResp =
+          await http.get(picsUrl).timeout(const Duration(seconds: 30));
+
       if (picsResp.statusCode != 200) {
-        result['error'] = 'فشل جلب الصور';
-        return result;
-      }
-      final picsData = jsonDecode(picsResp.body);
-      final data = picsData['data'] as List?;
-      if (data == null || data.isEmpty) {
-        result['error'] = 'لا توجد مشاهد';
+        result['error'] = 'فشل جلب الصور من Jikan (كود ${picsResp.statusCode})';
         return result;
       }
 
-      // 3. تنزيل كل صورة
+      final picsData = jsonDecode(picsResp.body);
+      final data = picsData['data'] as List?;
+      if (data == null || data.isEmpty) {
+        result['error'] = 'لا توجد مشاهد متاحة لهذا الأنمي';
+        return result;
+      }
+
+      // 4. تنزيل كل صورة
       final scenes = <Map<String, dynamic>>[];
       for (var pic in data) {
         final jpg = pic['jpg'];
@@ -338,7 +376,12 @@ class AnimeApiService {
           'imagePath': imagePath,
         });
       }
+
       result['scenes'] = scenes;
+      return result;
+    } on TimeoutException {
+      result['error'] =
+          'انتهت مهلة الاتصال. قد يكون خادم Jikan مشغولاً، حاول لاحقاً.';
       return result;
     } catch (e) {
       result['error'] = 'خطأ: $e';
@@ -354,7 +397,8 @@ class AnimeApiService {
       final fileName =
           'scene_${DateTime.now().microsecondsSinceEpoch}_${Random().nextInt(9999)}.jpg';
       final file = File('${folder.path}/$fileName');
-      final resp = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 20));
+      final resp =
+          await http.get(Uri.parse(url)).timeout(const Duration(seconds: 20));
       if (resp.statusCode != 200) return null;
       if (resp.bodyBytes.length < 500) return null;
       await file.writeAsBytes(resp.bodyBytes);
