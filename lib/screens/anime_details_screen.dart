@@ -4,6 +4,7 @@ import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -19,6 +20,7 @@ import '../main.dart';
 import '../models/anime.dart';
 import '../services/anime_api_service.dart';
 import '../services/storage_service.dart';
+import '../services/video_compression_service.dart';
 
 class AnimeDetailsScreen extends StatefulWidget {
   final Anime anime;
@@ -43,7 +45,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
   String? _characterImagePath;
   bool _loading = true;
   bool _busy = false;
-
   bool _fetchingScenes = false;
 
   final ScrollController _scrollController = ScrollController();
@@ -64,17 +65,13 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
   void initState() {
     super.initState();
 
-    // 🆕 دوران 360° كامل ومستمر
     _rotationController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 8), // 8 ثوانٍ للفة كاملة
+      duration: const Duration(seconds: 8),
     )..repeat();
 
     _rotationAnimation = Tween<double>(begin: 0, end: 2 * pi).animate(
-      CurvedAnimation(
-        parent: _rotationController,
-        curve: Curves.linear,
-      ),
+      CurvedAnimation(parent: _rotationController, curve: Curves.linear),
     );
 
     currentAnime = widget.anime;
@@ -161,25 +158,104 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
     try {
       final picked = await _picker.pickVideo(source: ImageSource.gallery);
       if (picked == null) return;
+
+      final progressNotifier = ValueNotifier<double>(0.0);
+      bool dialogClosed = false;
+
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => AlertDialog(
+            backgroundColor: panel,
+            content: ValueListenableBuilder<double>(
+              valueListenable: progressNotifier,
+              builder: (context, value, _) => Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.compress, size: 50, color: Colors.purpleAccent),
+                  const SizedBox(height: 16),
+                  const Text('جاري ضغط الفيديو...',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  const SizedBox(height: 16),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: LinearProgressIndicator(
+                      value: value,
+                      minHeight: 10,
+                      backgroundColor: Colors.white12,
+                      valueColor: AlwaysStoppedAnimation<Color>(primaryColorNotifier.value),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text('${(value * 100).toInt()}%',
+                      style: const TextStyle(fontSize: 12, color: Colors.white54)),
+                ],
+              ),
+            ),
+          ),
+        );
+      }
+
+      final compressedFile = await VideoCompressionService().compressVideo(
+        File(picked.path),
+        onProgress: (progress) {
+          if (!dialogClosed) progressNotifier.value = progress;
+        },
+      );
+
+      dialogClosed = true;
+      await Future.delayed(const Duration(milliseconds: 300));
+      if (mounted) Navigator.pop(context);
+
+      File fileToSave = compressedFile ?? File(picked.path);
+      final originalSize = await File(picked.path).length();
+
       final directory = await getApplicationDocumentsDirectory();
       final folder = Directory('${directory.path}/anime_videos');
       if (!await folder.exists()) await folder.create(recursive: true);
       final destination = '${folder.path}/${DateTime.now().microsecondsSinceEpoch}.mp4';
-      final savedFile = await File(picked.path).copy(destination);
+      final savedFile = await fileToSave.copy(destination);
+
       final allAnimes = await storage.loadAnimes();
       final index = allAnimes.indexWhere((a) => a.id == currentAnime.id);
       if (index != -1) {
+        final oldPath = allAnimes[index].videoPath;
+        if (oldPath != null && oldPath.isNotEmpty && oldPath != savedFile.path) {
+          try {
+            final oldFile = File(oldPath);
+            if (await oldFile.exists()) await oldFile.delete();
+          } catch (_) {}
+        }
+
         allAnimes[index].videoPath = savedFile.path;
         await storage.saveAnimes(allAnimes);
-        setState(() {
-          currentAnime.videoPath = savedFile.path;
-        });
+        setState(() => currentAnime.videoPath = savedFile.path);
         _initializeVideo(savedFile.path);
+
+        if (mounted) {
+          final newSize = await savedFile.length();
+          if (newSize < originalSize) {
+            final savings = ((1 - newSize / originalSize) * 100).toStringAsFixed(1);
+            final savedMB = ((originalSize - newSize) / (1024 * 1024)).toStringAsFixed(1);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('✅ تم حفظ الفيديو (ضُغط بنسبة $savings% • وفرت $savedMB MB)'),
+                backgroundColor: Colors.green,
+                duration: const Duration(seconds: 4),
+              ),
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('✅ تم حفظ الفيديو (لم يحتج لضغط)')),
+            );
+          }
+        }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('تعذر اختيار الفيديو.')));
+            .showSnackBar(SnackBar(content: Text('تعذر اختيار الفيديو: $e')));
       }
     }
   }
@@ -212,7 +288,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
     if (imagePath != null && File(imagePath).existsSync()) {
       imageWidget = Image.file(File(imagePath), fit: BoxFit.contain);
     } else if (imageUrl != null && imageUrl.isNotEmpty) {
-      imageWidget = Image.network(imageUrl, fit: BoxFit.contain);
+      imageWidget = CachedNetworkImage(imageUrl: imageUrl, fit: BoxFit.contain);
     }
     if (imageWidget == null) {
       ScaffoldMessenger.of(context)
@@ -236,7 +312,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
     if (imagePath != null && File(imagePath).existsSync()) {
       imageWidget = Image.file(File(imagePath), fit: BoxFit.contain);
     } else if (imageUrl != null && imageUrl.isNotEmpty) {
-      imageWidget = Image.network(imageUrl, fit: BoxFit.contain);
+      imageWidget = CachedNetworkImage(imageUrl: imageUrl, fit: BoxFit.contain);
     }
     if (imageWidget == null) return;
     showDialog(
@@ -261,7 +337,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
     final studiosController = TextEditingController(text: currentAnime.studios ?? '');
     double rating = currentAnime.rating;
     String? newImagePath = currentAnime.imagePath;
-    String? newBackImagePath = currentAnime.backImagePath; // 🆕
+    String? newBackImagePath = currentAnime.backImagePath;
 
     final result = await showDialog<bool>(
       context: context,
@@ -275,7 +351,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // الوجه الأمامي
                     GestureDetector(
                       onTap: () async {
                         final picked = await _picker.pickImage(
@@ -317,7 +392,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                           icon: const Icon(Icons.delete_outline, size: 16),
                           label: const Text('إزالة الصورة الأمامية')),
                     const SizedBox(height: 10),
-                    // 🆕 الوجه الخلفي
                     GestureDetector(
                       onTap: () async {
                         final picked = await _picker.pickImage(
@@ -430,7 +504,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
           ..watchedEpisodes = int.tryParse(watchedController.text) ?? 0
           ..rating = rating
           ..imagePath = newImagePath
-          ..backImagePath = newBackImagePath; // 🆕
+          ..backImagePath = newBackImagePath;
         await storage.saveAnimes(allAnimes);
         await _loadData();
       }
@@ -1182,7 +1256,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                 if (imgPath != null && File(imgPath).existsSync()) {
                   imageProvider = FileImage(File(imgPath));
                 } else if (imgUrl != null && imgUrl.isNotEmpty) {
-                  imageProvider = NetworkImage(imgUrl);
+                  imageProvider = CachedNetworkImageProvider(imgUrl);
                 }
 
                 return Padding(
@@ -1277,12 +1351,24 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                 if (path != null && File(path).existsSync()) {
                   imgWidget = Image.file(File(path), fit: BoxFit.cover);
                 } else if (url != null && url.isNotEmpty) {
-                  imgWidget = Image.network(url,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
-                          color: Colors.black26,
-                          child:
-                              const Icon(Icons.broken_image, color: Colors.white24)));
+                  imgWidget = CachedNetworkImage(
+                    imageUrl: url,
+                    fit: BoxFit.cover,
+                    placeholder: (_, __) => Container(
+                      color: Colors.black26,
+                      child: const Center(
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.cyan),
+                        ),
+                      ),
+                    ),
+                    errorWidget: (_, __, ___) => Container(
+                      color: Colors.black26,
+                      child: const Icon(Icons.broken_image, color: Colors.white24),
+                    ),
+                  );
                 } else {
                   imgWidget = Container(
                       color: Colors.black26,
@@ -1436,16 +1522,12 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
     if (mounted) setState(() {});
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // 🆕 بطاقة الوجه مع سُمك الكتاب (Spine)
-  // ══════════════════════════════════════════════════════════════
   Widget _coverCard(String? path, {required bool isFront}) {
     final primaryColor = primaryColorNotifier.value;
 
     return Container(
       width: 240,
       height: 360,
-      // نضيف هامش على اليمين لنترك مساحة لسمك الكتاب (الحواف)
       margin: const EdgeInsets.only(right: 12),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8),
@@ -1460,21 +1542,19 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
       ),
       child: Stack(
         children: [
-          // 🆕 1. سُمك الكتاب (الحافة/الصفحات)
           Positioned(
-            right: -10, // يبرز للخارج كسُمك كتاب
+            right: -10,
             top: 3,
             bottom: 3,
             child: Container(
               width: 14,
               decoration: BoxDecoration(
-                color: const Color(0xFFE0E0E0), // لون أوراق الكتاب
+                color: const Color(0xFFE0E0E0),
                 borderRadius: const BorderRadius.only(
                   topRight: Radius.circular(4),
                   bottomRight: Radius.circular(4),
                 ),
                 border: Border.all(color: Colors.black45, width: 1),
-                // خطوط تفصيلية لتبدو كأوراق متراصة
                 gradient: const LinearGradient(
                   begin: Alignment.centerLeft,
                   end: Alignment.centerRight,
@@ -1495,14 +1575,12 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
               ),
             ),
           ),
-
-          // 2. الغلاف الأمامي/الخلفي
           ClipRRect(
             borderRadius: BorderRadius.circular(8),
             child: Container(
               decoration: BoxDecoration(
                 border: Border.all(
-                  color: isFront ? primaryColor.withOpacity(0.8) : Colors.purpleAccent.withOpacity(0.8), 
+                  color: isFront ? primaryColor.withOpacity(0.8) : Colors.purpleAccent.withOpacity(0.8),
                   width: 2.5
                 ),
                 color: Colors.black,
@@ -1517,7 +1595,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                           child: const Icon(Icons.movie_creation_outlined,
                               size: 65, color: Colors.white30),
                         ),
-                  // لمعة زجاجية تعطي إحساس بانعكاس الضوء
                   Positioned.fill(
                     child: Container(
                       decoration: BoxDecoration(
@@ -1543,9 +1620,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
     );
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // 🆕 دوران 360° كامل مع ظل أرضي ووجهين
-  // ══════════════════════════════════════════════════════════════
   Widget _coverWith3D() {
     return GestureDetector(
       onTap: _showImageZoom,
@@ -1553,16 +1627,10 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
         animation: _rotationAnimation,
         builder: (context, child) {
           final angle = _rotationAnimation.value;
-          
-          // تحديد ما إذا كنا نرى الوجه الأمامي أو الخلفي بناءً على جيب تمام الزاوية
           final isFront = cos(angle) >= 0;
-
-          // إذا كنا في الوجه الخلفي، نستخدم الصورة الخلفية، وإذا لم توجد نستخدم الأمامية
           final displayImagePath = isFront
               ? currentAnime.imagePath
               : (currentAnime.backImagePath ?? currentAnime.imagePath);
-
-          // إخفاء البطاقة تماماً عند الحافة (90 و 270 درجة) لجعل الانتقال أكثر واقعية
           final opacity = cos(angle).abs().clamp(0.1, 1.0);
 
           return Container(
@@ -1571,11 +1639,9 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
             child: Stack(
               alignment: Alignment.center,
               children: [
-                // 1. الظل الأرضي (Ellipse Shadow)
                 Positioned(
                   bottom: 20,
                   child: Transform(
-                    // نحرك الظل عكس اتجاه البطاقة ونضيق حجمه عند الحواف
                     transform: Matrix4.identity()
                       ..translate(angle * 20, 0.0)
                       ..scale(cos(angle).abs() * 0.6 + 0.4, 1.0),
@@ -1596,19 +1662,16 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                     ),
                   ),
                 ),
-                
-                // 2. البطاقة الدوارة
                 Opacity(
                   opacity: opacity,
                   child: Transform(
                     alignment: Alignment.center,
                     transform: Matrix4.identity()
-                      ..setEntry(3, 2, 0.0015) // منظور 3D
-                      ..rotateY(angle), // الدوران الكامل 360
+                      ..setEntry(3, 2, 0.0015)
+                      ..rotateY(angle),
                     child: isFront
                         ? _coverCard(displayImagePath, isFront: true)
                         : Transform(
-                            // عكس الصورة الخلفية أفقياً حتى تظهر بشكل صحيح وليس كصورة معكوسة
                             alignment: Alignment.center,
                             transform: Matrix4.identity()..scale(-1.0, 1.0, 1.0),
                             child: _coverCard(displayImagePath, isFront: false),
