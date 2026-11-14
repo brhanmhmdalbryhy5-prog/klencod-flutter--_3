@@ -15,7 +15,10 @@ class ExportService {
     try {
       final animes = await _storage.loadAnimes();
       final rows = <List<String>>[
-        ['الاسم', 'الحالة', 'التصنيفات', 'الحلقات', 'تمت المشاهدة', 'تقييمي', 'التقييم العالمي', 'السنة', 'الاستوديو', 'النوع'],
+        [
+          'الاسم', 'الحالة', 'التصنيفات', 'الحلقات', 'تمت المشاهدة',
+          'تقييمي', 'التقييم العالمي', 'السنة', 'الاستوديو', 'النوع'
+        ],
         ...animes.map((a) => [
               a.title,
               a.status,
@@ -32,7 +35,8 @@ class ExportService {
 
       final csv = const ListToCsvConverter().convert(rows);
       final dir = await getApplicationDocumentsDirectory();
-      final file = File('${dir.path}/anime_export_${DateTime.now().millisecondsSinceEpoch}.csv');
+      final file = File(
+          '${dir.path}/anime_export_${DateTime.now().millisecondsSinceEpoch}.csv');
       await file.writeAsString('\uFEFF$csv');
 
       await Share.shareXFiles([XFile(file.path)], text: 'تصدير مكتبتي - CSV');
@@ -46,7 +50,6 @@ class ExportService {
     try {
       final animes = await _storage.loadAnimes();
 
-      // تحميل خط يدعم العربية
       final fontData = await PdfGoogleFonts.cairoRegular();
       final boldFontData = await PdfGoogleFonts.cairoBold();
 
@@ -102,9 +105,9 @@ class ExportService {
                 cellStyle: const pw.TextStyle(fontSize: 9),
                 cellAlignment: pw.Alignment.centerRight,
                 cellPadding: const pw.EdgeInsets.all(6),
-                border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
-                evenRowDecoration:
-                    const pw.BoxDecoration(color: PdfColors.grey100),
+                border:
+                    pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
+                // ✅ تم حذف evenRowDecoration (غير مدعوم في هذه النسخة)
               ),
             ];
           },
@@ -133,8 +136,12 @@ class ExportService {
 
       for (var anime in animes) {
         buffer.writeln('## ${anime.title}');
-        if (anime.genre.isNotEmpty) buffer.writeln('- **التصنيفات:** ${anime.genre}');
-        if (anime.status.isNotEmpty) buffer.writeln('- **الحالة:** ${anime.status}');
+        if (anime.genre.isNotEmpty) {
+          buffer.writeln('- **التصنيفات:** ${anime.genre}');
+        }
+        if (anime.status.isNotEmpty) {
+          buffer.writeln('- **الحالة:** ${anime.status}');
+        }
         if (anime.episodes > 0) {
           buffer.writeln(
               '- **الحلقات:** ${anime.watchedEpisodes}/${anime.episodes}');
@@ -146,8 +153,12 @@ class ExportService {
           buffer.writeln(
               '- **التقييم العالمي:** ${anime.globalRating!.toStringAsFixed(1)}/10');
         }
-        if (anime.releaseYear != null) buffer.writeln('- **السنة:** ${anime.releaseYear}');
-        if (anime.studios != null) buffer.writeln('- **الاستوديو:** ${anime.studios}');
+        if (anime.releaseYear != null) {
+          buffer.writeln('- **السنة:** ${anime.releaseYear}');
+        }
+        if (anime.studios != null) {
+          buffer.writeln('- **الاستوديو:** ${anime.studios}');
+        }
         if (anime.summary.isNotEmpty) {
           buffer.writeln('\n> ${anime.summary}\n');
         }
@@ -159,7 +170,8 @@ class ExportService {
           '${dir.path}/anime_library_${DateTime.now().millisecondsSinceEpoch}.md');
       await file.writeAsString(buffer.toString());
 
-      await Share.shareXFiles([XFile(file.path)], text: 'مكتبة الأنمي - Markdown');
+      await Share.shareXFiles([XFile(file.path)],
+          text: 'مكتبة الأنمي - Markdown');
       return '✅ تم تصدير ${animes.length} أنمي بصيغة Markdown.';
     } catch (e) {
       return '❌ فشل التصدير: $e';
