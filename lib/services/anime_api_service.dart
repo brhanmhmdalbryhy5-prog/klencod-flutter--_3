@@ -265,7 +265,7 @@ class AnimeApiService {
   }
 
   // ══════════════════════════════════════════════════════════════
-  // 🆕 جلب المشاهد (Kitsu أولاً، ثم AniList كاحتياطي)
+  // 🆕 جلب الصور (من Jikan - تعيد 5 إلى 10 صور ترويجية)
   // ══════════════════════════════════════════════════════════════
   Future<Map<String, dynamic>> fetchAnimeScenes({
     required String animeTitle,
@@ -278,101 +278,73 @@ class AnimeApiService {
       'error': null,
     };
 
-    // المحاولة 1: استخدام Kitsu API (سريع وموثوق)
     try {
-      final kitsuUrl = Uri.parse(
-        'https://kitsu.io/api/edge/anime?filter[text]=${Uri.encodeComponent(animeTitle)}&page[limit]=1',
-      );
-      final kitsuResp = await http.get(kitsuUrl).timeout(const Duration(seconds: 15));
+      int? malId = idMal;
 
-      if (kitsuResp.statusCode == 200) {
-        final kitsuData = jsonDecode(kitsuResp.body);
-        final data = kitsuData['data'] as List?;
+      // 1. جلب ID إذا لم يكن موجوداً
+      if (malId == null && animeTitle.trim().isNotEmpty) {
+        final searchUrl = Uri.parse(
+          'https://api.jikan.moe/v4/anime?q=${Uri.encodeComponent(animeTitle)}&limit=1&sfw=true',
+        );
+        final searchResp = await http.get(searchUrl).timeout(const Duration(seconds: 20));
+
+        if (searchResp.statusCode == 200) {
+          final searchData = jsonDecode(searchResp.body);
+          final dataList = searchData['data'] as List?;
+          if (dataList != null && dataList.isNotEmpty) {
+            malId = (dataList[0]['mal_id'] as num?)?.toInt();
+            result['idMal'] = malId;
+          }
+        }
+        await Future.delayed(const Duration(milliseconds: 400));
+      }
+
+      if (malId == null) {
+        result['error'] = 'لم يتم العثور على معرف الأنمي.';
+        return result;
+      }
+
+      // 2. جلب جميع الصور
+      final picsUrl = Uri.parse('https://api.jikan.moe/v4/anime/$malId/pictures');
+      final picsResp = await http.get(picsUrl).timeout(const Duration(seconds: 20));
+
+      if (picsResp.statusCode == 200) {
+        final picsData = jsonDecode(picsResp.body);
+        final data = picsData['data'] as List?;
         if (data != null && data.isNotEmpty) {
-          final attributes = data[0]['attributes'];
           final scenes = <Map<String, dynamic>>[];
+          for (var pic in data) {
+            final jpg = pic['jpg'];
+            if (jpg == null) continue;
+            final largeUrl = jpg['large_image_url'] as String?;
+            final normalUrl = jpg['image_url'] as String?;
+            final imageUrl = largeUrl ?? normalUrl;
+            if (imageUrl == null || imageUrl.isEmpty) continue;
 
-          // 1. صورة البوستر (posterImage)
-          final posterImage = attributes['posterImage'];
-          if (posterImage != null) {
-            final posterUrl = posterImage['original'] ?? posterImage['large'];
-            if (posterUrl != null) {
-              String? imagePath;
-              if (downloadImages) {
-                imagePath = await _downloadSceneImage(posterUrl);
-              }
-              scenes.add({'imageUrl': posterUrl, 'imagePath': imagePath});
+            String? imagePath;
+            if (downloadImages) {
+              imagePath = await _downloadSceneImage(imageUrl);
             }
+            scenes.add({
+              'imageUrl': imageUrl,
+              'imagePath': imagePath,
+            });
           }
-
-          // 2. صورة الغلاف (coverImage) إن وجدت
-          final coverImage = attributes['coverImage'];
-          if (coverImage != null) {
-            final coverUrl = coverImage['original'] ?? coverImage['large'];
-            if (coverUrl != null) {
-              String? imagePath;
-              if (downloadImages) {
-                imagePath = await _downloadSceneImage(coverUrl);
-              }
-              scenes.add({'imageUrl': coverUrl, 'imagePath': imagePath});
-            }
-          }
-
-          if (scenes.isNotEmpty) {
-            result['scenes'] = scenes;
-            return result;
-          }
+          result['scenes'] = scenes;
+          return result;
         }
       }
-    } catch (_) {
-      // تجاهل خطأ Kitsu وننتقل للاحتياطي
+      
+      result['error'] = 'لم يتم العثور على صور.';
+      return result;
+
+    } on TimeoutException {
+      result['error'] = 'انتهت مهلة الاتصال، حاول لاحقاً.';
+      return result;
+    } catch (e) {
+      result['error'] = 'خطأ: $e';
+      return result;
     }
-
-    // المحاولة 2 (احتياطي): AniList لجلب bannerImage
-    try {
-      final aniListQuery = '''
-        query (\$search: String) {
-          Media(search: \$search, type: ANIME) {
-            bannerImage
-            coverImage { extraLarge }
-          }
-        }
-      ''';
-      final aniListResp = await http.post(
-        Uri.parse('https://graphql.anilist.co'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'query': aniListQuery, 'variables': {'search': animeTitle.trim()}}),
-      ).timeout(const Duration(seconds: 15));
-
-      if (aniListResp.statusCode == 200) {
-        final aniListData = jsonDecode(aniListResp.body);
-        final media = aniListData['data']?['Media'];
-        if (media != null) {
-          final scenes = <Map<String, dynamic>>[];
-          final bannerUrl = media['bannerImage'] as String?;
-          final coverUrl = media['coverImage']?['extraLarge'] as String?;
-
-          if (bannerUrl != null && bannerUrl.isNotEmpty) {
-            String? imagePath;
-            if (downloadImages) imagePath = await _downloadSceneImage(bannerUrl);
-            scenes.add({'imageUrl': bannerUrl, 'imagePath': imagePath});
-          }
-          if (coverUrl != null && coverUrl.isNotEmpty) {
-            String? imagePath;
-            if (downloadImages) imagePath = await _downloadSceneImage(coverUrl);
-            scenes.add({'imageUrl': coverUrl, 'imagePath': imagePath});
-          }
-
-          if (scenes.isNotEmpty) {
-            result['scenes'] = scenes;
-            return result;
-          }
-        }
-      }
-    } catch (_) {}
-
-    result['error'] = 'تعذر جلب المشاهد من جميع المصادر. حاول لاحقاً.';
-    return result;
   }
 
   Future<String?> _downloadSceneImage(String url) async {
