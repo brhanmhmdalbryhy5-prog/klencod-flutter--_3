@@ -63,39 +63,63 @@ class _OverlayWidgetState extends State<OverlayWidget> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Material(
-        color: Colors.transparent,
-        child: Center(
+        color: Colors.transparent, 
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
           child: Container(
-            padding: const EdgeInsets.all(12),
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: const Color(0xFF1B1F28).withOpacity(0.95),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.cyan.withOpacity(0.5)),
+              border: Border.all(color: Colors.cyan.withOpacity(0.6), width: 1.5),
               boxShadow: [
-                BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 15, spreadRadius: 2),
+                BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 20, spreadRadius: 2),
               ],
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.cloud_download, color: Colors.cyan, size: 24),
-                    const SizedBox(width: 10),
+                    const Icon(Icons.cloud_download, color: Colors.cyan, size: 28),
+                    const SizedBox(width: 12),
                     Expanded(
-                      child: Text(_title, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      child: Text(
+                        _title, 
+                        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold), 
+                        maxLines: 1, 
+                        overflow: TextOverflow.ellipsis
+                      ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
-                Text(_status, style: const TextStyle(color: Colors.white70, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
+                Text(
+                  _status, 
+                  style: const TextStyle(color: Colors.white70, fontSize: 13), 
+                  maxLines: 2, 
+                  overflow: TextOverflow.ellipsis
+                ),
+                const SizedBox(height: 16),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
-                  child: LinearProgressIndicator(value: _progress, minHeight: 8, backgroundColor: Colors.white12, valueColor: const AlwaysStoppedAnimation<Color>(Colors.cyan)),
+                  child: LinearProgressIndicator(
+                    value: _progress, 
+                    minHeight: 10, 
+                    backgroundColor: Colors.white12, 
+                    valueColor: const AlwaysStoppedAnimation<Color>(Colors.cyan)
+                  ),
                 ),
                 const SizedBox(height: 8),
-                Text('${(_progress * 100).toInt()}%', style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '${(_progress * 100).toInt()}%', 
+                    style: const TextStyle(color: Colors.cyan, fontSize: 13, fontWeight: FontWeight.bold)
+                  ),
+                ),
               ],
             ),
           ),
