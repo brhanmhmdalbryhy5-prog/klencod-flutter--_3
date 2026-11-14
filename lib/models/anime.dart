@@ -20,9 +20,19 @@ class Anime {
   String? partName;
   String? videoPath;
   List<Map<String, dynamic>> characters;
-  
+
   // 🔥 حقل جديد للاستوديو
   String? studios;
+
+  // 🆕 نوع العمل (TV / MOVIE / OVA / SPECIAL / ONA / TV_SHORT)
+  String? format;
+
+  // 🆕 صور المشاهد المحلية
+  // كل عنصر: {'imagePath': '/path/to/scene.jpg', 'imageUrl': 'https://...'}
+  List<Map<String, dynamic>> scenes;
+
+  // 🆕 رقم MyAnimeList (لجلب المشاهد من Jikan API)
+  int? idMal;
 
   Anime({
     required this.id,
@@ -47,6 +57,9 @@ class Anime {
     this.videoPath,
     this.characters = const [],
     this.studios,
+    this.format,
+    this.scenes = const [],
+    this.idMal,
   });
 
   Map<String, dynamic> toJson() {
@@ -56,10 +69,13 @@ class Anime {
       'episodes': episodes, 'watchedEpisodes': watchedEpisodes,
       'rating': rating, 'favorite': favorite, 'colorIndex': colorIndex,
       'date': date, 'imagePath': imagePath, 'imageUrl': imageUrl,
-      'globalRating': globalRating, 'releaseYear': releaseYear, 
+      'globalRating': globalRating, 'releaseYear': releaseYear,
       'parentId': parentId, 'partName': partName, 'videoPath': videoPath,
       'characters': characters,
-      'studios': studios, // 🔥
+      'studios': studios,
+      'format': format,        // 🆕
+      'scenes': scenes,        // 🆕
+      'idMal': idMal,          // 🆕
     };
   }
 
@@ -85,8 +101,17 @@ class Anime {
       parentId: json['parentId'] as String?,
       partName: json['partName'] as String?,
       videoPath: json['videoPath'] as String?,
-      characters: (json['characters'] as List?)?.map((e) => Map<String, dynamic>.from(e)).toList() ?? [],
+      characters: (json['characters'] as List?)
+              ?.map((e) => Map<String, dynamic>.from(e))
+              .toList() ??
+          [],
       studios: json['studios'] as String?,
+      format: json['format'] as String?,                              // 🆕
+      scenes: (json['scenes'] as List?)                               // 🆕
+              ?.map((e) => Map<String, dynamic>.from(e))
+              .toList() ??
+          [],
+      idMal: (json['idMal'] as num?)?.toInt(),                        // 🆕
     );
   }
 }
