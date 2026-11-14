@@ -5,7 +5,6 @@ import '../services/backup_service.dart';
 import '../services/theme_service.dart';
 import '../services/anime_api_service.dart';
 import '../services/bulk_download_service.dart';
-import '../services/overlay_service.dart';
 import 'trash_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -24,7 +23,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final BackupService backupService = BackupService();
   final AnimeApiService apiService = AnimeApiService();
   final BulkDownloadService bulkService = BulkDownloadService();
-  final OverlayService overlayService = OverlayService();
 
   @override
   void initState() {
@@ -269,52 +267,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  /// دالة مساعدة لتشغيل أي عملية مع إظهار الطبقة العائمة وتحديثها
-  Future<void> _runWithOverlay({
-    required String title,
+  /// دالة مساعدة لتشغيل أي عملية (بدون طبقة عائمة)
+  Future<void> _runAction({
     required Future<Map<String, dynamic>> Function() action,
   }) async {
     if (bulkService.isRunning) return;
-
-    // 🆕 ربط زر الإلغاء في النافذة العائمة بدالة إيقاف الجلب
-    overlayService.onCancelRequested = () {
-      if (bulkService.isRunning) {
-        bulkService.cancel();
-      }
-    };
-
-    final overlayOpened = await overlayService.showOverlay(title: title);
-
-    if (!overlayOpened && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('ℹ️ لتظهر النافذة العائمة، يرجى السماح للتطبيق "بالظهور فوق التطبيقات الأخرى" من إعدادات الهاتف.'),
-          duration: Duration(seconds: 5),
-        ),
-      );
-    }
-
-    void progressListener() {
-      final progress = bulkService.progress.value;
-      if (progress != null) {
-        overlayService.updateProgress(
-          title: title,
-          status: progress.status,
-          progress: progress.percentage,
-        );
-      }
-    }
-
-    bulkService.progress.addListener(progressListener);
-
     try {
       final result = await action();
-      if (overlayOpened) await overlayService.closeOverlay();
       if (mounted) await _showDownloadResult(result);
-    } finally {
-      bulkService.progress.removeListener(progressListener);
-      overlayService.onCancelRequested = null; // تنظيف الدالة بعد الانتهاء
-      if (overlayOpened) await overlayService.closeOverlay();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('حدث خطأ: $e')),
+        );
+      }
     }
   }
 
@@ -336,10 +302,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
     if (confirm != true || !mounted) return;
-    await _runWithOverlay(
-      title: 'تحميل شامل',
-      action: () => bulkService.downloadAllData(),
-    );
+    await _runAction(action: () => bulkService.downloadAllData());
   }
 
   Future<void> _startSeasonsAndCharactersDownload() async {
@@ -360,10 +323,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
     if (confirm != true || !mounted) return;
-    await _runWithOverlay(
-      title: 'جلب المواسم والشخصيات',
-      action: () => bulkService.downloadSeasonsAndCharactersOnly(),
-    );
+    await _runAction(action: () => bulkService.downloadSeasonsAndCharactersOnly());
   }
 
   Future<void> _startSeasonsOnlyDownload() async {
@@ -384,10 +344,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
     if (confirm != true || !mounted) return;
-    await _runWithOverlay(
-      title: 'جلب المواسم والأفلام',
-      action: () => bulkService.downloadSeasonsOnly(),
-    );
+    await _runAction(action: () => bulkService.downloadSeasonsOnly());
   }
 
   Future<void> _startCharactersOnlyDownload() async {
@@ -408,10 +365,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
     if (confirm != true || !mounted) return;
-    await _runWithOverlay(
-      title: 'جلب الشخصيات',
-      action: () => bulkService.downloadCharactersOnly(),
-    );
+    await _runAction(action: () => bulkService.downloadCharactersOnly());
   }
 
   Future<void> _startImagesDownload() async {
@@ -432,10 +386,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
     if (confirm != true || !mounted) return;
-    await _runWithOverlay(
-      title: 'تحميل الصور المفقودة',
-      action: () => bulkService.downloadImagesOnly(),
-    );
+    await _runAction(action: () => bulkService.downloadImagesOnly());
   }
 
   Future<void> _startMissingImagesDownload() async {
@@ -456,10 +407,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
     if (confirm != true || !mounted) return;
-    await _runWithOverlay(
-      title: 'تنشيط الصور',
-      action: () => bulkService.downloadAllMissingImages(),
-    );
+    await _runAction(action: () => bulkService.downloadAllMissingImages());
   }
 
   Future<void> _startScenesDownload() async {
@@ -467,8 +415,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: const Color(0xFF1B1F28),
-        title: const Text('جلب مشاهد الأنمي'),
-        content: const Text('سيقوم التطبيق بجلب صور مشاهد لكل الأنميات من Jikan API وحفظها محلياً.'),
+        title: const Text('جلب صور الأنمي (ملصقات)'),
+        content: const Text('سيقوم التطبيق بجلب جميع الصور الترويجية المتاحة لكل الأنمي وحفظها محلياً.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
           FilledButton(
@@ -480,10 +428,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
     if (confirm != true || !mounted) return;
-    await _runWithOverlay(
-      title: 'جلب المشاهد',
-      action: () => bulkService.downloadAllScenes(),
-    );
+    await _runAction(action: () => bulkService.downloadAllScenes());
   }
 
   Future<void> _clearAllGenres() async {
@@ -525,17 +470,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     setState(() => backupBusy = true);
-    
-    final overlayOpened = await overlayService.showOverlay(title: restore ? 'استعادة شاملة' : 'نسخة شاملة');
-    
     String result;
     try {
       result = restore ? await backupService.restoreBackup() : await backupService.createBackup();
     } catch (e) {
       result = 'حدث خطأ: $e';
     }
-    
-    if (overlayOpened) await overlayService.closeOverlay();
     if (!mounted) return;
     setState(() => backupBusy = false);
     await showDialog<void>(
@@ -571,17 +511,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (ok != true || !mounted) return;
     }
     setState(() => backupBusy = true);
-    
-    final overlayOpened = await overlayService.showOverlay(title: restore ? 'استعادة خفيفة' : 'نسخة خفيفة');
-    
     String result;
     try {
       result = restore ? await backupService.restoreLiteBackup() : await backupService.createLiteBackup();
     } catch (e) {
       result = 'حدث خطأ: $e';
     }
-    
-    if (overlayOpened) await overlayService.closeOverlay();
     if (!mounted) return;
     setState(() => backupBusy = false);
     await showDialog<void>(
@@ -766,8 +701,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _settingsTile(
               icon: Icons.collections,
               color: const Color(0xFF00ACC1),
-              title: 'جلب مشاهد الأنمي',
-              subtitle: 'يجلب صور مشاهد من Jikan ويحفظها محلياً',
+              title: 'جلب صور الأنمي (ملصقات)',
+              subtitle: 'يجلب صور ترويجية (5-10 صور) لكل أنمي',
               trailing: const Icon(Icons.chevron_left, color: Colors.white38),
               onTap: isDownloading ? null : _startScenesDownload,
             ),
