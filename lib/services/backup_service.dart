@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:archive/archive_io.dart' as ziplib;
+import 'package:archive/archive.dart' as ziplib;
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -14,12 +14,6 @@ class BackupService {
   static const String characterPrefix = 'anime_character_image_';
 
   Future<String> createBackup() async {
-    final tempDir = await getTemporaryDirectory();
-    final ts = DateTime.now().millisecondsSinceEpoch;
-    final tempZipPath = '${tempDir.path}/backup_$ts.zip';
-    File? tempMetaFile;
-    File? tempAnimeFile;
-
     try {
       final prefs = await SharedPreferences.getInstance();
       final decoded = jsonDecode(prefs.getString(animeKey) ?? '[]');
@@ -29,18 +23,16 @@ class BackupService {
           .map((item) => Anime.fromJson(Map<String, dynamic>.from(item)))
           .toList();
 
-      final encoder = ziplib.ZipFileEncoder();
-      encoder.create(tempZipPath);
-
+      final archive = ziplib.Archive();
       final coverAssets = <String, String>{};
       final characterAssets = <String, String>{};
       final videoAssets = <String, String>{};
-      final addedNames = <String>{};
+      final addedAssets = <String>{};
 
-      void addFileIfNeeded(File file, String archiveName) {
-        if (addedNames.contains(archiveName)) return;
-        addedNames.add(archiveName);
-        encoder.addFile(file, archiveName);
+      void addBytes(String name, List<int> bytes) {
+        if (addedAssets.contains(name)) return;
+        addedAssets.add(name);
+        archive.addFile(ziplib.ArchiveFile(name, bytes.length, bytes));
       }
 
       final animeJson = <Map<String, dynamic>>[];
@@ -53,9 +45,8 @@ class BackupService {
         if (path != null && path.isNotEmpty) {
           final file = File(path);
           if (await file.exists()) {
-            final ext = _extension(path);
-            final asset = 'covers/cover_$i.$ext';
-            addFileIfNeeded(file, asset);
+            final asset = 'covers/cover_$i.${_extension(path)}';
+            addBytes(asset, await file.readAsBytes());
             coverAssets[anime.id] = asset;
             item['imagePath'] = 'backup://$asset';
           } else {
@@ -67,9 +58,8 @@ class BackupService {
         if (videoPath != null && videoPath.isNotEmpty) {
           final file = File(videoPath);
           if (await file.exists()) {
-            final ext = _extension(videoPath);
-            final asset = 'videos/video_$i.$ext';
-            addFileIfNeeded(file, asset);
+            final asset = 'videos/video_$i.${_extension(videoPath)}';
+            addBytes(asset, await file.readAsBytes());
             videoAssets[anime.id] = asset;
             item['videoPath'] = 'backup://$asset';
           } else {
@@ -86,9 +76,8 @@ class BackupService {
         if (path == null || path.isEmpty) continue;
         final file = File(path);
         if (!await file.exists()) continue;
-        final ext = _extension(path);
-        final asset = 'characters/${Uri.encodeComponent(key)}.$ext';
-        addFileIfNeeded(file, asset);
+        final asset = 'characters/${Uri.encodeComponent(key)}.${_extension(path)}';
+        addBytes(asset, await file.readAsBytes());
         characterAssets[key] = asset;
       }
 
@@ -99,7 +88,7 @@ class BackupService {
           if (entity is! File) continue;
           final name = entity.uri.pathSegments.last;
           final asset = 'memories/${Uri.encodeComponent(name)}';
-          addFileIfNeeded(entity, asset);
+          addBytes(asset, await entity.readAsBytes());
         }
       }
 
@@ -112,50 +101,34 @@ class BackupService {
         'videoAssets': videoAssets,
       };
 
-      // ✅ كتابة JSON إلى ملفات مؤقتة ثم إضافتها (بدل OutputMemoryStream غير المتوفر)
-      tempMetaFile = File('${tempDir.path}/metadata_$ts.json');
-      await tempMetaFile.writeAsBytes(utf8.encode(jsonEncode(metadata)));
-      encoder.addFile(tempMetaFile, 'metadata.json');
+      final metadataBytes = utf8.encode(jsonEncode(metadata));
+      final animeBytes = utf8.encode(jsonEncode(animeJson));
 
-      tempAnimeFile = File('${tempDir.path}/animes_$ts.json');
-      await tempAnimeFile.writeAsBytes(
-        utf8.encode(jsonEncode(animeJson)),
-      );
-      encoder.addFile(tempAnimeFile, 'animes.json');
+      archive.addFile(ziplib.ArchiveFile('metadata.json', metadataBytes.length, metadataBytes));
+      archive.addFile(ziplib.ArchiveFile('animes.json', animeBytes.length, animeBytes));
 
-      await encoder.close();
-
-      // تنظيف الملفات المؤقتة
-      try { await tempMetaFile.delete(); } catch (_) {}
-      try { await tempAnimeFile.delete(); } catch (_) {}
-      tempMetaFile = null;
-      tempAnimeFile = null;
-
-      // ✅ قراءة ZIP وتمريره لـ saveFile (يتعامل مع content:// تلقائياً)
-      final zipBytes = await File(tempZipPath).readAsBytes();
+      final zipBytes = ziplib.ZipEncoder().encode(archive);
+      if (zipBytes == null || zipBytes.isEmpty) return 'تعذر إنشاء ملف النسخة الاحتياطية.';
 
       final output = await FilePicker.platform.saveFile(
         dialogTitle: 'حفظ نسخة ذاكرة الأوتاكو',
-        fileName: 'anime_memory_backup_$ts.zip',
+        fileName: 'anime_memory_backup_${DateTime.now().millisecondsSinceEpoch}.zip',
         type: FileType.custom,
         allowedExtensions: ['zip'],
-        bytes: zipBytes,
+        bytes: Uint8List.fromList(zipBytes),
       );
 
-      try { await File(tempZipPath).delete(); } catch (_) {}
-
       if (output == null) return 'تم إلغاء حفظ النسخة الاحتياطية.';
-      return 'تمت عملية إنشاء النسخة (مع الفيديوهات). تحقق من مكان الحفظ.';
+      return 'تمت عملية إنشاء النسخة. تحقق من مكان الحفظ.';
     } catch (e) {
-      try { await File(tempZipPath).delete(); } catch (_) {}
-      try { if (tempMetaFile != null) await tempMetaFile.delete(); } catch (_) {}
-      try { if (tempAnimeFile != null) await tempAnimeFile.delete(); } catch (_) {}
       return 'فشل إنشاء النسخة الاحتياطية: $e';
     }
   }
 
   Future<String> restoreBackup() async {
-    final createdFiles = <File>[];
+    Directory? restoreDirectory;
+    final createdMemoryFiles = <File>[];
+    var success = false;
 
     try {
       final selection = await FilePicker.platform.pickFiles(
@@ -168,16 +141,45 @@ class BackupService {
 
       if (selection == null || selection.files.isEmpty) return 'تم إلغاء الاستعادة.';
 
-      final sourcePath = selection.files.single.path;
-      if (sourcePath == null) return 'تعذر الوصول إلى الملف المختار.';
+      final selectedFile = selection.files.single;
+      Uint8List? bytes = selectedFile.bytes;
 
-      final sourceFile = File(sourcePath);
-      if (!await sourceFile.exists()) return 'الملف المختار غير موجود.';
+      if (selectedFile.path != null) {
+        final source = File(selectedFile.path!);
+        if (await source.exists()) bytes = await source.readAsBytes();
+      }
 
-      // ✅ decodeBuffer مع InputFileStream (بدل decodeStream غير المتوفر في 3.6.1)
-      final inputStream = ziplib.InputFileStream(sourcePath);
-      final archive = ziplib.ZipDecoder().decodeBuffer(inputStream);
-      inputStream.close();
+      if (bytes == null || bytes.isEmpty) return 'تعذرت قراءة الملف.';
+
+      // ✅ فك الضغط باستخدام الدالة المستقرة
+      ziplib.Archive archive;
+      try {
+        archive = ziplib.ZipDecoder().decodeBytes(bytes);
+      } catch (e) {
+        return '❌ الملف تالف أو غير مكتمل. يرجى التأكد من اختيار ملف ZIP صحيح.';
+      }
+
+      final archiveFiles = <String, ziplib.ArchiveFile>{};
+      for (final entry in archive) {
+        if (!entry.isFile) continue;
+        archiveFiles[entry.name.replaceAll('\\', '/')] = entry;
+      }
+
+      final metadataFile = archiveFiles['metadata.json'];
+      final animesFile = archiveFiles['animes.json'];
+
+      if (metadataFile == null || animesFile == null) return 'النسخة غير مكتملة.';
+
+      final metadataDecoded = jsonDecode(utf8.decode(_entryBytes(metadataFile)));
+      final animeDecoded = jsonDecode(utf8.decode(_entryBytes(animesFile)));
+
+      if (animeDecoded is! List) return 'بيانات الأنميات غير صالحة.';
+
+      final animes = animeDecoded.map((item) => Anime.fromJson(Map<String, dynamic>.from(item))).toList();
+
+      final coverAssets = Map<String, dynamic>.from(metadataDecoded['coverAssets'] ?? {});
+      final characterAssets = Map<String, dynamic>.from(metadataDecoded['characterAssets'] ?? {});
+      final videoAssets = Map<String, dynamic>.from(metadataDecoded['videoAssets'] ?? {});
 
       final appDirectory = await getApplicationDocumentsDirectory();
       final videosDirectory = Directory('${appDirectory.path}/anime_videos');
@@ -191,34 +193,10 @@ class BackupService {
       await memoriesDirectory.create(recursive: true);
 
       final restoredPaths = <String, String>{};
-      Map<String, dynamic>? metadataDecoded;
-      List<dynamic>? animeDecoded;
       final timestamp = DateTime.now().millisecondsSinceEpoch;
 
-      for (final file in archive) {
-        if (!file.isFile) continue;
-        final name = file.name.replaceAll('\\', '/');
-
-        if (name == 'metadata.json' || name == 'animes.json') {
-          // ✅ قراءة مباشرة من file.content (بدل OutputMemoryStream)
-          final content = file.content;
-          Uint8List bytes;
-          if (content is Uint8List) {
-            bytes = content;
-          } else if (content is List<int>) {
-            bytes = Uint8List.fromList(content);
-          } else {
-            throw FormatException('نوع محتوى غير مدعوم: ${content.runtimeType}');
-          }
-
-          if (name == 'metadata.json') {
-            metadataDecoded = jsonDecode(utf8.decode(bytes));
-          } else {
-            animeDecoded = jsonDecode(utf8.decode(bytes));
-          }
-          continue;
-        }
-
+      for (final entry in archiveFiles.entries) {
+        final name = entry.key;
         String? targetPath;
 
         if (name.startsWith('covers/')) {
@@ -233,31 +211,12 @@ class BackupService {
         }
 
         if (targetPath != null) {
-          final outputStream = ziplib.OutputFileStream(targetPath);
-          file.writeContent(outputStream, freeMemory: true);
-          outputStream.close();
-          restoredPaths[name] = targetPath;
-          createdFiles.add(File(targetPath));
+          final target = File(targetPath);
+          await target.writeAsBytes(_entryBytes(entry.value), flush: true);
+          restoredPaths[name] = target.path;
+          createdMemoryFiles.add(target);
         }
       }
-
-      if (metadataDecoded == null || animeDecoded == null) {
-        await _cleanupFiles(createdFiles);
-        return 'النسخة غير مكتملة (metadata أو animes مفقود).';
-      }
-
-      if (animeDecoded is! List) {
-        await _cleanupFiles(createdFiles);
-        return 'بيانات الأنميات غير صالحة.';
-      }
-
-      final animes = animeDecoded
-          .map((item) => Anime.fromJson(Map<String, dynamic>.from(item)))
-          .toList();
-
-      final coverAssets = Map<String, dynamic>.from(metadataDecoded['coverAssets'] ?? {});
-      final characterAssets = Map<String, dynamic>.from(metadataDecoded['characterAssets'] ?? {});
-      final videoAssets = Map<String, dynamic>.from(metadataDecoded['videoAssets'] ?? {});
 
       for (final anime in animes) {
         final coverAsset = coverAssets[anime.id];
@@ -267,36 +226,36 @@ class BackupService {
         anime.videoPath = videoAsset is String ? restoredPaths[videoAsset] : null;
       }
 
-      final prefs = await SharedPreferences.getInstance();
+      final newCharacterPaths = <String, String>{};
+      for (final entry in characterAssets.entries) {
+        final path = restoredPaths[entry.value as String];
+        if (path != null) newCharacterPaths[entry.key] = path;
+      }
 
+      final prefs = await SharedPreferences.getInstance();
       for (final key in prefs.getKeys().toList()) {
         if (key.startsWith(characterPrefix)) await prefs.remove(key);
       }
-      for (final entry in characterAssets.entries) {
-        final path = restoredPaths[entry.value as String];
-        if (path != null) await prefs.setString(entry.key, path);
+      for (final entry in newCharacterPaths.entries) {
+        await prefs.setString(entry.key, entry.value);
       }
 
-      final encodedAnimes = jsonEncode(animes.map((a) => a.toJson()).toList());
+      final encodedAnimes = jsonEncode(animes.map((anime) => anime.toJson()).toList());
       final saved = await prefs.setString(animeKey, encodedAnimes);
-      if (!saved) {
-        await _cleanupFiles(createdFiles);
-        return 'تعذر حفظ بيانات الأنميات.';
-      }
+      if (!saved) throw Exception('تعذر حفظ بيانات الأنميات.');
 
-      return 'تمت استعادة جميع البيانات (بما فيها الفيديوهات) بنجاح.';
+      success = true;
+      return '✅ تمت استعادة جميع البيانات بنجاح.';
     } catch (e) {
-      await _cleanupFiles(createdFiles);
       return 'فشلت الاستعادة: $e';
     }
   }
 
-  Future<void> _cleanupFiles(List<File> files) async {
-    for (final file in files) {
-      try {
-        if (await file.exists()) await file.delete();
-      } catch (_) {}
-    }
+  List<int> _entryBytes(ziplib.ArchiveFile file) {
+    final content = file.content;
+    if (content is List<int>) return content;
+    if (content is Uint8List) return content;
+    throw const FormatException('محتوى ملف غير صالح.');
   }
 
   String _extension(String path) {
