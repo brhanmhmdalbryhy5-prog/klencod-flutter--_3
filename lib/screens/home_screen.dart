@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // 🔥
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../main.dart';
 import '../models/anime.dart';
@@ -14,6 +14,8 @@ import '../services/storage_service.dart';
 import '../services/anime_api_service.dart';
 import 'otaku_oracle_screen.dart';
 import 'random_picker_screen.dart';
+import 'statistics_screen.dart';
+import 'monthly_wrapped_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -42,8 +44,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _initialLoad() async {
     await loadData();
-    
-    // 🔥 أوقفنا الجلب التلقائي - التطبيق لا يعمل إلا بأمر المستخدم
+
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getBool('auto_fetch_enabled') ?? false) {
       _autoFetchMissingData();
@@ -65,7 +66,6 @@ class _HomeScreenState extends State<HomeScreen> {
     bool hasChanges = false;
 
     for (var anime in missingData) {
-      // لاحظنا أننا لا نمرر downloadImages هنا لتوفير الإنترنت، لأن المستخدم يمكنه فعل ذلك من الإعدادات
       final data = await apiService.fetchAnimeData(anime.title);
       if (data['genres'].isNotEmpty && anime.genre.trim().isEmpty) { anime.genre = data['genres'].join('، '); hasChanges = true; }
       if (data['summary'].isNotEmpty && anime.summary.trim().isEmpty) { anime.summary = data['summary']; hasChanges = true; }
@@ -280,7 +280,6 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(saved ? 'تم حفظ الأنمي في مكتبتك' : 'تعذر حفظ البيانات.')));
-      // لا نقوم بتشغيل الجلب التلقائي هنا إلا إذا كان مفعلاً
       final prefs = await SharedPreferences.getInstance();
       if (prefs.getBool('auto_fetch_enabled') ?? false) {
         if (result.genre.isEmpty || result.summary.isEmpty || result.globalRating == null || result.releaseYear == null) { _autoFetchMissingData(); }
@@ -365,6 +364,74 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // 🆕 دالة لإنشاء انتقال بحركة انزلاق (للميزة 4: الرسوم المتحركة)
+  Route _createAnimatedRoute(Widget page) {
+    return PageRouteBuilder(
+      pageBuilder: (context, animation, secondaryAnimation) => page,
+      transitionsBuilder: (context, animation, secondaryAnimation, child) {
+        const begin = Offset(0.0, 1.0); // يبدأ من الأسفل
+        const end = Offset.zero;
+        const curve = Curves.easeInOutCubic;
+        var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+        return SlideTransition(
+          position: animation.drive(tween),
+          child: FadeTransition(
+            opacity: animation,
+            child: child,
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildWrappedAndStatsButtons() {
+    return Row(
+      children: [
+        Expanded(
+          child: _actionButton(
+            title: 'إحصائياتي',
+            icon: Icons.analytics,
+            color: Colors.orangeAccent,
+            onTap: () => Navigator.push(context, _createAnimatedRoute(const StatisticsScreen())),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _actionButton(
+            title: 'ملخص الشهر',
+            icon: Icons.auto_awesome,
+            color: Colors.purpleAccent,
+            onTap: () => Navigator.push(context, _createAnimatedRoute(MonthlyWrappedScreen(animes: animes))),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _actionButton({required String title, required IconData icon, required Color color, required VoidCallback onTap}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF1B1F28),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.5)),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () { HapticFeedback.lightImpact(); onTap(); },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          child: Column(
+            children: [
+              Icon(icon, color: color, size: 28),
+              const SizedBox(height: 8),
+              Text(title, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildSkeletonLoader() {
     return Column(
       children: List.generate(5, (index) => 
@@ -399,7 +466,7 @@ class _HomeScreenState extends State<HomeScreen> {
       const Color(0xFF69F0AE), const Color(0xFFFFAB40), const Color(0xFF448AFF), 
       const Color(0xFFFF4081)
     ];
-    
+
     final List<IconData> achIcons = [
       Icons.star_border, Icons.explore, Icons.local_cafe, Icons.psychology,
       Icons.auto_awesome, Icons.verified, Icons.workspace_premium, Icons.military_tech,
@@ -486,6 +553,11 @@ class _HomeScreenState extends State<HomeScreen> {
               Expanded(child: _randomPickerButton()),
             ],
           ),
+
+          // 🆕 أزرار الإحصائيات والتقرير الشهري
+          _buildWrappedAndStatsButtons(),
+          const SizedBox(height: 20),
+
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(gradient: LinearGradient(colors: [primaryColor, primaryColor.withOpacity(0.3), const Color(0xFF202431)], begin: Alignment.topRight, end: Alignment.bottomLeft), borderRadius: BorderRadius.circular(22), border: Border.all(color: primaryColor.withOpacity(0.4), width: 1.5), boxShadow: [BoxShadow(color: primaryColor.withOpacity(0.3), blurRadius: 20, spreadRadius: 3)]),
@@ -510,11 +582,11 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ),
-          
+
           _buildLatestAchievementCard(),
 
           const SizedBox(height: 25),
-          const Text('إحصائياتك', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+          const Text('إحصائياتك السريعة', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
           const SizedBox(height: 13),
           GridView.count(
             crossAxisCount: 2, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), mainAxisSpacing: 11, crossAxisSpacing: 11, childAspectRatio: 1.65,
