@@ -13,19 +13,27 @@ class NotificationService {
   static const String _channelName = 'النسخ الاحتياطي';
   static const String _channelDesc = 'إشعارات تقدّم النسخ الاحتياطي';
 
+  /// تهيئة الخدمة (تُستدعى مرة واحدة عند بدء التطبيق)
   Future<void> init() async {
     if (_initialized) return;
+
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
       requestSoundPermission: true,
     );
-    const settings = InitializationSettings(android: androidSettings, iOS: iosSettings);
+
+    const settings = InitializationSettings(
+      android: androidSettings,
+      iOS: iosSettings,
+    );
+
     await _plugin.initialize(settings);
     _initialized = true;
   }
 
+  /// طلب إذن الإشعارات (Android 13+)
   Future<void> requestPermission() async {
     await init();
     try {
@@ -35,7 +43,7 @@ class NotificationService {
     } catch (_) {}
   }
 
-  /// إشعار تقدم مستمر (ongoing)
+  /// إشعار تقدّم مستمر (يبقى ظاهراً أثناء العملية)
   Future<void> showProgress({
     required String title,
     required String body,
@@ -43,6 +51,7 @@ class NotificationService {
     required int total,
   }) async {
     await init();
+
     final safeTotal = total < 1 ? 1 : total;
     final safeProgress = progress.clamp(0, safeTotal);
 
@@ -77,9 +86,10 @@ class NotificationService {
     );
   }
 
-  /// إشعار إكمال (يختفي عند الضغط)
+  /// إشعار اكتمال (يختفي عند الضغط عليه)
   Future<void> showCompleted({required String body}) async {
     await init();
+
     final androidDetails = AndroidNotificationDetails(
       _channelId,
       _channelName,
@@ -91,7 +101,10 @@ class NotificationService {
       playSound: false,
       icon: '@mipmap/ic_launcher',
     );
-    const iosDetails = DarwinNotificationDetails(presentAlert: true, presentSound: false);
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentSound: false,
+    );
 
     await _plugin.show(
       backupNotificationId,
@@ -104,6 +117,7 @@ class NotificationService {
   /// إشعار فشل
   Future<void> showFailed({required String body}) async {
     await init();
+
     final androidDetails = AndroidNotificationDetails(
       _channelId,
       _channelName,
@@ -115,7 +129,10 @@ class NotificationService {
       playSound: true,
       icon: '@mipmap/ic_launcher',
     );
-    const iosDetails = DarwinNotificationDetails(presentAlert: true, presentSound: true);
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentSound: true,
+    );
 
     await _plugin.show(
       backupNotificationId,
@@ -125,8 +142,15 @@ class NotificationService {
     );
   }
 
+  /// إلغاء الإشعار الحالي (مثلاً عند إلغاء المستخدم للعملية)
   Future<void> cancelProgress() async {
     await init();
     await _plugin.cancel(backupNotificationId);
+  }
+
+  /// إلغاء كل الإشعارات
+  Future<void> cancelAll() async {
+    await init();
+    await _plugin.cancelAll();
   }
 }
