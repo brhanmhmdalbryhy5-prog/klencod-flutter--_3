@@ -273,7 +273,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await _showDownloadResult(result);
   }
 
-  // 🆕 تحميل المواسم والشخصيات فقط
   Future<void> _startSeasonsAndCharactersDownload() async {
     if (bulkService.isRunning) return;
 
@@ -326,6 +325,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     if (confirm != true || !mounted) return;
     final result = await bulkService.downloadImagesOnly();
+    if (!mounted) return;
+    await _showDownloadResult(result);
+  }
+
+  // 🆕 تنشيط صور الشخصيات والمواسم
+  Future<void> _startMissingImagesDownload() async {
+    if (bulkService.isRunning) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF1B1F28),
+        title: const Text('تنشيط صور الشخصيات والمواسم'),
+        content: const Text(
+          'سيتحقق التطبيق من كل صورة (أغلفة الأنمي والمواسم + صور الشخصيات) '
+          'لكل الأنميات والمواسم في مكتبتك.\n\n'
+          'إذا كانت الصورة مفقودة أو الملف محذوف من الجهاز، سيُعيد تحميلها تلقائياً.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: primaryColorNotifier.value),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('ابدأ'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+    final result = await bulkService.downloadAllMissingImages();
     if (!mounted) return;
     await _showDownloadResult(result);
   }
@@ -511,7 +541,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: isDownloading ? null : _startBulkDownload,
             ),
             const SizedBox(height: 10),
-            // 🆕 الزر الجديد: تحميل المواسم والشخصيات فقط
             _settingsTile(
               icon: Icons.groups_outlined,
               color: Colors.purpleAccent,
@@ -530,6 +559,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: isDownloading ? null : _startImagesDownload,
             ),
             const SizedBox(height: 10),
+            // 🆕 تنشيط صور الشخصيات والمواسم
+            _settingsTile(
+              icon: Icons.auto_fix_high,
+              color: const Color(0xFF00BFA5),
+              title: 'تنشيط صور الشخصيات والمواسم',
+              subtitle: 'يجلب كل صورة مفقودة (أغلفة + شخصيات) لكل الأنميات والمواسم',
+              trailing: const Icon(Icons.chevron_left, color: Colors.white38),
+              onTap: isDownloading ? null : _startMissingImagesDownload,
+            ),
+            const SizedBox(height: 10),
             _settingsTile(icon: Icons.delete_sweep_outlined, color: const Color(0xFFFF5A65), title: 'مسح جميع التصنيفات', subtitle: 'حذف التصنيفات من جميع الأنميات', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: _clearAllGenres),
             const SizedBox(height: 10),
             _settingsTile(icon: Icons.delete_outline, color: const Color(0xFFFFB74D), title: 'سلة المهملات', subtitle: 'استعادة الأنميات المحذوفة', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: () { Navigator.push(context, MaterialPageRoute(builder: (_) => const TrashScreen())); }),
@@ -537,7 +576,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 24),
             const Text('النسخ الاحتياطي', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
             const SizedBox(height: 12),
-            _settingsTile(icon: Icons.backup_outlined, color: const Color(0xFF35B77A), title: 'إنشاء نسخة احتياطية', subtitle: 'حفظ بياناتك (مع الصور والفيديوهات)', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: backupBusy ? null : () => runBackupAction(restore: false)),
+            _settingsTile(icon: Icons.backup_outlined, color: const Color(0xFF35B77A), title: 'إنشاء نسخة احتياطية', subtitle: 'حفظ كل شيء (بيانات + صور + شخصيات + فيديوهات)', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: backupBusy ? null : () => runBackupAction(restore: false)),
             const SizedBox(height: 10),
             _settingsTile(icon: Icons.settings_backup_restore, color: const Color(0xFFFFC857), title: 'استعادة نسخة احتياطية', subtitle: 'استرجاع بياناتك', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: backupBusy ? null : () => runBackupAction(restore: true)),
             if (backupBusy) ...[const SizedBox(height: 16), const Center(child: CircularProgressIndicator()), const SizedBox(height: 8), const Center(child: Text('جارٍ تجهيز البيانات...', style: TextStyle(color: Colors.white60)))],
