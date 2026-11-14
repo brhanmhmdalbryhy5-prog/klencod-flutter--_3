@@ -44,13 +44,10 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
   bool _loading = true;
   bool _busy = false;
 
-  // 🆕 حالة تحميل المشاهد
   bool _fetchingScenes = false;
 
-  // 🆕 ScrollController لشريط التمرير
   final ScrollController _scrollController = ScrollController();
 
-  // 🆕 AnimationController لدوران الصورة 3D
   late AnimationController _rotationController;
   late Animation<double> _rotationAnimation;
 
@@ -67,7 +64,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
   void initState() {
     super.initState();
 
-    // 🆕 إعداد دوران الصورة 3D (تموج سينمائي ناعم)
     _rotationController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 6),
@@ -229,7 +225,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
     );
   }
 
-  // 🆕 تكبير صورة مشهد
   void _showSceneZoom(String? imagePath, String? imageUrl) {
     HapticFeedback.lightImpact();
     Widget? imageWidget;
@@ -906,7 +901,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
     final episodes = data['episodes'] as int;
     final subAnimesData = data['subAnimes'] as List;
     final charactersData = data['characters'] as List;
-    // 🆕
     final fetchedFormat = data['format'] as String?;
     final fetchedIdMal = (data['idMal'] as num?)?.toInt();
 
@@ -953,7 +947,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
       if (charactersData.isNotEmpty) {
         currentAnime.characters = List<Map<String, dynamic>>.from(charactersData);
       }
-      // 🆕 حفظ format و idMal
       if (fetchedFormat != null) currentAnime.format = fetchedFormat;
       if (fetchedIdMal != null) currentAnime.idMal = fetchedIdMal;
     });
@@ -987,8 +980,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                     ?.map((e) => Map<String, dynamic>.from(e))
                     .toList() ??
                 [],
-            format: sub['format'], // 🆕
-            idMal: sub['idMal'], // 🆕
+            format: sub['format'],
+            idMal: sub['idMal'],
           );
           allAnimes.add(newSub);
         } else {
@@ -1015,7 +1008,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
               (sub['characters'] as List?)?.isNotEmpty == true) {
             existing.characters = List<Map<String, dynamic>>.from(sub['characters']);
           }
-          // 🆕
           if (existing.format == null && sub['format'] != null) {
             existing.format = sub['format'];
           }
@@ -1175,7 +1167,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
     );
   }
 
-  // 🆕 قسم المشاهد
   Widget _buildScenes() {
     final primaryColor = primaryColorNotifier.value;
     final scenes = currentAnime.scenes;
@@ -1275,7 +1266,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
     );
   }
 
-  // 🆕 جلب المشاهد
   Future<void> _fetchScenes() async {
     if (currentAnime.title.trim().isEmpty) {
       ScaffoldMessenger.of(context)
@@ -1306,12 +1296,16 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
       if (scenes.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(errorMsg ?? 'لم يتم العثور على مشاهد.')));
+            SnackBar(
+              content: Text(errorMsg ?? 'لم يتم العثور على مشاهد.'),
+              duration: const Duration(seconds: 4),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
         }
         return;
       }
 
-      // تجنب التكرار بواسطة imageUrl
       final existingUrls =
           currentAnime.scenes.map((s) => s['imageUrl']?.toString() ?? '').toSet();
       final newScenes = <Map<String, dynamic>>[];
@@ -1348,7 +1342,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
     }
   }
 
-  // 🆕 حذف مشهد
   Future<void> _deleteScene(int index) async {
     final scene = currentAnime.scenes[index];
     final path = scene['imagePath'] as String?;
@@ -1406,7 +1399,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
         child: const Icon(Icons.movie_creation_outlined, size: 65, color: Colors.white30));
   }
 
-  // 🆕 غلاف الصورة مع تأثير 3D دوّار
   Widget _coverWith3D() {
     return GestureDetector(
       onTap: _showImageZoom,
@@ -1421,7 +1413,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                 return Transform(
                   alignment: Alignment.center,
                   transform: Matrix4.identity()
-                    ..setEntry(3, 2, 0.0015) // perspective
+                    ..setEntry(3, 2, 0.0015)
                     ..rotateY(_rotationAnimation.value),
                   child: child,
                 );
@@ -1594,7 +1586,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
           controller: _scrollController,
           padding: const EdgeInsets.all(16),
           children: [
-            _coverWith3D(), // 🆕 صورة 3D دوّارة
+            _coverWith3D(),
             const SizedBox(height: 18),
             Text(title,
                 textAlign: TextAlign.center,
@@ -1825,7 +1817,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
             ],
 
             _buildCharacters(),
-            _buildScenes(), // 🆕 قسم المشاهد
+            _buildScenes(),
 
             Container(
               padding: const EdgeInsets.all(15),
