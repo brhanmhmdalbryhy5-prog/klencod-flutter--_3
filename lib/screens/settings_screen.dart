@@ -5,6 +5,8 @@ import '../services/backup_service.dart';
 import '../services/theme_service.dart';
 import '../services/anime_api_service.dart';
 import '../services/bulk_download_service.dart';
+import '../services/storage_service.dart';
+import '../services/video_compression_service.dart';
 import '../services/data_health_service.dart';
 import 'trash_screen.dart';
 
@@ -21,10 +23,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool backupBusy = false;
   bool autoFetchEnabled = false;
   bool isCheckingHealth = false;
+  bool isCompressing = false;
 
   final BackupService backupService = BackupService();
   final AnimeApiService apiService = AnimeApiService();
   final BulkDownloadService bulkService = BulkDownloadService();
+  final StorageService storage = StorageService();
 
   @override
   void initState() {
@@ -89,7 +93,116 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // ... (باقي الدوال القديمة مثل _showColorPicker, _showFontPicker, إلخ)
+  Future<void> _compressAllVideos() async {
+    if (isCompressing) return;
+
+    final animes = await storage.loadAnimes();
+    final videosCount = animes.where((a) => a.videoPath != null && a.videoPath!.isNotEmpty).length;
+
+    if (videosCount == 0) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا توجد فيديوهات لضغطها.')),
+      );
+      return;
+    }
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF1B1F28),
+        title: const Text('ضغط الفيديوهات التذكارية'),
+        content: Text(
+          'سيتم ضغط $videosCount فيديو بجودة متوسطة (720p) لتوفير مساحة التخزين.\n\n'
+          'ملاحظة: قد تقل الجودة قليلاً، لكن الحجم سينخفض بنسبة 50-70%.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: primaryColorNotifier.value),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('ابدأ الضغط'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+
+    setState(() => isCompressing = true);
+
+    final progressNotifier = ValueNotifier<String>('جاري التحضير...');
+    final percentNotifier = ValueNotifier<double>(0.0);
+    bool dialogClosed = false;
+
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => AlertDialog(
+          backgroundColor: const Color(0xFF1B1F28),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.compress, size: 50, color: Colors.purpleAccent),
+              const SizedBox(height: 16),
+              const Text('جاري ضغط الفيديوهات...', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              const SizedBox(height: 16),
+              ValueListenableBuilder<String>(
+                valueListenable: progressNotifier,
+                builder: (context, value, _) => Text(value, style: const TextStyle(color: Colors.white70, fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center),
+              ),
+              const SizedBox(height: 12),
+              ValueListenableBuilder<double>(
+                valueListenable: percentNotifier,
+                builder: (context, value, _) => ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: LinearProgressIndicator(value: value, minHeight: 10, backgroundColor: Colors.white12, valueColor: AlwaysStoppedAnimation<Color>(primaryColorNotifier.value)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    try {
+      final result = await VideoCompressionService().compressAllVideos(
+        animes: animes,
+        onSave: () => storage.saveAnimes(animes),
+        onProgress: (current, total, title) {
+          percentNotifier.value = current / total;
+          progressNotifier.value = '($current/$total) $title';
+        },
+      );
+
+      dialogClosed = true;
+      if (mounted) Navigator.pop(context);
+
+      if (!mounted) return;
+      await showDialog(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: const Color(0xFF1B1F28),
+          title: const Text('نتيجة الضغط'),
+          content: Text(
+            '✅ تم ضغط: ${result.compressed} فيديو\n'
+            '⏭️ تم تخطي: ${result.skipped}\n'
+            '❌ فشل: ${result.failed}\n\n'
+            '💾 تم توفير: ${result.savedFormatted}',
+            style: const TextStyle(height: 1.8),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('حسنًا'))],
+        ),
+      );
+    } catch (e) {
+      if (!dialogClosed && mounted) Navigator.pop(context);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('حدث خطأ: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => isCompressing = false);
+    }
+  }
 
   Future<void> _showColorPicker() async {
     final selectedColor = await showDialog<Color>(
@@ -102,11 +215,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             width: double.maxFinite,
             height: 450,
             child: GridView.builder(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 5,
-                crossAxisSpacing: 10,
-                mainAxisSpacing: 10,
-              ),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 5, crossAxisSpacing: 10, mainAxisSpacing: 10),
               itemCount: appThemeColors.length,
               itemBuilder: (context, index) {
                 final colorItem = appThemeColors[index];
@@ -117,23 +226,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     message: colorItem.name,
                     child: Container(
                       decoration: BoxDecoration(
-                        color: colorItem.color,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: isSelected ? Colors.white : Colors.transparent,
-                          width: 3,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: colorItem.color.withOpacity(0.6),
-                            blurRadius: 10,
-                            spreadRadius: 1,
-                          )
-                        ],
+                        color: colorItem.color, shape: BoxShape.circle,
+                        border: Border.all(color: isSelected ? Colors.white : Colors.transparent, width: 3),
+                        boxShadow: [BoxShadow(color: colorItem.color.withOpacity(0.6), blurRadius: 10, spreadRadius: 1)],
                       ),
-                      child: isSelected
-                          ? const Icon(Icons.check, color: Colors.white, size: 20)
-                          : null,
+                      child: isSelected ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
                     ),
                   ),
                 );
@@ -222,11 +319,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         context: context,
         builder: (_) => AlertDialog(
           backgroundColor: const Color(0xFF1B1F28),
-          title: const Row(children: [
-            Icon(Icons.wifi_off, color: Colors.redAccent),
-            SizedBox(width: 8),
-            Text('لا يوجد إنترنت'),
-          ]),
+          title: const Row(children: [Icon(Icons.wifi_off, color: Colors.redAccent), SizedBox(width: 8), Text('لا يوجد إنترنت')]),
           content: const Text('يرجى تشغيل الاتصال بالإنترنت ثم المحاولة مرة أخرى.', style: TextStyle(height: 1.6)),
           actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('حسناً'))],
         ),
@@ -239,17 +332,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         context: context,
         builder: (_) => AlertDialog(
           backgroundColor: const Color(0xFF1B1F28),
-          title: const Row(children: [
-            Icon(Icons.wifi_off, color: Colors.orangeAccent),
-            SizedBox(width: 8),
-            Text('انقطع الاتصال'),
-          ]),
-          content: Text(
-            'انقطع الإنترنت أثناء العملية.\n\n'
-            '✅ نجح: $updated أنمي\n'
-            '❌ فشل: $failed أنمي',
-            style: const TextStyle(height: 1.6),
-          ),
+          title: const Row(children: [Icon(Icons.wifi_off, color: Colors.orangeAccent), SizedBox(width: 8), Text('انقطع الاتصال')]),
+          content: Text('انقطع الإنترنت أثناء العملية.\n\n✅ نجح: $updated أنمي\n❌ فشل: $failed أنمي', style: const TextStyle(height: 1.6)),
           actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('حسناً'))],
         ),
       );
@@ -261,11 +345,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         context: context,
         builder: (_) => AlertDialog(
           backgroundColor: const Color(0xFF1B1F28),
-          title: const Row(children: [
-            Icon(Icons.info_outline, color: Colors.amber),
-            SizedBox(width: 8),
-            Text('نتيجة التحميل'),
-          ]),
+          title: const Row(children: [Icon(Icons.info_outline, color: Colors.amber), SizedBox(width: 8), Text('نتيجة التحميل')]),
           content: SizedBox(
             width: double.maxFinite,
             child: Column(
@@ -295,9 +375,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       );
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('✅ اكتمل بنجاح: $updated أنمي')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('✅ اكتمل بنجاح: $updated أنمي')));
     }
   }
 
@@ -322,11 +400,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         content: const Text('سيقوم التطبيق بجلب جميع البيانات والصور والمواسم والشخصيات لكل الأنميات في مكتبتك وحفظها محلياً.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: primaryColorNotifier.value),
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('ابدأ التحميل'),
-          ),
+          FilledButton(style: FilledButton.styleFrom(backgroundColor: primaryColorNotifier.value), onPressed: () => Navigator.pop(dialogContext, true), child: const Text('ابدأ التحميل')),
         ],
       ),
     );
@@ -334,8 +408,108 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await _runAction(action: () => bulkService.downloadAllData());
   }
 
-  // (يمكنك إضافة باقي دوال التحميل مثل _startSeasonsAndCharactersDownload هنا بنفس النمط)
-  
+  Future<void> _startSeasonsAndCharactersDownload() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF1B1F28),
+        title: const Text('تحميل المواسم والشخصيات فقط'),
+        content: const Text('سيقوم التطبيق بجلب المواسم والأفلام المرتبطة والشخصيات الرئيسية لكل الأنميات في مكتبتك.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
+          FilledButton(style: FilledButton.styleFrom(backgroundColor: primaryColorNotifier.value), onPressed: () => Navigator.pop(dialogContext, true), child: const Text('ابدأ التحميل')),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    await _runAction(action: () => bulkService.downloadSeasonsAndCharactersOnly());
+  }
+
+  Future<void> _startSeasonsOnlyDownload() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF1B1F28),
+        title: const Text('جلب المواسم والأفلام فقط'),
+        content: const Text('سيجلب المواسم والأفلام المرتبطة بكل أنمي، دون المساس بالشخصيات أو بيانات الأنمي الأصلية.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
+          FilledButton(style: FilledButton.styleFrom(backgroundColor: primaryColorNotifier.value), onPressed: () => Navigator.pop(dialogContext, true), child: const Text('ابدأ')),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    await _runAction(action: () => bulkService.downloadSeasonsOnly());
+  }
+
+  Future<void> _startCharactersOnlyDownload() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF1B1F28),
+        title: const Text('جلب شخصيات الأنمي فقط'),
+        content: const Text('سيجلب شخصيات الأنمي الأصلي فقط، دون المساس بالمواسم أو بيانات الأنمي.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
+          FilledButton(style: FilledButton.styleFrom(backgroundColor: primaryColorNotifier.value), onPressed: () => Navigator.pop(dialogContext, true), child: const Text('ابدأ')),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    await _runAction(action: () => bulkService.downloadCharactersOnly());
+  }
+
+  Future<void> _startImagesDownload() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF1B1F28),
+        title: const Text('تحميل الصور المفقودة'),
+        content: const Text('سيقوم التطبيق بتحميل جميع الصور غير المحفوظة.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
+          FilledButton(style: FilledButton.styleFrom(backgroundColor: primaryColorNotifier.value), onPressed: () => Navigator.pop(dialogContext, true), child: const Text('ابدأ')),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    await _runAction(action: () => bulkService.downloadImagesOnly());
+  }
+
+  Future<void> _startMissingImagesDownload() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF1B1F28),
+        title: const Text('تنشيط صور الشخصيات والمواسم'),
+        content: const Text('سيتحقق التطبيق من كل صورة (أغلفة + شخصيات) لكل الأنميات والمواسم.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
+          FilledButton(style: FilledButton.styleFrom(backgroundColor: primaryColorNotifier.value), onPressed: () => Navigator.pop(dialogContext, true), child: const Text('ابدأ')),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    await _runAction(action: () => bulkService.downloadAllMissingImages());
+  }
+
+  Future<void> _startScenesDownload() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF1B1F28),
+        title: const Text('جلب صور الأنمي (ملصقات)'),
+        content: const Text('سيقوم التطبيق بجلب جميع الصور الترويجية المتاحة لكل الأنمي وحفظها محلياً.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
+          FilledButton(style: FilledButton.styleFrom(backgroundColor: primaryColorNotifier.value), onPressed: () => Navigator.pop(dialogContext, true), child: const Text('ابدأ')),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    await _runAction(action: () => bulkService.downloadAllScenes());
+  }
+
   Future<void> _clearAllGenres() async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -394,6 +568,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Future<void> _runLiteBackup({required bool restore}) async {
+    if (backupBusy) return;
+    if (restore) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: const Color(0xFF1B1F28),
+          title: const Text('استعادة النسخة الخفيفة'),
+          content: const Text('ستُستبدل بيانات الأنميات الحالية (الأغلفة والشخصيات).\nالفيديوهات والمشاهد والذكريات ستبقى كما هي.\n\nهل تريد المتابعة؟'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+            ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: primaryColorNotifier.value, foregroundColor: Colors.white), onPressed: () => Navigator.pop(ctx, true), child: const Text('متابعة')),
+          ],
+        ),
+      );
+      if (ok != true || !mounted) return;
+    }
+    setState(() => backupBusy = true);
+    String result;
+    try {
+      result = restore ? await backupService.restoreLiteBackup() : await backupService.createLiteBackup();
+    } catch (e) {
+      result = 'حدث خطأ: $e';
+    }
+    if (!mounted) return;
+    setState(() => backupBusy = false);
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1B1F28),
+        title: Text(restore ? 'نتيجة استعادة النسخة الخفيفة' : 'نتيجة النسخة الخفيفة'),
+        content: Text(result),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('حسنًا'))],
+      ),
+    );
+  }
+
   void showAbout() {
     showAboutDialog(
       context: context,
@@ -424,7 +635,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 7),
             const Text('تحكّم في تطبيقك وبياناتك.', style: TextStyle(color: Colors.white60)),
             const SizedBox(height: 24),
-            
             Container(
               padding: const EdgeInsets.all(19),
               decoration: BoxDecoration(gradient: LinearGradient(colors: [primaryColor, primaryColor.withOpacity(0.3), const Color(0xFF202431)], begin: Alignment.topRight, end: Alignment.bottomLeft), borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: primaryColor.withOpacity(0.3), blurRadius: 20, spreadRadius: 3)]),
@@ -437,45 +647,73 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
 
+            if (isDownloading) ...[
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.all(15),
+                decoration: BoxDecoration(color: const Color(0xFF1B1F28), borderRadius: BorderRadius.circular(16), border: Border.all(color: primaryColor.withOpacity(0.5))),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [const Icon(Icons.cloud_download, color: Colors.cyan, size: 24), const SizedBox(width: 10), Expanded(child: Text(progress.status, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)))]),
+                    const SizedBox(height: 10),
+                    Text(progress.currentTitle, style: const TextStyle(color: Colors.white70, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 10),
+                    ClipRRect(borderRadius: BorderRadius.circular(8), child: LinearProgressIndicator(value: progress.percentage, minHeight: 8, backgroundColor: Colors.white12, valueColor: AlwaysStoppedAnimation<Color>(primaryColor))),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(onPressed: () => bulkService.cancel(), style: OutlinedButton.styleFrom(foregroundColor: Colors.redAccent, side: const BorderSide(color: Colors.redAccent)), icon: const Icon(Icons.stop_circle_outlined), label: const Text('إيقاف العملية')),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
             const SizedBox(height: 25),
             const Text('التخصيص', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
             const SizedBox(height: 12),
             
-            // 🆕 المظهر التلقائي
-            _settingsTile(
-              icon: Icons.dark_mode_outlined, 
-              color: primaryColor, 
-              title: 'الوضع الليلي التلقائي', 
-              subtitle: autoDarkMode ? 'مُفعّل (يتغير حسب وقت اليوم)' : 'معطّل', 
-              trailing: Switch(value: autoDarkMode, activeColor: primaryColor, onChanged: _toggleAutoDark), 
-              onTap: null
-            ),
+            _settingsTile(icon: Icons.dark_mode_outlined, color: primaryColor, title: 'الوضع الليلي التلقائي', subtitle: autoDarkMode ? 'مُفعّل (يتغير حسب وقت اليوم)' : 'معطّل', trailing: Switch(value: autoDarkMode, activeColor: primaryColor, onChanged: _toggleAutoDark), onTap: null),
             const SizedBox(height: 10),
-            
-            _settingsTile(
-              icon: Icons.palette_outlined, 
-              color: primaryColor, 
-              title: 'المظهر اليدوي', 
-              subtitle: darkMode ? 'الوضع الداكن' : 'الوضع الفاتح', 
-              trailing: Switch(value: darkMode, activeColor: primaryColor, onChanged: autoDarkMode ? null : _toggleTheme), 
-              onTap: null
-            ),
+            _settingsTile(icon: Icons.palette_outlined, color: primaryColor, title: 'المظهر اليدوي', subtitle: darkMode ? 'الوضع الداكن' : 'الوضع الفاتح', trailing: Switch(value: darkMode, activeColor: primaryColor, onChanged: autoDarkMode ? null : _toggleTheme), onTap: null),
+            const SizedBox(height: 10),
+            _settingsTile(icon: Icons.color_lens_outlined, color: primaryColor, title: 'لون التطبيق', subtitle: 'تغيير اللون الأساسي', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: _showColorPicker),
+            const SizedBox(height: 10),
+            _settingsTile(icon: Icons.font_download_outlined, color: primaryColor, title: 'خط اسم الأنمي', subtitle: 'اختيار الخط المفضل', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: _showFontPicker),
+            const SizedBox(height: 10),
+            _settingsTile(icon: Icons.format_color_text, color: titleColorNotifier.value, title: 'لون اسم الأنمي', subtitle: 'تغيير لون النص', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: _showTitleColorPicker),
+
+            const SizedBox(height: 24),
+            const Text('التحميل والتحديث', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 12),
+            _settingsTile(icon: Icons.sync, color: const Color(0xFFFF9F43), title: 'التحديث التلقائي عند فتح التطبيق', subtitle: autoFetchEnabled ? 'مُفعّل' : 'معطّل (التطبيق لا يعمل إلا بأمرك)', trailing: Switch(value: autoFetchEnabled, activeColor: primaryColor, onChanged: _toggleAutoFetch), onTap: null),
+            const SizedBox(height: 10),
+            _settingsTile(icon: Icons.cloud_download_outlined, color: const Color(0xFF3A91B5), title: 'تحميل شامل (بيانات + صور + مواسم)', subtitle: 'يجلب كل شيء ويحفظه محلياً', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: isDownloading ? null : _startBulkDownload),
+            const SizedBox(height: 10),
+            _settingsTile(icon: Icons.groups_outlined, color: Colors.purpleAccent, title: 'تحميل المواسم والشخصيات فقط', subtitle: 'يجلب المواسم والأفلام دون تعديل بيانات الأنمي الأصلي', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: isDownloading ? null : _startSeasonsAndCharactersDownload),
+            const SizedBox(height: 10),
+            _settingsTile(icon: Icons.movie_filter_outlined, color: const Color(0xFFE67E22), title: 'جلب المواسم والأفلام فقط', subtitle: 'يجلب المواسم والأفلام المرتبطة فقط (بدون شخصيات)', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: isDownloading ? null : _startSeasonsOnlyDownload),
+            const SizedBox(height: 10),
+            _settingsTile(icon: Icons.people_alt_outlined, color: Colors.purpleAccent, title: 'جلب شخصيات الأنمي فقط', subtitle: 'يجلب شخصيات الأنمي الأصلي فقط (بدون مواسم)', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: isDownloading ? null : _startCharactersOnlyDownload),
+            const SizedBox(height: 10),
+            _settingsTile(icon: Icons.image_outlined, color: const Color(0xFF9B59B6), title: 'تحميل الصور المفقودة فقط', subtitle: 'يحمل الصور غير المحفوظة', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: isDownloading ? null : _startImagesDownload),
+            const SizedBox(height: 10),
+            _settingsTile(icon: Icons.auto_fix_high, color: const Color(0xFF00BFA5), title: 'تنشيط صور الشخصيات والمواسم', subtitle: 'يجلب كل صورة مفقودة (أغلفة + شخصيات) لكل الأنميات والمواسم', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: isDownloading ? null : _startMissingImagesDownload),
+            const SizedBox(height: 10),
+            _settingsTile(icon: Icons.collections, color: const Color(0xFF00ACC1), title: 'جلب صور الأنمي (ملصقات)', subtitle: 'يجلب صور ترويجية (5-10 صور) لكل أنمي', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: isDownloading ? null : _startScenesDownload),
             
             const SizedBox(height: 24),
             const Text('أدوات الصيانة', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
             const SizedBox(height: 12),
-
-            // 🆕 فحص صحة البيانات
-            _settingsTile(
-              icon: Icons.health_and_safety_outlined, 
-              color: Colors.tealAccent, 
-              title: 'فحص صحة البيانات', 
-              subtitle: 'يبحث عن صور/فيديوات مفقودة ويصلحها', 
-              trailing: isCheckingHealth 
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) 
-                  : const Icon(Icons.chevron_left, color: Colors.white38), 
-              onTap: isCheckingHealth ? null : _checkHealth
-            ),
+            _settingsTile(icon: Icons.health_and_safety_outlined, color: Colors.tealAccent, title: 'فحص صحة البيانات', subtitle: 'يبحث عن صور/فيديوات مفقودة ويصلحها', trailing: isCheckingHealth ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.chevron_left, color: Colors.white38), onTap: isCheckingHealth ? null : _checkHealth),
+            const SizedBox(height: 10),
+            _settingsTile(icon: Icons.compress, color: const Color(0xFF9C27B0), title: 'ضغط الفيديوهات التذكارية', subtitle: 'يقلل حجم الفيديوهات 50-70% لتوفير المساحة', trailing: isCompressing ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.chevron_left, color: Colors.white38), onTap: (isCompressing || isDownloading) ? null : _compressAllVideos),
+            
+            const SizedBox(height: 10),
+            _settingsTile(icon: Icons.delete_sweep_outlined, color: const Color(0xFFFF5A65), title: 'مسح جميع التصنيفات', subtitle: 'حذف التصنيفات من جميع الأنميات', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: _clearAllGenres),
+            const SizedBox(height: 10),
+            _settingsTile(icon: Icons.delete_outline, color: const Color(0xFFFFB74D), title: 'سلة المهملات', subtitle: 'استعادة الأنميات المحذوفة', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: () { Navigator.push(context, MaterialPageRoute(builder: (_) => const TrashScreen())); }),
 
             const SizedBox(height: 24),
             const Text('النسخ الاحتياطي', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
@@ -483,6 +721,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _settingsTile(icon: Icons.backup_outlined, color: const Color(0xFF35B77A), title: 'إنشاء نسخة احتياطية شاملة', subtitle: 'كل شيء (بيانات + صور + شخصيات + مشاهد + فيديوهات)', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: backupBusy ? null : () => runBackupAction(restore: false)),
             const SizedBox(height: 10),
             _settingsTile(icon: Icons.settings_backup_restore, color: const Color(0xFFFFC857), title: 'استعادة النسخة الشاملة', subtitle: 'استرجاع كل شيء', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: backupBusy ? null : () => runBackupAction(restore: true)),
+            const SizedBox(height: 10),
+            _settingsTile(icon: Icons.backup_outlined, color: const Color(0xFF2196F3), title: 'نسخة خفيفة (بيانات + شخصيات + أغلفة)', subtitle: 'بدون فيديوهات/مشاهد/ذكريات — أسرع وأصغر', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: backupBusy ? null : () => _runLiteBackup(restore: false)),
+            const SizedBox(height: 10),
+            _settingsTile(icon: Icons.restore, color: const Color(0xFF03A9F4), title: 'استعادة النسخة الخفيفة', subtitle: 'استرجاع البيانات والأغلفة والشخصيات فقط', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: backupBusy ? null : () => _runLiteBackup(restore: true)),
+            
+            if (backupBusy) ...[
+              const SizedBox(height: 16),
+              const Center(child: CircularProgressIndicator()),
+              const SizedBox(height: 8),
+              const Center(child: Text('جارٍ تجهيز البيانات...', style: TextStyle(color: Colors.white60))),
+            ],
 
             const SizedBox(height: 24),
             const Text('حول التطبيق', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
