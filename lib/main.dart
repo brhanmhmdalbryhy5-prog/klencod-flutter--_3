@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'screens/home_screen.dart';
@@ -11,6 +12,18 @@ final ValueNotifier<Color> primaryColorNotifier = ValueNotifier(const Color(0xFF
 final ValueNotifier<String> fontNotifier = ValueNotifier('Cairo');
 final ValueNotifier<Color> titleColorNotifier = ValueNotifier(const Color(0xFFFFD700));
 
+// 🆕 متغير للتحكم في الوضع التلقائي
+bool isAutoDarkModeEnabled = false;
+
+// 🆕 دالة التحقق من الوقت
+void checkAutoTheme() {
+  if (!isAutoDarkModeEnabled) return;
+  final hour = DateTime.now().hour;
+  // من 6 مساءً (18) إلى 6 صباحاً (6) = ليلي
+  final shouldBeDark = hour >= 18 || hour < 6;
+  themeNotifier.value = shouldBeDark ? ThemeMode.dark : ThemeMode.light;
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
@@ -20,8 +33,16 @@ void main() async {
   } catch (_) {}
 
   final prefs = await SharedPreferences.getInstance();
-  final isDark = prefs.getBool('isDarkMode') ?? true;
-  themeNotifier.value = isDark ? ThemeMode.dark : ThemeMode.light;
+  isAutoDarkModeEnabled = prefs.getBool('auto_dark_mode') ?? false;
+  
+  if (isAutoDarkModeEnabled) {
+    checkAutoTheme();
+    // فحص الوقت كل 30 دقيقة
+    Timer.periodic(const Duration(minutes: 30), (_) => checkAutoTheme());
+  } else {
+    final isDark = prefs.getBool('isDarkMode') ?? true;
+    themeNotifier.value = isDark ? ThemeMode.dark : ThemeMode.light;
+  }
   
   final savedColorValue = prefs.getInt('primaryColorValue') ?? 0xFF741C2B;
   primaryColorNotifier.value = Color(savedColorValue);
