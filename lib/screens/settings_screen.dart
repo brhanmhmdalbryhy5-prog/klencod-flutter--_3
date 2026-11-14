@@ -276,10 +276,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }) async {
     if (bulkService.isRunning) return;
 
-    // محاولة فتح الطبقة العائمة
+    // 🆕 ربط زر الإلغاء في النافذة العائمة بدالة إيقاف الجلب
+    overlayService.onCancelRequested = () {
+      if (bulkService.isRunning) {
+        bulkService.cancel();
+      }
+    };
+
     final overlayOpened = await overlayService.showOverlay(title: title);
 
-    // إذا رفض المستخدم الصلاحية، نظهر له تنبيهاً بسيطاً
     if (!overlayOpened && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -308,6 +313,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) await _showDownloadResult(result);
     } finally {
       bulkService.progress.removeListener(progressListener);
+      overlayService.onCancelRequested = null; // تنظيف الدالة بعد الانتهاء
       if (overlayOpened) await overlayService.closeOverlay();
     }
   }
