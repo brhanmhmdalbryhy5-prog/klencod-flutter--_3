@@ -7,7 +7,6 @@ class OverlayService {
 
   bool _isPermissionGranted = false;
 
-  /// التحقق من صلاحية العرض وطلبها إذا لزم الأمر
   Future<bool> ensurePermission() async {
     if (_isPermissionGranted) return true;
     bool granted = await FlutterOverlayWindow.isPermissionGranted();
@@ -18,24 +17,21 @@ class OverlayService {
     return granted;
   }
 
-  /// إظهار الطبقة العائمة
   Future<void> showOverlay({String title = 'جاري المعالجة...'}) async {
     if (!await ensurePermission()) return;
     await FlutterOverlayWindow.showOverlay(
-      height: 160, // ارتفاع ثابت
-      width: WindowSize.matchParent, // عرض الشاشة
-      alignment: OverlayAlignment.top, // في الأعلى
-      enableDrag: true, // إمكانية سحبها
+      height: 160,
+      width: WindowSize.matchParent,
+      alignment: OverlayAlignment.topCenter, // ✅ تم الإصلاح
+      enableDrag: true,
       overlayTitle: title,
     );
   }
 
-  /// إخفاء الطبقة العائمة
   Future<void> closeOverlay() async {
     await FlutterOverlayWindow.closeOverlay();
   }
 
-  /// إرسال تحديث التقدم للطبقة العائمة
   Future<void> updateProgress({
     required String title,
     required String status,
