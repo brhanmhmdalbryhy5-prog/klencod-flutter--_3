@@ -1,72 +1,105 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/anime.dart';
 
 class StorageService {
-  static const String _storageKey = 'anime_memory_list';
-  static const String _trashKey = 'anime_trash_list'; // 🔥 مفتاح جديد لسلة المهملات
+  static const String _storageKey = 'anime_memory_list';       // للترحيل فقط
+  static const String _trashKey = 'anime_trash_list';
   static const String _ratingSystemKey = 'rating_system_v2';
+  static const String _fileName = 'animes_data.json';          // ✅ ملف دائم
 
-  // 🔥 دالة لتحميل الأنميات العادية
+  Future<File> _getStorageFile() async {
+    final dir = await getApplicationDocumentsDirectory();
+    return File('${dir.path}/$_fileName');
+  }
+
   Future<List<Anime>> loadAnimes() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? savedData = prefs.getString(_storageKey);
-
-    if (savedData == null || savedData.isEmpty) {
-      return [];
-    }
-
     try {
-      final List<dynamic> decodedData = jsonDecode(savedData);
+      final file = await _getStorageFile();
 
-      List<Anime> animes = decodedData
-          .map((item) => Anime.fromJson(Map<String, dynamic>.from(item as Map)))
-          .toList();
-
-      // الترقية التلقائية من 5 نجوم إلى 10 نجوم
-      final bool isUpgraded = prefs.getBool(_ratingSystemKey) ?? false;
-      if (!isUpgraded) {
-        for (var anime in animes) {
-          if (anime.rating > 0 && anime.rating <= 5) {
-            anime.rating = anime.rating * 2;
-          }
+      // 1️⃣ قراءة من الملف إن وُجد
+      if (await file.exists()) {
+        final content = await file.readAsString();
+        if (content.isNotEmpty) {
+          final decoded = jsonDecode(content) as List;
+          final animes = decoded
+              .map((item) => Anime.fromJson(Map<String, dynamic>.from(item as Map)))
+              .toList();
+          await _applyRatingUpgradeIfNeeded(animes);
+          return animes;
         }
-        await saveAnimes(animes);
-        await prefs.setBool(_ratingSystemKey, true);
       }
 
-      return animes;
-    } catch (_) {
+      // 2️⃣ ترحيل من SharedPreferences (مرة واحدة فقط)
+      final prefs = await SharedPreferences.getInstance();
+      final savedData = prefs.getString(_storageKey);
+      if (savedData != null && savedData.isNotEmpty) {
+        final decoded = jsonDecode(savedData) as List;
+        final animes = decoded
+            .map((item) => Anime.fromJson(Map<String, dynamic>.from(item as Map)))
+            .toList();
+        await _applyRatingUpgradeIfNeeded(animes);
+        await saveAnimes(animes);       // نقل إلى الملف
+        await prefs.remove(_storageKey); // تنظيف
+        return animes;
+      }
+
+      return [];
+    } catch (e) {
+      print('StorageService.loadAnimes error: $e');
       return [];
     }
   }
 
   Future<bool> saveAnimes(List<Anime> animes) async {
-    final prefs = await SharedPreferences.getInstance();
-    final String encodedData = jsonEncode(animes.map((anime) => anime.toJson()).toList());
-    return prefs.setString(_storageKey, encodedData);
+    try {
+      final file = await _getStorageFile();
+      final json = jsonEncode(animes.map((a) => a.toJson()).toList());
+
+      // ✅ كتابة ذرية (آمنة): ملف مؤقت ثم إعادة تسمية
+      final tempFile = File('${file.path}.tmp');
+      await tempFile.writeAsString(json, flush: true);
+      await tempFile.rename(file.path);
+
+      return true;
+    } catch (e) {
+      print('StorageService.saveAnimes error: $e');
+      return false;
+    }
   }
 
-  // 🔥 دالة لنقل الأنمي إلى سلة المهملات (بدلاً من الحذف النهائي)
+  Future<void> _applyRatingUpgradeIfNeeded(List<Anime> animes) async {
+    final prefs = await SharedPreferences.getInstance();
+    final isUpgraded = prefs.getBool(_ratingSystemKey) ?? false;
+    if (!isUpgraded) {
+      bool changed = false;
+      for (var anime in animes) {
+        if (anime.rating > 0 && anime.rating <= 5) {
+          anime.rating = anime.rating * 2;
+          changed = true;
+        }
+      }
+      if (changed) await saveAnimes(animes);
+      await prefs.setBool(_ratingSystemKey, true);
+    }
+  }
+
   Future<bool> moveToTrash(List<Anime> animes, String animeId) async {
     final animeIndex = animes.indexWhere((anime) => anime.id == animeId);
     if (animeIndex == -1) return false;
 
     final Anime anime = animes[animeIndex];
     animes.removeAt(animeIndex);
-
-    // حفظ القائمة الأصلية بدون الأنمي
     final bool saved = await saveAnimes(animes);
 
     if (saved) {
-      // إضافة الأنمي إلى سلة المهملات
       final prefs = await SharedPreferences.getInstance();
       final String? trashData = prefs.getString(_trashKey);
       List<dynamic> trashList = trashData != null ? jsonDecode(trashData) : [];
-      
       trashList.add(anime.toJson());
       await prefs.setString(_trashKey, jsonEncode(trashList));
     }
@@ -74,12 +107,10 @@ class StorageService {
     return saved;
   }
 
-  // 🔥 دالة لتحميل سلة المهملات
   Future<List<Anime>> loadTrash() async {
     final prefs = await SharedPreferences.getInstance();
     final String? trashData = prefs.getString(_trashKey);
     if (trashData == null || trashData.isEmpty) return [];
-
     try {
       final List<dynamic> decodedData = jsonDecode(trashData);
       return decodedData
@@ -90,27 +121,20 @@ class StorageService {
     }
   }
 
-  // 🔥 دالة لاستعادة أنمي من السلة
   Future<bool> restoreFromTrash(List<Anime> currentAnimes, Anime animeToRestore) async {
     final prefs = await SharedPreferences.getInstance();
-    
-    // إزالته من سلة المهملات
     final String? trashData = prefs.getString(_trashKey);
     if (trashData != null) {
       List<dynamic> trashList = jsonDecode(trashData);
       trashList.removeWhere((item) => item['id'] == animeToRestore.id);
       await prefs.setString(_trashKey, jsonEncode(trashList));
     }
-
-    // إضافته للقائمة الأصلية
     currentAnimes.add(animeToRestore);
     return await saveAnimes(currentAnimes);
   }
 
-  // 🔥 دالة لحذف أنمي نهائياً (من السلة أو من المكتبة)
   Future<bool> permanentDelete(Anime anime, {bool isInTrash = false}) async {
     final prefs = await SharedPreferences.getInstance();
-
     if (isInTrash) {
       final String? trashData = prefs.getString(_trashKey);
       if (trashData != null) {
@@ -119,8 +143,6 @@ class StorageService {
         await prefs.setString(_trashKey, jsonEncode(trashList));
       }
     }
-
-    // حذف الصورة من الجهاز
     final String? imagePath = anime.imagePath;
     if (imagePath != null && imagePath.isNotEmpty) {
       try {
@@ -128,7 +150,6 @@ class StorageService {
         if (await file.exists()) await file.delete();
       } catch (_) {}
     }
-
     return true;
   }
 
