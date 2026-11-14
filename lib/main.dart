@@ -4,6 +4,7 @@ import 'screens/home_screen.dart';
 import 'screens/library_screen.dart';
 import 'screens/memories_screen.dart';
 import 'screens/settings_screen.dart';
+import 'services/notification_service.dart'; // 🆕 استيراد خدمة الإشعارات
 
 final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.dark);
 final ValueNotifier<Color> primaryColorNotifier = ValueNotifier(const Color(0xFF741C2B));
@@ -13,8 +14,15 @@ final ValueNotifier<Color> titleColorNotifier = ValueNotifier(const Color(0xFFFF
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 🆕 تهيئة الإشعارات + طلب الإذن
+  try {
+    await NotificationService().init();
+    await NotificationService().requestPermission();
+  } catch (_) {}
+
   final prefs = await SharedPreferences.getInstance();
-  
+
   final isDark = prefs.getBool('isDarkMode') ?? true;
   themeNotifier.value = isDark ? ThemeMode.dark : ThemeMode.light;
 
