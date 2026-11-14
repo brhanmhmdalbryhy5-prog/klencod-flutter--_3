@@ -14,9 +14,6 @@ import 'storage_service.dart';
 class BackupService {
   static const String characterPrefix = 'anime_character_image_';
 
-  // ══════════════════════════════════════════════════════════════
-  // إنشاء نسخة احتياطية كاملة
-  // ══════════════════════════════════════════════════════════════
   Future<String> createBackup() async {
     final tempDir = await getTemporaryDirectory();
     final ts = DateTime.now().millisecondsSinceEpoch;
@@ -48,7 +45,7 @@ class BackupService {
         final anime = animes[i];
         final item = anime.toJson();
 
-        // ─── 1. غلاف الأنمي/الموسم ───────────────────────
+        // غلاف
         final path = anime.imagePath;
         if (path != null && path.isNotEmpty) {
           final file = File(path);
@@ -60,11 +57,9 @@ class BackupService {
           } else {
             item['imagePath'] = null;
           }
-        } else {
-          item['imagePath'] = null;
         }
 
-        // ─── 2. الفيديو ──────────────────────────────────
+        // فيديو
         final videoPath = anime.videoPath;
         if (videoPath != null && videoPath.isNotEmpty) {
           final file = File(videoPath);
@@ -76,11 +71,9 @@ class BackupService {
           } else {
             item['videoPath'] = null;
           }
-        } else {
-          item['videoPath'] = null;
         }
 
-        // ─── 3. شخصيات الأنمي/الموسم + صورها ────────────
+        // شخصيات
         final updatedCharacters = <Map<String, dynamic>>[];
         for (var j = 0; j < anime.characters.length; j++) {
           final char = Map<String, dynamic>.from(anime.characters[j]);
@@ -88,8 +81,7 @@ class BackupService {
           if (charPath != null && charPath.isNotEmpty) {
             final charFile = File(charPath);
             if (await charFile.exists()) {
-              final asset =
-                  'char_imgs/anime_${i}_char_$j.${_extension(charPath)}';
+              final asset = 'char_imgs/anime_${i}_char_$j.${_extension(charPath)}';
               await addFile(charFile, asset);
               char['imagePath'] = 'backup://$asset';
             } else {
@@ -100,23 +92,41 @@ class BackupService {
         }
         item['characters'] = updatedCharacters;
 
+        // 🆕 مشاهد
+        final updatedScenes = <Map<String, dynamic>>[];
+        for (var k = 0; k < anime.scenes.length; k++) {
+          final scene = Map<String, dynamic>.from(anime.scenes[k]);
+          final scenePath = scene['imagePath'] as String?;
+          if (scenePath != null && scenePath.isNotEmpty) {
+            final sceneFile = File(scenePath);
+            if (await sceneFile.exists()) {
+              final asset = 'scenes/anime_${i}_scene_$k.${_extension(scenePath)}';
+              await addFile(sceneFile, asset);
+              scene['imagePath'] = 'backup://$asset';
+            } else {
+              scene['imagePath'] = null;
+            }
+          }
+          updatedScenes.add(scene);
+        }
+        item['scenes'] = updatedScenes;
+
         animeJson.add(item);
       }
 
-      // ─── 4. صور شخصيات SharedPreferences (قديمة) ─────
+      // صور شخصيات SharedPreferences
       for (final key in prefs.getKeys()) {
         if (!key.startsWith(characterPrefix)) continue;
         final path = prefs.getString(key);
         if (path == null || path.isEmpty) continue;
         final file = File(path);
         if (!await file.exists()) continue;
-        final asset =
-            'characters/${Uri.encodeComponent(key)}.${_extension(path)}';
+        final asset = 'characters/${Uri.encodeComponent(key)}.${_extension(path)}';
         await addFile(file, asset);
         characterAssets[key] = asset;
       }
 
-      // ─── 5. صور الذكريات ────────────────────────────
+      // صور الذكريات
       final appDir = await getApplicationDocumentsDirectory();
       final memoriesDir = Directory('${appDir.path}/anime_memory_photos');
       if (await memoriesDir.exists()) {
@@ -127,10 +137,9 @@ class BackupService {
         }
       }
 
-      // ─── 6. كتابة الملفات الوصفية ────────────────────
       final metadata = {
         'format': 'anime_memory_backup',
-        'version': 5, // ← رُفع لدعم حفظ صور الشخصيات
+        'version': 6, // 🆕 رفع الإصدار لدعم المشاهد
         'createdAt': DateTime.now().toIso8601String(),
         'coverAssets': coverAssets,
         'characterAssets': characterAssets,
@@ -146,7 +155,6 @@ class BackupService {
       try { await tempMetaFile.delete(); } catch (_) {}
       try { await tempAnimeFile.delete(); } catch (_) {}
 
-      // ─── 7. حفظ الملف النهائي ────────────────────────
       final saveResult = await _saveLargeFileToDisk(
         tempZipPath,
         'anime_memory_backup_$ts.zip',
@@ -161,9 +169,6 @@ class BackupService {
     }
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // استعادة النسخة الاحتياطية
-  // ══════════════════════════════════════════════════════════════
   Future<String> restoreBackup() async {
     final createdFiles = <File>[];
 
@@ -183,7 +188,6 @@ class BackupService {
       if (sourcePath == null) return 'تعذر الوصول إلى الملف.';
       if (!await File(sourcePath).exists()) return 'الملف غير موجود.';
 
-      // ─── فك ضغط Streaming ────────────────────────────
       final inputStream = ziplib.InputFileStream(sourcePath);
       final archive = ziplib.ZipDecoder().decodeStream(inputStream);
 
@@ -192,12 +196,14 @@ class BackupService {
       final videosDir = Directory('${appDir.path}/anime_videos');
       final charsDir = Directory('${appDir.path}/anime_characters');
       final charImgsDir = Directory('${appDir.path}/character_images');
+      final scenesDir = Directory('${appDir.path}/anime_scenes'); // 🆕
       final memoriesDir = Directory('${appDir.path}/anime_memory_photos');
 
       await coversDir.create(recursive: true);
       await videosDir.create(recursive: true);
       await charsDir.create(recursive: true);
       await charImgsDir.create(recursive: true);
+      await scenesDir.create(recursive: true); // 🆕
       await memoriesDir.create(recursive: true);
 
       final restoredPaths = <String, String>{};
@@ -205,12 +211,10 @@ class BackupService {
       List<dynamic>? animeDecoded;
       final ts = DateTime.now().millisecondsSinceEpoch;
 
-      // ─── استخراج كل الملفات ──────────────────────────
       for (final file in archive) {
         if (!file.isFile) continue;
         final name = file.name.replaceAll('\\', '/');
 
-        // ملفات JSON صغيرة
         if (name == 'metadata.json' || name == 'animes.json') {
           final content = file.content;
           Uint8List? bytes;
@@ -229,20 +233,17 @@ class BackupService {
           continue;
         }
 
-        // ملفات كبيرة — stream مباشر على القرص
         String? targetPath;
         if (name.startsWith('covers/')) {
-          targetPath =
-              '${coversDir.path}/restored_${ts}_${_sanitize(name.split('/').last)}';
+          targetPath = '${coversDir.path}/restored_${ts}_${_sanitize(name.split('/').last)}';
         } else if (name.startsWith('videos/')) {
-          targetPath =
-              '${videosDir.path}/restored_${ts}_${_sanitize(name.split('/').last)}';
+          targetPath = '${videosDir.path}/restored_${ts}_${_sanitize(name.split('/').last)}';
         } else if (name.startsWith('char_imgs/')) {
-          targetPath =
-              '${charImgsDir.path}/restored_${ts}_${_sanitize(name.split('/').last)}';
+          targetPath = '${charImgsDir.path}/restored_${ts}_${_sanitize(name.split('/').last)}';
         } else if (name.startsWith('characters/')) {
-          targetPath =
-              '${charsDir.path}/restored_${ts}_${_sanitize(name.split('/').last)}';
+          targetPath = '${charsDir.path}/restored_${ts}_${_sanitize(name.split('/').last)}';
+        } else if (name.startsWith('scenes/')) { // 🆕
+          targetPath = '${scenesDir.path}/restored_${ts}_${_sanitize(name.split('/').last)}';
         } else if (name.startsWith('memories/')) {
           final decodedName = Uri.decodeComponent(name.split('/').last);
           targetPath = '${memoriesDir.path}/restored_${ts}_$decodedName';
@@ -250,7 +251,7 @@ class BackupService {
 
         if (targetPath != null) {
           final outputStream = ziplib.OutputFileStream(targetPath);
-          file.writeContent(outputStream); // sync في archive 4.x
+          file.writeContent(outputStream);
           await outputStream.close();
           restoredPaths[name] = targetPath;
           createdFiles.add(File(targetPath));
@@ -264,28 +265,19 @@ class BackupService {
         return 'النسخة غير مكتملة (metadata أو animes مفقود).';
       }
 
-      final animes = animeDecoded
-          .map((e) => Anime.fromJson(Map<String, dynamic>.from(e)))
-          .toList();
+      final animes = animeDecoded.map((e) => Anime.fromJson(Map<String, dynamic>.from(e))).toList();
 
-      final coverAssets =
-          Map<String, dynamic>.from(metadataDecoded['coverAssets'] ?? {});
-      final characterAssets =
-          Map<String, dynamic>.from(metadataDecoded['characterAssets'] ?? {});
-      final videoAssets =
-          Map<String, dynamic>.from(metadataDecoded['videoAssets'] ?? {});
+      final coverAssets = Map<String, dynamic>.from(metadataDecoded['coverAssets'] ?? {});
+      final characterAssets = Map<String, dynamic>.from(metadataDecoded['characterAssets'] ?? {});
+      final videoAssets = Map<String, dynamic>.from(metadataDecoded['videoAssets'] ?? {});
 
-      // ─── ربط البيانات بالملفات ───────────────────────
       for (final anime in animes) {
-        // غلاف
         final c = coverAssets[anime.id];
         anime.imagePath = c is String ? restoredPaths[c] : null;
-
-        // فيديو
         final v = videoAssets[anime.id];
         anime.videoPath = v is String ? restoredPaths[v] : null;
 
-        // ✅ صور شخصيات الأنمي/الموسم
+        // صور شخصيات الأنمي
         for (final ch in anime.characters) {
           final chPath = ch['imagePath'] as String?;
           if (chPath != null && chPath.startsWith('backup://')) {
@@ -293,16 +285,23 @@ class BackupService {
             ch['imagePath'] = restoredPaths[assetName];
           }
         }
+
+        // 🆕 صور المشاهد
+        for (final scene in anime.scenes) {
+          final sPath = scene['imagePath'] as String?;
+          if (sPath != null && sPath.startsWith('backup://')) {
+            final assetName = sPath.replaceFirst('backup://', '');
+            scene['imagePath'] = restoredPaths[assetName];
+          }
+        }
       }
 
-      // ─── حفظ البيانات ───────────────────────────────
       final saved = await StorageService().saveAnimes(animes);
       if (!saved) {
         await _cleanup(createdFiles);
         return 'تعذر حفظ بيانات الأنميات.';
       }
 
-      // ─── استعادة صور شخصيات SharedPreferences ───────
       final prefs = await SharedPreferences.getInstance();
       for (final key in prefs.getKeys().toList()) {
         if (key.startsWith(characterPrefix)) await prefs.remove(key);
@@ -312,16 +311,13 @@ class BackupService {
         if (p != null) await prefs.setString(entry.key, p);
       }
 
-      return '✅ تمت استعادة جميع البيانات (الأنميات + المواسم + الشخصيات + الصور + الفيديوهات) بنجاح.';
+      return '✅ تمت استعادة جميع البيانات (الأنميات + المواسم + الشخصيات + المشاهد + الفيديوهات) بنجاح.';
     } catch (e) {
       await _cleanup(createdFiles);
       return 'فشلت الاستعادة: $e';
     }
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // حفظ الملف النهائي عبر قائمة المشاركة
-  // ══════════════════════════════════════════════════════════════
   Future<String> _saveLargeFileToDisk(String tempPath, String fileName) async {
     try {
       final xFile = XFile(tempPath, name: fileName);
@@ -334,7 +330,6 @@ class BackupService {
       if (result.status == ShareResultStatus.dismissed) {
         return 'تم إلغاء حفظ النسخة.';
       }
-
       return '✅ تم إنشاء النسخة. تم فتح نافذة المشاركة لحفظها.';
     } catch (e) {
       try {
@@ -356,9 +351,7 @@ class BackupService {
 
   Future<void> _cleanup(List<File> files) async {
     for (final f in files) {
-      try {
-        if (await f.exists()) await f.delete();
-      } catch (_) {}
+      try { if (await f.exists()) await f.delete(); } catch (_) {}
     }
   }
 
@@ -370,6 +363,5 @@ class BackupService {
     return RegExp(r'^[a-z0-9]{1,8}$').hasMatch(ext) ? ext : 'bin';
   }
 
-  String _sanitize(String name) =>
-      name.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+  String _sanitize(String name) => name.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
 }
