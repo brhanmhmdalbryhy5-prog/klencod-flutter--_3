@@ -64,13 +64,17 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
   void initState() {
     super.initState();
 
-    // 🆕 دوران 360° كامل ومستمر (بدون reverse)
+    // 🆕 دوران 360° كامل ومستمر
     _rotationController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 10), // سرعة الدوران الكامل
+      duration: const Duration(seconds: 8), // 8 ثوانٍ للفة كاملة
     )..repeat();
+
     _rotationAnimation = Tween<double>(begin: 0, end: 2 * pi).animate(
-      CurvedAnimation(parent: _rotationController, curve: Curves.linear),
+      CurvedAnimation(
+        parent: _rotationController,
+        curve: Curves.linear,
+      ),
     );
 
     currentAnime = widget.anime;
@@ -257,6 +261,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
     final studiosController = TextEditingController(text: currentAnime.studios ?? '');
     double rating = currentAnime.rating;
     String? newImagePath = currentAnime.imagePath;
+    String? newBackImagePath = currentAnime.backImagePath; // 🆕
 
     final result = await showDialog<bool>(
       context: context,
@@ -270,6 +275,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // الوجه الأمامي
                     GestureDetector(
                       onTap: () async {
                         final picked = await _picker.pickImage(
@@ -301,10 +307,57 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
                                   Icon(Icons.add_photo_alternate, size: 30),
-                                  Text('إضافة صورة محلية')
+                                  Text('إضافة صورة أمامية')
                                 ])),
                       ),
                     ),
+                    if (newImagePath != null)
+                      TextButton.icon(
+                          onPressed: () => setDialogState(() => newImagePath = null),
+                          icon: const Icon(Icons.delete_outline, size: 16),
+                          label: const Text('إزالة الصورة الأمامية')),
+                    const SizedBox(height: 10),
+                    // 🆕 الوجه الخلفي
+                    GestureDetector(
+                      onTap: () async {
+                        final picked = await _picker.pickImage(
+                            source: ImageSource.gallery, imageQuality: 85);
+                        if (picked != null) {
+                          final directory = await getApplicationDocumentsDirectory();
+                          final folder = Directory('${directory.path}/anime_images');
+                          if (!await folder.exists()) await folder.create(recursive: true);
+                          final dest =
+                              '${folder.path}/${DateTime.now().microsecondsSinceEpoch}_back.jpg';
+                          final saved = await File(picked.path).copy(dest);
+                          setDialogState(() => newBackImagePath = saved.path);
+                        }
+                      },
+                      child: Container(
+                        height: 100,
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: Colors.black26,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.purpleAccent),
+                        ),
+                        child: newBackImagePath != null && File(newBackImagePath!).existsSync()
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(11),
+                                child: Image.file(File(newBackImagePath!), fit: BoxFit.cover))
+                            : const Center(
+                                child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                  Icon(Icons.flip, size: 30, color: Colors.purpleAccent),
+                                  Text('إضافة صورة خلفية (اختياري)', style: TextStyle(fontSize: 12)),
+                                ])),
+                      ),
+                    ),
+                    if (newBackImagePath != null)
+                      TextButton.icon(
+                          onPressed: () => setDialogState(() => newBackImagePath = null),
+                          icon: const Icon(Icons.delete_outline, size: 16),
+                          label: const Text('إزالة الصورة الخلفية')),
                     const SizedBox(height: 12),
                     TextField(
                         controller: titleController,
@@ -376,7 +429,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
           ..episodes = int.tryParse(episodesController.text) ?? 0
           ..watchedEpisodes = int.tryParse(watchedController.text) ?? 0
           ..rating = rating
-          ..imagePath = newImagePath;
+          ..imagePath = newImagePath
+          ..backImagePath = newBackImagePath; // 🆕
         await storage.saveAnimes(allAnimes);
         await _loadData();
       }
@@ -1383,66 +1437,68 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
   }
 
   // ══════════════════════════════════════════════════════════════
-  // 🆕 بطاقة الوجه (الأمامي والخلفي يستخدمان نفس الصورة)
+  // 🆕 بطاقة الوجه (تستخدم للوجه الأمامي والخلفي)
   // ══════════════════════════════════════════════════════════════
-  Widget _coverCard() {
-    final path = currentAnime.imagePath;
+  Widget _coverCard(String? path, {required bool isFront}) {
+    final primaryColor = primaryColorNotifier.value;
+
     return Container(
-      constraints: const BoxConstraints(maxHeight: 380),
-      child: AspectRatio(
-        aspectRatio: 3 / 4.5, // نسبة البطاقة (أقرب لبطاقة حقيقية)
+      width: 240,
+      height: 360,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.6),
+            blurRadius: 20,
+            spreadRadius: 2,
+            offset: const Offset(0, 10),
+          ),
+          BoxShadow(
+            color: primaryColor.withOpacity(0.3),
+            blurRadius: 15,
+            spreadRadius: 1,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
         child: Container(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(22),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                primaryColorNotifier.value.withOpacity(0.8),
-                Colors.black87,
-                primaryColorNotifier.value.withOpacity(0.8),
-              ],
+            border: Border.all(
+              color: isFront ? primaryColor.withOpacity(0.8) : Colors.purpleAccent.withOpacity(0.8), 
+              width: 2.5
             ),
-            padding: const EdgeInsets.all(3), // حافة ذهبية رقيقة
+            color: Colors.black,
           ),
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.black,
-              borderRadius: BorderRadius.circular(19),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(19),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  // الصورة نفسها على الوجهين
-                  path != null && path.isNotEmpty && File(path).existsSync()
-                      ? Image.file(File(path), fit: BoxFit.cover)
-                      : Container(
-                          color: panel,
-                          child: const Icon(Icons.movie_creation_outlined,
-                              size: 65, color: Colors.white30),
-                        ),
-                  // لمعة زجاجية (Glass reflection)
-                  Positioned.fill(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            Colors.white.withOpacity(0.18),
-                            Colors.transparent,
-                            Colors.black.withOpacity(0.25),
-                          ],
-                          stops: const [0.0, 0.5, 1.0],
-                        ),
-                      ),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              path != null && path.isNotEmpty && File(path).existsSync()
+                  ? Image.file(File(path), fit: BoxFit.cover)
+                  : Container(
+                      color: panel,
+                      child: const Icon(Icons.movie_creation_outlined,
+                          size: 65, color: Colors.white30),
+                    ),
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Colors.white.withOpacity(0.2),
+                        Colors.transparent,
+                        Colors.black.withOpacity(0.4),
+                      ],
+                      stops: const [0.0, 0.4, 1.0],
                     ),
                   ),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
         ),
       ),
@@ -1450,7 +1506,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
   }
 
   // ══════════════════════════════════════════════════════════════
-  // 🆕 بطاقة 3D دوّارة 360° بشكل مستمر
+  // 🆕 دوران 360° كامل مع ظل أرضي ووجهين
   // ══════════════════════════════════════════════════════════════
   Widget _coverWith3D() {
     return GestureDetector(
@@ -1459,46 +1515,67 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
         animation: _rotationAnimation,
         builder: (context, child) {
           final angle = _rotationAnimation.value;
-          final cosAngle = cos(angle);
-          final isFront = cosAngle >= 0; // الوجه الأمامي مقابل الخلفي
-          final intensity = 1 - cosAngle.abs(); // 0 أمام، 1 حافة
+          
+          // تحديد ما إذا كنا نرى الوجه الأمامي أو الخلفي بناءً على جيب تمام الزاوية
+          final isFront = cos(angle) >= 0;
 
-          // الظل يزداد عند الحافة ويعود عند الوجه
-          final shadowBlur = 15.0 + intensity * 25.0;
-          final shadowOffsetY = 10.0 + intensity * 10.0;
+          // إذا كنا في الوجه الخلفي، نستخدم الصورة الخلفية، وإذا لم توجد نستخدم الأمامية
+          final displayImagePath = isFront
+              ? currentAnime.imagePath
+              : (currentAnime.backImagePath ?? currentAnime.imagePath);
+
+          // إخفاء البطاقة تماماً عند الحافة (90 و 270 درجة) لجعل الانتقال أكثر واقعية
+          final opacity = cos(angle).abs().clamp(0.1, 1.0);
 
           return Container(
-            margin: const EdgeInsets.symmetric(horizontal: 30, vertical: 16),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(22),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.6),
-                  blurRadius: shadowBlur,
-                  spreadRadius: 2,
-                  offset: Offset(0, shadowOffsetY),
+            height: 420,
+            margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 15),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // 1. الظل الأرضي (Ellipse Shadow)
+                Positioned(
+                  bottom: 20,
+                  child: Transform(
+                    transform: Matrix4.identity()
+                      ..scale(cos(angle).abs() * 0.6 + 0.4, 1.0), // الظل يضيق عند الحواف
+                    child: Container(
+                      width: 200,
+                      height: 25,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(100),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.6),
+                            blurRadius: 25,
+                            spreadRadius: 5,
+                          ),
+                        ],
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ),
                 ),
-                BoxShadow(
-                  color: primaryColorNotifier.value.withOpacity(0.15 + intensity * 0.35),
-                  blurRadius: shadowBlur * 1.4,
-                  spreadRadius: 1,
-                  offset: const Offset(0, 6),
+                
+                // 2. البطاقة الدوارة
+                Opacity(
+                  opacity: opacity,
+                  child: Transform(
+                    alignment: Alignment.center,
+                    transform: Matrix4.identity()
+                      ..setEntry(3, 2, 0.0015) // منظور 3D
+                      ..rotateY(angle), // الدوران الكامل 360
+                    child: isFront
+                        ? _coverCard(displayImagePath, isFront: true)
+                        : Transform(
+                            // عكس الصورة الخلفية أفقياً حتى تظهر بشكل صحيح وليس كصورة معكوسة
+                            alignment: Alignment.center,
+                            transform: Matrix4.identity()..scale(-1.0, 1.0, 1.0),
+                            child: _coverCard(displayImagePath, isFront: false),
+                          ),
+                  ),
                 ),
               ],
-            ),
-            child: Transform(
-              alignment: Alignment.center,
-              transform: Matrix4.identity()
-                ..setEntry(3, 2, 0.0012) // Perspective (يعطي إحساس العمق)
-                ..rotateY(angle),
-              child: isFront
-                  ? _coverCard()
-                  : Transform(
-                      // اقلب الوجه الخلفي أفقياً ليكون صحيحاً
-                      alignment: Alignment.center,
-                      transform: Matrix4.identity()..scale(-1.0, 1.0, 1.0),
-                      child: _coverCard(),
-                    ),
             ),
           );
         },
