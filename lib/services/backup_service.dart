@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:archive/archive_io.dart' as ziplib;
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/anime.dart';
@@ -27,7 +28,6 @@ class BackupService {
       final animes = await StorageService().loadAnimes();
       final prefs = await SharedPreferences.getInstance();
 
-      // ✅ ZipFileEncoder يكتب مباشرة على القرص — لا RAM
       final encoder = ziplib.ZipFileEncoder();
       encoder.create(tempZipPath);
 
@@ -102,7 +102,7 @@ class BackupService {
         }
       }
 
-      // كتابة metadata + animes كملفات مؤقتة ثم إضافتها
+      // كتابة metadata + animes كملفات مؤقتة
       final metadata = {
         'format': 'anime_memory_backup',
         'version': 4,
@@ -118,11 +118,10 @@ class BackupService {
 
       await encoder.close();
 
-      // تنظيف مؤقت
       try { await tempMetaFile.delete(); } catch (_) {}
       try { await tempAnimeFile.delete(); } catch (_) {}
 
-      // حفظ الملف النهائي
+      // حفظ الملف النهائي عبر المشاركة
       final saveResult = await _saveLargeFileToDisk(
         tempZipPath,
         'anime_memory_backup_$ts.zip',
@@ -159,7 +158,6 @@ class BackupService {
       if (sourcePath == null) return 'تعذر الوصول إلى الملف.';
       if (!await File(sourcePath).exists()) return 'الملف غير موجود.';
 
-      // ✅ Streaming decode — لا يحمّل ZIP كاملاً في RAM
       final inputStream = ziplib.InputFileStream(sourcePath);
       final archive = ziplib.ZipDecoder().decodeStream(inputStream);
 
@@ -179,12 +177,10 @@ class BackupService {
       List<dynamic>? animeDecoded;
       final ts = DateTime.now().millisecondsSinceEpoch;
 
-      // ✅ المرور على كل ملف بشكل stream
       for (final file in archive) {
         if (!file.isFile) continue;
         final name = file.name.replaceAll('\\', '/');
 
-        // ملفات صغيرة — نقرأها بالكامل
         if (name == 'metadata.json' || name == 'animes.json') {
           final content = file.content;
           Uint8List? bytes;
@@ -203,7 +199,6 @@ class BackupService {
           continue;
         }
 
-        // ملفات كبيرة (فيديوهات، صور) — stream مباشر على القرص
         String? targetPath;
         if (name.startsWith('covers/')) {
           targetPath = '${coversDir.path}/restored_${ts}_${_sanitize(name.split('/').last)}';
@@ -218,7 +213,6 @@ class BackupService {
 
         if (targetPath != null) {
           final outputStream = ziplib.OutputFileStream(targetPath);
-          // ✅ writeContent في archive 4.x متزامنة (sync) — بدون await
           file.writeContent(outputStream);
           await outputStream.close();
           restoredPaths[name] = targetPath;
@@ -241,7 +235,6 @@ class BackupService {
       final characterAssets = Map<String, dynamic>.from(metadataDecoded['characterAssets'] ?? {});
       final videoAssets = Map<String, dynamic>.from(metadataDecoded['videoAssets'] ?? {});
 
-      // ربط الصور والفيديوهات
       for (final anime in animes) {
         final c = coverAssets[anime.id];
         anime.imagePath = c is String ? restoredPaths[c] : null;
@@ -249,14 +242,12 @@ class BackupService {
         anime.videoPath = v is String ? restoredPaths[v] : null;
       }
 
-      // حفظ البيانات
       final saved = await StorageService().saveAnimes(animes);
       if (!saved) {
         await _cleanup(createdFiles);
         return 'تعذر حفظ بيانات الأنميات.';
       }
 
-      // استعادة صور شخصيات SharedPreferences
       final prefs = await SharedPreferences.getInstance();
       for (final key in prefs.getKeys().toList()) {
         if (key.startsWith(characterPrefix)) await prefs.remove(key);
@@ -274,45 +265,40 @@ class BackupService {
   }
 
   // ══════════════════════════════════════════════════════════════
-  // حفظ ملف كبير على القرص (يتجنب MethodChannel)
+  // دالة الحفظ الجديدة: تفتح قائمة المشاركة ليختار المستخدم المكان
   // ══════════════════════════════════════════════════════════════
   Future<String> _saveLargeFileToDisk(String tempPath, String fileName) async {
-    // 1. Downloads (iOS/macOS/Windows/Linux)
     try {
-      final dir = await getDownloadsDirectory();
-      if (dir != null) {
-        final target = '${dir.path}/$fileName';
-        await File(tempPath).copy(target);
-        return '✅ تم حفظ النسخة في:\n$target';
-      }
-    } catch (_) {}
-
-    // 2. External storage (Android — المجلد الخاص بالتطبيق)
-    try {
-      final dir = await getExternalStorageDirectory();
-      if (dir != null) {
-        final folder = Directory('${dir.path}/backups');
-        await folder.create(recursive: true);
-        final target = '${folder.path}/$fileName';
-        await File(tempPath).copy(target);
-        return '✅ تم حفظ النسخة في:\n$target';
-      }
-    } catch (_) {}
-
-    // 3. FilePicker (للملفات الصغيرة فقط)
-    try {
-      final bytes = await File(tempPath).readAsBytes();
-      final output = await FilePicker.platform.saveFile(
-        dialogTitle: 'حفظ النسخة الاحتياطية',
-        fileName: fileName,
-        type: FileType.custom,
-        allowedExtensions: ['zip'],
-        bytes: bytes,
+      final xFile = XFile(tempPath, name: fileName);
+      
+      // فتح نافذة المشاركة
+      final result = await Share.shareXFiles(
+        [xFile],
+        subject: 'نسخة احتياطية - ذاكرة الأوتاكو',
+        text: 'احفظ هذه النسخة في التنزيلات أو Google Drive.',
       );
-      if (output == null) return 'تم إلغاء الحفظ.';
-      return '✅ تم حفظ النسخة.';
+
+      if (result.status == ShareResultStatus.dismissed) {
+        return 'تم إلغاء حفظ النسخة.';
+      }
+      
+      return '✅ تم إنشاء النسخة. تم فتح نافذة المشاركة لحفظها.';
     } catch (e) {
-      return '❌ تعذر الحفظ: $e';
+      // في حال فشل المشاركة، نجرب FilePicker كخطة بديلة
+      try {
+        final bytes = await File(tempPath).readAsBytes();
+        final output = await FilePicker.platform.saveFile(
+          dialogTitle: 'حفظ النسخة الاحتياطية',
+          fileName: fileName,
+          type: FileType.custom,
+          allowedExtensions: ['zip'],
+          bytes: bytes,
+        );
+        if (output == null) return 'تم إلغاء الحفظ.';
+        return '✅ تم حفظ النسخة.';
+      } catch (e2) {
+        return '❌ تعذر الحفظ: $e';
+      }
     }
   }
 
