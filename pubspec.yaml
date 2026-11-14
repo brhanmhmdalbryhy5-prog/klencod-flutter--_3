@@ -19,14 +19,9 @@ dependencies:
   fl_chart: ^0.68.0
   screenshot: ^3.0.0
   share_plus: ^10.1.2
-
-  # 🆕 حزمة الإشعارات (لميزة النسخ الاحتياطي)
   flutter_local_notifications: ^17.2.3
 
-  # 🆕 حزمة الطبقة العائمة (Overlay)
-  flutter_overlay_window: ^1.0.2
-
-  # 🔥 تم تثبيت الإصدارات المتوافقة مع Flutter 3.22.0
+  # 🔥 تمت إزالة حزمة الطبقة العائمة
   video_player: 2.9.3
   chewie: 1.8.5
 
