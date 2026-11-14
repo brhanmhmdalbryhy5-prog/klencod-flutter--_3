@@ -64,12 +64,13 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
   void initState() {
     super.initState();
 
+    // 🆕 دوران 360° كامل ومستمر (بدون reverse)
     _rotationController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 6),
-    )..repeat(reverse: true);
-    _rotationAnimation = Tween<double>(begin: -0.17, end: 0.17).animate(
-      CurvedAnimation(parent: _rotationController, curve: Curves.easeInOut),
+      duration: const Duration(seconds: 10), // سرعة الدوران الكامل
+    )..repeat();
+    _rotationAnimation = Tween<double>(begin: 0, end: 2 * pi).animate(
+      CurvedAnimation(parent: _rotationController, curve: Curves.linear),
     );
 
     currentAnime = widget.anime;
@@ -1381,6 +1382,130 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
     if (mounted) setState(() {});
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // 🆕 بطاقة الوجه (الأمامي والخلفي يستخدمان نفس الصورة)
+  // ══════════════════════════════════════════════════════════════
+  Widget _coverCard() {
+    final path = currentAnime.imagePath;
+    return Container(
+      constraints: const BoxConstraints(maxHeight: 380),
+      child: AspectRatio(
+        aspectRatio: 3 / 4.5, // نسبة البطاقة (أقرب لبطاقة حقيقية)
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                primaryColorNotifier.value.withOpacity(0.8),
+                Colors.black87,
+                primaryColorNotifier.value.withOpacity(0.8),
+              ],
+            ),
+            padding: const EdgeInsets.all(3), // حافة ذهبية رقيقة
+          ),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.black,
+              borderRadius: BorderRadius.circular(19),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(19),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  // الصورة نفسها على الوجهين
+                  path != null && path.isNotEmpty && File(path).existsSync()
+                      ? Image.file(File(path), fit: BoxFit.cover)
+                      : Container(
+                          color: panel,
+                          child: const Icon(Icons.movie_creation_outlined,
+                              size: 65, color: Colors.white30),
+                        ),
+                  // لمعة زجاجية (Glass reflection)
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Colors.white.withOpacity(0.18),
+                            Colors.transparent,
+                            Colors.black.withOpacity(0.25),
+                          ],
+                          stops: const [0.0, 0.5, 1.0],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // 🆕 بطاقة 3D دوّارة 360° بشكل مستمر
+  // ══════════════════════════════════════════════════════════════
+  Widget _coverWith3D() {
+    return GestureDetector(
+      onTap: _showImageZoom,
+      child: AnimatedBuilder(
+        animation: _rotationAnimation,
+        builder: (context, child) {
+          final angle = _rotationAnimation.value;
+          final cosAngle = cos(angle);
+          final isFront = cosAngle >= 0; // الوجه الأمامي مقابل الخلفي
+          final intensity = 1 - cosAngle.abs(); // 0 أمام، 1 حافة
+
+          // الظل يزداد عند الحافة ويعود عند الوجه
+          final shadowBlur = 15.0 + intensity * 25.0;
+          final shadowOffsetY = 10.0 + intensity * 10.0;
+
+          return Container(
+            margin: const EdgeInsets.symmetric(horizontal: 30, vertical: 16),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(22),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.6),
+                  blurRadius: shadowBlur,
+                  spreadRadius: 2,
+                  offset: Offset(0, shadowOffsetY),
+                ),
+                BoxShadow(
+                  color: primaryColorNotifier.value.withOpacity(0.15 + intensity * 0.35),
+                  blurRadius: shadowBlur * 1.4,
+                  spreadRadius: 1,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Transform(
+              alignment: Alignment.center,
+              transform: Matrix4.identity()
+                ..setEntry(3, 2, 0.0012) // Perspective (يعطي إحساس العمق)
+                ..rotateY(angle),
+              child: isFront
+                  ? _coverCard()
+                  : Transform(
+                      // اقلب الوجه الخلفي أفقياً ليكون صحيحاً
+                      alignment: Alignment.center,
+                      transform: Matrix4.identity()..scale(-1.0, 1.0, 1.0),
+                      child: _coverCard(),
+                    ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _cover() {
     final path = currentAnime.imagePath;
     if (path != null && path.isNotEmpty && File(path).existsSync()) {
@@ -1397,40 +1522,6 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
         width: double.infinity,
         color: panel,
         child: const Icon(Icons.movie_creation_outlined, size: 65, color: Colors.white30));
-  }
-
-  Widget _coverWith3D() {
-    return GestureDetector(
-      onTap: _showImageZoom,
-      child: Stack(
-        alignment: Alignment.bottomRight,
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(18),
-            child: AnimatedBuilder(
-              animation: _rotationAnimation,
-              builder: (context, child) {
-                return Transform(
-                  alignment: Alignment.center,
-                  transform: Matrix4.identity()
-                    ..setEntry(3, 2, 0.0015)
-                    ..rotateY(_rotationAnimation.value),
-                  child: child,
-                );
-              },
-              child: _cover(),
-            ),
-          ),
-          Container(
-            margin: const EdgeInsets.all(10),
-            padding: const EdgeInsets.all(6),
-            decoration:
-                BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(10)),
-            child: const Icon(Icons.zoom_in, color: Colors.white, size: 24),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _buildSeasonGridCard(Anime sub) {
