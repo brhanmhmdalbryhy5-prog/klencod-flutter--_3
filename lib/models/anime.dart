@@ -13,6 +13,7 @@ class Anime {
   int colorIndex;
   String date;
   String? imagePath;
+  String? backImagePath; // 🆕 للوجه الخلفي
   String? imageUrl;
   double? globalRating;
   int? releaseYear;
@@ -20,18 +21,9 @@ class Anime {
   String? partName;
   String? videoPath;
   List<Map<String, dynamic>> characters;
-
-  // 🔥 حقل جديد للاستوديو
   String? studios;
-
-  // 🆕 نوع العمل (TV / MOVIE / OVA / SPECIAL / ONA / TV_SHORT)
   String? format;
-
-  // 🆕 صور المشاهد المحلية
-  // كل عنصر: {'imagePath': '/path/to/scene.jpg', 'imageUrl': 'https://...'}
   List<Map<String, dynamic>> scenes;
-
-  // 🆕 رقم MyAnimeList (لجلب المشاهد من Jikan API)
   int? idMal;
 
   Anime({
@@ -49,6 +41,7 @@ class Anime {
     this.colorIndex = 0,
     this.date = '',
     this.imagePath,
+    this.backImagePath,
     this.imageUrl,
     this.globalRating,
     this.releaseYear,
@@ -68,14 +61,15 @@ class Anime {
       'character': character, 'summary': summary, 'memory': memory,
       'episodes': episodes, 'watchedEpisodes': watchedEpisodes,
       'rating': rating, 'favorite': favorite, 'colorIndex': colorIndex,
-      'date': date, 'imagePath': imagePath, 'imageUrl': imageUrl,
-      'globalRating': globalRating, 'releaseYear': releaseYear,
+      'date': date, 'imagePath': imagePath, 'backImagePath': backImagePath,
+      'imageUrl': imageUrl,
+      'globalRating': globalRating, 'releaseYear': releaseYear, 
       'parentId': parentId, 'partName': partName, 'videoPath': videoPath,
       'characters': characters,
       'studios': studios,
-      'format': format,        // 🆕
-      'scenes': scenes,        // 🆕
-      'idMal': idMal,          // 🆕
+      'format': format,
+      'scenes': scenes,
+      'idMal': idMal,
     };
   }
 
@@ -95,23 +89,18 @@ class Anime {
       colorIndex: (json['colorIndex'] as num?)?.toInt() ?? 0,
       date: json['date'] as String? ?? '',
       imagePath: json['imagePath'] as String?,
+      backImagePath: json['backImagePath'] as String?,
       imageUrl: json['imageUrl'] as String?,
       globalRating: (json['globalRating'] as num?)?.toDouble(),
       releaseYear: (json['releaseYear'] as num?)?.toInt(),
       parentId: json['parentId'] as String?,
       partName: json['partName'] as String?,
       videoPath: json['videoPath'] as String?,
-      characters: (json['characters'] as List?)
-              ?.map((e) => Map<String, dynamic>.from(e))
-              .toList() ??
-          [],
+      characters: (json['characters'] as List?)?.map((e) => Map<String, dynamic>.from(e)).toList() ?? [],
       studios: json['studios'] as String?,
-      format: json['format'] as String?,                              // 🆕
-      scenes: (json['scenes'] as List?)                               // 🆕
-              ?.map((e) => Map<String, dynamic>.from(e))
-              .toList() ??
-          [],
-      idMal: (json['idMal'] as num?)?.toInt(),                        // 🆕
+      format: json['format'] as String?,
+      scenes: (json['scenes'] as List?)?.map((e) => Map<String, dynamic>.from(e)).toList() ?? [],
+      idMal: (json['idMal'] as num?)?.toInt(),
     );
   }
 }
