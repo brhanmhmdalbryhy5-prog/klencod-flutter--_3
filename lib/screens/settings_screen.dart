@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../main.dart';
@@ -5,6 +6,7 @@ import '../services/backup_service.dart';
 import '../services/theme_service.dart';
 import '../services/anime_api_service.dart';
 import '../services/bulk_download_service.dart';
+import '../services/overlay_service.dart';
 import 'trash_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -23,6 +25,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final BackupService backupService = BackupService();
   final AnimeApiService apiService = AnimeApiService();
   final BulkDownloadService bulkService = BulkDownloadService();
+  final OverlayService overlayService = OverlayService();
 
   @override
   void initState() {
@@ -267,17 +270,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<void> _startBulkDownload() async {
+  /// دالة مساعدة لتشغيل أي عملية مع إظهار الطبقة العائمة وتحديثها
+  Future<void> _runWithOverlay({
+    required String title,
+    required Future<Map<String, dynamic>> Function() action,
+  }) async {
     if (bulkService.isRunning) return;
+    await overlayService.showOverlay(title: title);
+    StreamSubscription? subscription;
+    if (action == bulkService.downloadAllData) {
+      subscription = bulkService.progress.listen((progress) {
+        if (progress != null) {
+          overlayService.updateProgress(
+            title: title,
+            status: progress.status,
+            progress: progress.percentage,
+          );
+        }
+      });
+    }
+    try {
+      final result = await action();
+      await overlayService.closeOverlay();
+      if (mounted) await _showDownloadResult(result);
+    } finally {
+      subscription?.cancel();
+      await overlayService.closeOverlay();
+    }
+  }
 
+  Future<void> _startBulkDownload() async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: const Color(0xFF1B1F28),
         title: const Text('تحميل البيانات الكاملة'),
-        content: const Text(
-          'سيقوم التطبيق بجلب جميع البيانات والصور والمواسم والشخصيات لكل الأنميات في مكتبتك وحفظها محلياً.',
-        ),
+        content: const Text('سيقوم التطبيق بجلب جميع البيانات والصور والمواسم والشخصيات لكل الأنميات في مكتبتك وحفظها محلياً.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
           FilledButton(
@@ -288,24 +316,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
     );
-
     if (confirm != true || !mounted) return;
-    final result = await bulkService.downloadAllData();
-    if (!mounted) return;
-    await _showDownloadResult(result);
+    await _runWithOverlay(
+      title: 'تحميل شامل',
+      action: () => bulkService.downloadAllData(),
+    );
   }
 
   Future<void> _startSeasonsAndCharactersDownload() async {
-    if (bulkService.isRunning) return;
-
     final confirm = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: const Color(0xFF1B1F28),
         title: const Text('تحميل المواسم والشخصيات فقط'),
-        content: const Text(
-          'سيقوم التطبيق بجلب المواسم والأفلام المرتبطة والشخصيات الرئيسية لكل الأنميات في مكتبتك.',
-        ),
+        content: const Text('سيقوم التطبيق بجلب المواسم والأفلام المرتبطة والشخصيات الرئيسية لكل الأنميات في مكتبتك.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
           FilledButton(
@@ -316,17 +340,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
     );
-
     if (confirm != true || !mounted) return;
-    final result = await bulkService.downloadSeasonsAndCharactersOnly();
-    if (!mounted) return;
-    await _showDownloadResult(result);
+    await _runWithOverlay(
+      title: 'جلب المواسم والشخصيات',
+      action: () => bulkService.downloadSeasonsAndCharactersOnly(),
+    );
   }
 
-  // 🆕 المواسم فقط
   Future<void> _startSeasonsOnlyDownload() async {
-    if (bulkService.isRunning) return;
-
     final confirm = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -343,17 +364,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
     );
-
     if (confirm != true || !mounted) return;
-    final result = await bulkService.downloadSeasonsOnly();
-    if (!mounted) return;
-    await _showDownloadResult(result);
+    await _runWithOverlay(
+      title: 'جلب المواسم والأفلام',
+      action: () => bulkService.downloadSeasonsOnly(),
+    );
   }
 
-  // 🆕 الشخصيات فقط
   Future<void> _startCharactersOnlyDownload() async {
-    if (bulkService.isRunning) return;
-
     final confirm = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -370,16 +388,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
     );
-
     if (confirm != true || !mounted) return;
-    final result = await bulkService.downloadCharactersOnly();
-    if (!mounted) return;
-    await _showDownloadResult(result);
+    await _runWithOverlay(
+      title: 'جلب الشخصيات',
+      action: () => bulkService.downloadCharactersOnly(),
+    );
   }
 
   Future<void> _startImagesDownload() async {
-    if (bulkService.isRunning) return;
-
     final confirm = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -396,24 +412,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
     );
-
     if (confirm != true || !mounted) return;
-    final result = await bulkService.downloadImagesOnly();
-    if (!mounted) return;
-    await _showDownloadResult(result);
+    await _runWithOverlay(
+      title: 'تحميل الصور المفقودة',
+      action: () => bulkService.downloadImagesOnly(),
+    );
   }
 
   Future<void> _startMissingImagesDownload() async {
-    if (bulkService.isRunning) return;
-
     final confirm = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: const Color(0xFF1B1F28),
         title: const Text('تنشيط صور الشخصيات والمواسم'),
-        content: const Text(
-          'سيتحقق التطبيق من كل صورة (أغلفة + شخصيات) لكل الأنميات والمواسم.',
-        ),
+        content: const Text('سيتحقق التطبيق من كل صورة (أغلفة + شخصيات) لكل الأنميات والمواسم.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
           FilledButton(
@@ -424,24 +436,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
     );
-
     if (confirm != true || !mounted) return;
-    final result = await bulkService.downloadAllMissingImages();
-    if (!mounted) return;
-    await _showDownloadResult(result);
+    await _runWithOverlay(
+      title: 'تنشيط الصور',
+      action: () => bulkService.downloadAllMissingImages(),
+    );
   }
 
   Future<void> _startScenesDownload() async {
-    if (bulkService.isRunning) return;
-
     final confirm = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: const Color(0xFF1B1F28),
         title: const Text('جلب مشاهد الأنمي'),
-        content: const Text(
-          'سيقوم التطبيق بجلب صور مشاهد لكل الأنميات من Jikan API وحفظها محلياً.',
-        ),
+        content: const Text('سيقوم التطبيق بجلب صور مشاهد لكل الأنميات من Jikan API وحفظها محلياً.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
           FilledButton(
@@ -452,11 +460,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
     );
-
     if (confirm != true || !mounted) return;
-    final result = await bulkService.downloadAllScenes();
-    if (!mounted) return;
-    await _showDownloadResult(result);
+    await _runWithOverlay(
+      title: 'جلب المشاهد',
+      action: () => bulkService.downloadAllScenes(),
+    );
   }
 
   Future<void> _clearAllGenres() async {
@@ -498,12 +506,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     setState(() => backupBusy = true);
+    await overlayService.showOverlay(title: restore ? 'استعادة شاملة' : 'نسخة شاملة');
     String result;
     try {
       result = restore ? await backupService.restoreBackup() : await backupService.createBackup();
     } catch (e) {
       result = 'حدث خطأ: $e';
     }
+    await overlayService.closeOverlay();
     if (!mounted) return;
     setState(() => backupBusy = false);
     await showDialog<void>(
@@ -517,7 +527,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // 🆕 النسخة الخفيفة
   Future<void> _runLiteBackup({required bool restore}) async {
     if (backupBusy) return;
     if (restore) {
@@ -526,11 +535,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         builder: (ctx) => AlertDialog(
           backgroundColor: const Color(0xFF1B1F28),
           title: const Text('استعادة النسخة الخفيفة'),
-          content: const Text(
-            'ستُستبدل بيانات الأنميات الحالية (الأغلفة والشخصيات).\n'
-            'الفيديوهات والمشاهد والذكريات ستبقى كما هي.\n\n'
-            'هل تريد المتابعة؟',
-          ),
+          content: const Text('ستُستبدل بيانات الأنميات الحالية (الأغلفة والشخصيات).\nالفيديوهات والمشاهد والذكريات ستبقى كما هي.\n\nهل تريد المتابعة؟'),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
             ElevatedButton(
@@ -544,12 +549,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (ok != true || !mounted) return;
     }
     setState(() => backupBusy = true);
+    await overlayService.showOverlay(title: restore ? 'استعادة خفيفة' : 'نسخة خفيفة');
     String result;
     try {
       result = restore ? await backupService.restoreLiteBackup() : await backupService.createLiteBackup();
     } catch (e) {
       result = 'حدث خطأ: $e';
     }
+    await overlayService.closeOverlay();
     if (!mounted) return;
     setState(() => backupBusy = false);
     await showDialog<void>(
@@ -695,7 +702,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: isDownloading ? null : _startSeasonsAndCharactersDownload,
             ),
             const SizedBox(height: 10),
-            // 🆕 المواسم فقط
             _settingsTile(
               icon: Icons.movie_filter_outlined,
               color: const Color(0xFFE67E22),
@@ -705,7 +711,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: isDownloading ? null : _startSeasonsOnlyDownload,
             ),
             const SizedBox(height: 10),
-            // 🆕 الشخصيات فقط
             _settingsTile(
               icon: Icons.people_alt_outlined,
               color: Colors.purpleAccent,
@@ -753,7 +758,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 10),
             _settingsTile(icon: Icons.settings_backup_restore, color: const Color(0xFFFFC857), title: 'استعادة النسخة الشاملة', subtitle: 'استرجاع كل شيء', trailing: const Icon(Icons.chevron_left, color: Colors.white38), onTap: backupBusy ? null : () => runBackupAction(restore: true)),
             const SizedBox(height: 10),
-            // 🆕 نسخة خفيفة
             _settingsTile(
               icon: Icons.backup_outlined,
               color: const Color(0xFF2196F3),
@@ -763,7 +767,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: backupBusy ? null : () => _runLiteBackup(restore: false),
             ),
             const SizedBox(height: 10),
-            // 🆕 استعادة النسخة الخفيفة
             _settingsTile(
               icon: Icons.restore,
               color: const Color(0xFF03A9F4),
