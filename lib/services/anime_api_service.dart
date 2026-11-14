@@ -1,6 +1,10 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
+
 import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
+
 import '../models/anime.dart';
 import 'storage_service.dart';
 import 'image_service.dart';
@@ -11,13 +15,14 @@ class AnimeApiService {
   Future<Map<String, dynamic>> fetchAnimeData(
     String animeTitle, {
     bool downloadImages = false,
-    bool skipTranslation = false,  // 🆕 تخطي ترجمة الأنمي الأصلي فقط (المواسم تُترجم دائماً)
+    bool skipTranslation = false,
   }) async {
     final emptyReturn = {
       'genres': <String>[], 'summary': '', 'episodes': 0,
       'globalRating': null, 'releaseYear': null,
       'imageUrl': null, 'imagePath': null,
-      'subAnimes': [], 'characters': [], 'studios': null
+      'subAnimes': [], 'characters': [], 'studios': null,
+      'format': null, 'idMal': null, // 🆕
     };
     if (animeTitle.trim().isEmpty) return emptyReturn;
 
@@ -25,11 +30,14 @@ class AnimeApiService {
       try {
         const String url = 'https://graphql.anilist.co';
 
+        // ✅ تمت إضافة idMal و format للأنمي الأساسي، و idMal للمواسم
         final String query = '''
           query (\$search: String) {
             Page(perPage: 1) {
               media(search: \$search, type: ANIME) {
                 id
+                idMal
+                format
                 genres
                 description
                 episodes
@@ -48,6 +56,7 @@ class AnimeApiService {
                     relationType
                     node {
                       id
+                      idMal
                       title { romaji english }
                       description
                       episodes
@@ -97,6 +106,8 @@ class AnimeApiService {
             final double? globalRating = averageScore != null ? averageScore / 10.0 : null;
             final int? releaseYear = media['startDate']?['year'] as int?;
             final String? imageUrl = media['coverImage']?['large'] as String?;
+            final String? format = media['format'] as String?;      // 🆕
+            final int? idMal = (media['idMal'] as num?)?.toInt();   // 🆕
 
             String? studios;
             final studiosList = media['studios']?['nodes'] as List?;
@@ -118,7 +129,7 @@ class AnimeApiService {
                 characters.add({
                   'name': name,
                   'imageUrl': imgUrl,
-                  'imagePath': charImagePath
+                  'imagePath': charImagePath,
                 });
               }
             }
@@ -127,7 +138,6 @@ class AnimeApiService {
             if (!hasAdultContent) {
               summary = media['description']?.toString() ?? '';
               summary = summary.replaceAll(RegExp(r'<[^>]*>'), '');
-              // ✅ تخطي ترجمة ملخص الأنمي الأصلي فقط إذا طُلب ذلك
               if (summary.isNotEmpty && !skipTranslation) {
                 summary = await _translateToArabic(summary);
               }
@@ -139,13 +149,14 @@ class AnimeApiService {
               for (var edge in relations) {
                 final relationType = edge['relationType'];
                 final node = edge['node'];
-                final format = node['format'];
+                final subFormat = node['format'];
 
-                if (format == 'TV' ||
-                    format == 'MOVIE' ||
-                    format == 'OVA' ||
-                    format == 'SPECIAL' ||
-                    format == 'TV_SHORT') {
+                if (subFormat == 'TV' ||
+                    subFormat == 'MOVIE' ||
+                    subFormat == 'OVA' ||
+                    subFormat == 'SPECIAL' ||
+                    subFormat == 'TV_SHORT' ||
+                    subFormat == 'ONA') {
                   final titleRomaji = node['title']['romaji'] ?? '';
                   final titleEnglish = node['title']['english'] ?? '';
                   final displayTitle = titleRomaji.isNotEmpty ? titleRomaji : titleEnglish;
@@ -164,7 +175,6 @@ class AnimeApiService {
 
                     String subSummary = node['description']?.toString() ?? '';
                     subSummary = subSummary.replaceAll(RegExp(r'<[^>]*>'), '');
-                    // ✅ ترجمة المواسم دائماً (لا تتأثر بـ skipTranslation)
                     if (subSummary.isNotEmpty && !subHasAdult) {
                       subSummary = await _translateToArabic(subSummary);
                     } else if (subHasAdult) {
@@ -173,6 +183,7 @@ class AnimeApiService {
 
                     final subScore = node['averageScore'] as int?;
                     final String? subImageUrl = node['coverImage']?['large'] as String?;
+                    final int? subIdMal = (node['idMal'] as num?)?.toInt(); // 🆕
 
                     String? subImagePath;
                     if (downloadImages && subImageUrl != null) {
@@ -194,13 +205,13 @@ class AnimeApiService {
                         subCharacters.add({
                           'name': name,
                           'imageUrl': imgUrl,
-                          'imagePath': charImagePath
+                          'imagePath': charImagePath,
                         });
                       }
                     }
 
                     String partName = 'جزء إضافي';
-                    if (format == 'MOVIE') partName = 'فيلم';
+                    if (subFormat == 'MOVIE') partName = 'فيلم';
                     else if (relationType == 'PREQUEL') partName = 'موسم سابق';
                     else if (relationType == 'SEQUEL') partName = 'موسم لاحق';
                     else if (relationType == 'SIDE_STORY') partName = 'قصة جانبية';
@@ -216,6 +227,8 @@ class AnimeApiService {
                       'imageUrl': subImageUrl,
                       'imagePath': subImagePath,
                       'characters': subCharacters,
+                      'format': subFormat, // 🆕
+                      'idMal': subIdMal,   // 🆕
                     });
                   }
                 }
@@ -238,6 +251,8 @@ class AnimeApiService {
               'subAnimes': subAnimes,
               'characters': characters,
               'studios': studios,
+              'format': format,   // 🆕
+              'idMal': idMal,     // 🆕
             };
           }
           return emptyReturn;
@@ -247,6 +262,106 @@ class AnimeApiService {
       }
     }
     return emptyReturn;
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // 🆕 جلب المشاهد (من Jikan API)
+  // ══════════════════════════════════════════════════════════════
+  Future<Map<String, dynamic>> fetchAnimeScenes({
+    required String animeTitle,
+    int? idMal,
+    bool downloadImages = true,
+  }) async {
+    final result = <String, dynamic>{
+      'scenes': <Map<String, dynamic>>[],
+      'idMal': idMal,
+      'error': null,
+    };
+    try {
+      int? malId = idMal;
+
+      // 1. البحث عن MAL ID إذا لم يكن موجوداً
+      if (malId == null) {
+        final searchUrl = Uri.parse(
+          'https://api.jikan.moe/v4/anime?q=${Uri.encodeComponent(animeTitle)}&limit=1&sfw=true',
+        );
+        final searchResp = await http.get(searchUrl).timeout(const Duration(seconds: 15));
+        if (searchResp.statusCode != 200) {
+          result['error'] = 'فشل البحث';
+          return result;
+        }
+        final searchData = jsonDecode(searchResp.body);
+        final dataList = searchData['data'] as List?;
+        if (dataList == null || dataList.isEmpty) {
+          result['error'] = 'لم يتم العثور على الأنمي';
+          return result;
+        }
+        malId = (dataList[0]['mal_id'] as num?)?.toInt();
+        result['idMal'] = malId;
+        if (malId == null) {
+          result['error'] = 'MAL ID غير متوفر';
+          return result;
+        }
+        await Future.delayed(const Duration(milliseconds: 400));
+      }
+
+      // 2. جلب الصور
+      final picsUrl = Uri.parse('https://api.jikan.moe/v4/anime/$malId/pictures');
+      final picsResp = await http.get(picsUrl).timeout(const Duration(seconds: 20));
+      if (picsResp.statusCode != 200) {
+        result['error'] = 'فشل جلب الصور';
+        return result;
+      }
+      final picsData = jsonDecode(picsResp.body);
+      final data = picsData['data'] as List?;
+      if (data == null || data.isEmpty) {
+        result['error'] = 'لا توجد مشاهد';
+        return result;
+      }
+
+      // 3. تنزيل كل صورة
+      final scenes = <Map<String, dynamic>>[];
+      for (var pic in data) {
+        final jpg = pic['jpg'];
+        if (jpg == null) continue;
+        final largeUrl = jpg['large_image_url'] as String?;
+        final normalUrl = jpg['image_url'] as String?;
+        final imageUrl = largeUrl ?? normalUrl;
+        if (imageUrl == null || imageUrl.isEmpty) continue;
+
+        String? imagePath;
+        if (downloadImages) {
+          imagePath = await _downloadSceneImage(imageUrl);
+        }
+        scenes.add({
+          'imageUrl': imageUrl,
+          'imagePath': imagePath,
+        });
+      }
+      result['scenes'] = scenes;
+      return result;
+    } catch (e) {
+      result['error'] = 'خطأ: $e';
+      return result;
+    }
+  }
+
+  Future<String?> _downloadSceneImage(String url) async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final folder = Directory('${dir.path}/anime_scenes');
+      if (!await folder.exists()) await folder.create(recursive: true);
+      final fileName =
+          'scene_${DateTime.now().microsecondsSinceEpoch}_${Random().nextInt(9999)}.jpg';
+      final file = File('${folder.path}/$fileName');
+      final resp = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 20));
+      if (resp.statusCode != 200) return null;
+      if (resp.bodyBytes.length < 500) return null;
+      await file.writeAsBytes(resp.bodyBytes);
+      return file.path;
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<String> _translateToArabic(String text) async {
