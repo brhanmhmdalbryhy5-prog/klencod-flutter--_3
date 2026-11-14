@@ -29,14 +29,14 @@ class BatchCompressResult {
 }
 
 class VideoCompressionService {
-  static final VideoCompressionService _instance = VideoCompressionService._internal();
+  static final VideoCompressionService _instance =
+      VideoCompressionService._internal();
   factory VideoCompressionService() => _instance;
   VideoCompressionService._internal();
 
   bool _isCompressing = false;
   bool get isCompressing => _isCompressing;
 
-  /// يضغط ملف فيديو ويعيد الملف المضغوط، أو null إذا فشل الضغط
   Future<File?> compressVideo(
     File source, {
     VideoQuality quality = VideoQuality.MediumQuality,
@@ -49,10 +49,10 @@ class VideoCompressionService {
       if (!await source.exists()) return null;
 
       final originalSize = await source.length();
-      // لا نضغط الملفات الصغيرة (< 1MB)
       if (originalSize < 1024 * 1024) return source;
 
-      final subscription = VideoCompress.compressProgress$.subscribe((progress) {
+      final subscription =
+          VideoCompress.compressProgress$.subscribe((progress) {
         if (onProgress != null) onProgress(progress / 100.0);
       });
 
@@ -65,19 +65,20 @@ class VideoCompressionService {
         );
 
         if (info?.file == null) return null;
-        final compressed = info!.file!;
-        if (!await compressed.exists()) return null;
+        final compressedFile = info!.file!;
+        if (!await compressedFile.exists()) return null;
 
-        final compressedSize = await compressed.length();
-        // إذا كان المضغوط أكبر من الأصلي (نادراً)، نحتفظ بالأصلي
+        final compressedSize = await compressedFile.length();
         if (compressedSize >= originalSize) {
-          try { await compressed.delete(); } catch (_) {}
+          try {
+            await compressedFile.delete();
+          } catch (_) {}
           return source;
         }
 
-        return compressed;
+        return compressedFile;
       } finally {
-        await subscription.unsubscribe();
+        subscription.unsubscribe(); // ✅ بدون await
         await VideoCompress.deleteAllCache();
       }
     } catch (e) {
@@ -87,23 +88,23 @@ class VideoCompressionService {
     }
   }
 
-  /// يحجم كل فيديوهات المكتبة (للاستخدام الجماعي)
   Future<BatchCompressResult> compressAllVideos({
-    required List<dynamic> animes, // List<Anime>
+    required List<dynamic> animes,
     required Future<void> Function() onSave,
     required void Function(int current, int total, String title) onProgress,
   }) async {
-    int compressed = 0;
-    int skipped = 0;
-    int failed = 0;
-    int savedBytes = 0;
+    int compressedCount = 0; // ✅ اسم مختلف
+    int skippedCount = 0;
+    int failedCount = 0;
+    int savedBytesTotal = 0;
 
     final videosToCompress = animes
         .where((a) => a.videoPath != null && a.videoPath.toString().isNotEmpty)
         .toList();
 
     if (videosToCompress.isEmpty) {
-      return BatchCompressResult(compressed: 0, skipped: 0, failed: 0, savedBytes: 0);
+      return BatchCompressResult(
+          compressed: 0, skipped: 0, failed: 0, savedBytes: 0);
     }
 
     for (int i = 0; i < videosToCompress.length; i++) {
@@ -116,43 +117,47 @@ class VideoCompressionService {
 
       try {
         final originalSize = await file.length();
-        final compressed = await compressVideo(file);
+        final result = await compressVideo(file); // ✅ اسم مختلف
 
-        if (compressed == null || compressed.path == file.path) {
-          skipped++;
+        if (result == null || result.path == file.path) {
+          skippedCount++;
           continue;
         }
 
-        final newSize = await compressed.length();
+        final newSize = await result.length();
         if (newSize >= originalSize) {
-          skipped++;
+          skippedCount++;
           continue;
         }
 
-        // ننسخ المضغوط إلى مجلد التطبيق ثم نحذف الأصلي
         final directory = await getApplicationDocumentsDirectory();
         final folder = Directory('${directory.path}/anime_videos');
         if (!await folder.exists()) await folder.create(recursive: true);
-        final newPath = '${folder.path}/${DateTime.now().microsecondsSinceEpoch}.mp4';
-        await compressed.copy(newPath);
+        final newPath =
+            '${folder.path}/${DateTime.now().microsecondsSinceEpoch}.mp4';
+        await result.copy(newPath);
 
-        try { await file.delete(); } catch (_) {}
-        try { await compressed.delete(); } catch (_) {}
+        try {
+          await file.delete();
+        } catch (_) {}
+        try {
+          await result.delete();
+        } catch (_) {}
 
         anime.videoPath = newPath;
         await onSave();
-        savedBytes += (originalSize - newSize);
-        compressed++;
+        savedBytesTotal += (originalSize - newSize);
+        compressedCount++; // ✅ الآن يشير للـ int
       } catch (e) {
-        failed++;
+        failedCount++;
       }
     }
 
     return BatchCompressResult(
-      compressed: compressed,
-      skipped: skipped,
-      failed: failed,
-      savedBytes: savedBytes,
+      compressed: compressedCount,
+      skipped: skippedCount,
+      failed: failedCount,
+      savedBytes: savedBytesTotal,
     );
   }
 
