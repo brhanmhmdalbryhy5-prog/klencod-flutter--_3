@@ -15,7 +15,10 @@ class BackupService {
 
   Future<String> createBackup() async {
     final tempDir = await getTemporaryDirectory();
-    final tempZipPath = '${tempDir.path}/backup_${DateTime.now().millisecondsSinceEpoch}.zip';
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    final tempZipPath = '${tempDir.path}/backup_$ts.zip';
+    File? tempMetaFile;
+    File? tempAnimeFile;
 
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -26,7 +29,6 @@ class BackupService {
           .map((item) => Anime.fromJson(Map<String, dynamic>.from(item)))
           .toList();
 
-      // ✅ ZipFileEncoder يكتب مباشرة في ملف (لا RAM)
       final encoder = ziplib.ZipFileEncoder();
       encoder.create(tempZipPath);
 
@@ -47,7 +49,6 @@ class BackupService {
         final anime = animes[i];
         final item = anime.toJson();
 
-        // 1. الغلاف
         final path = anime.imagePath;
         if (path != null && path.isNotEmpty) {
           final file = File(path);
@@ -62,7 +63,6 @@ class BackupService {
           }
         }
 
-        // 2. الفيديو
         final videoPath = anime.videoPath;
         if (videoPath != null && videoPath.isNotEmpty) {
           final file = File(videoPath);
@@ -80,7 +80,6 @@ class BackupService {
         animeJson.add(item);
       }
 
-      // 3. صور الشخصيات
       for (final key in prefs.getKeys()) {
         if (!key.startsWith(characterPrefix)) continue;
         final path = prefs.getString(key);
@@ -93,7 +92,6 @@ class BackupService {
         characterAssets[key] = asset;
       }
 
-      // 4. صور الذكريات
       final appDirectory = await getApplicationDocumentsDirectory();
       final memoriesDirectory = Directory('${appDirectory.path}/anime_memory_photos');
       if (await memoriesDirectory.exists()) {
@@ -114,47 +112,44 @@ class BackupService {
         'videoAssets': videoAssets,
       };
 
-      final metadataBytes = utf8.encode(jsonEncode(metadata));
-      final animeBytes = utf8.encode(jsonEncode(animeJson));
+      // ✅ كتابة JSON إلى ملفات مؤقتة ثم إضافتها (بدل OutputMemoryStream غير المتوفر)
+      tempMetaFile = File('${tempDir.path}/metadata_$ts.json');
+      await tempMetaFile.writeAsBytes(utf8.encode(jsonEncode(metadata)));
+      encoder.addFile(tempMetaFile, 'metadata.json');
 
-      encoder.addArchiveFile(ziplib.ArchiveFile('metadata.json', metadataBytes.length, metadataBytes));
-      encoder.addArchiveFile(ziplib.ArchiveFile('animes.json', animeBytes.length, animeBytes));
+      tempAnimeFile = File('${tempDir.path}/animes_$ts.json');
+      await tempAnimeFile.writeAsBytes(
+        utf8.encode(jsonEncode(animeJson)),
+      );
+      encoder.addFile(tempAnimeFile, 'animes.json');
 
       await encoder.close();
 
-      // اطلب من المستخدم مكان الحفظ
+      // تنظيف الملفات المؤقتة
+      try { await tempMetaFile.delete(); } catch (_) {}
+      try { await tempAnimeFile.delete(); } catch (_) {}
+      tempMetaFile = null;
+      tempAnimeFile = null;
+
+      // ✅ قراءة ZIP وتمريره لـ saveFile (يتعامل مع content:// تلقائياً)
+      final zipBytes = await File(tempZipPath).readAsBytes();
+
       final output = await FilePicker.platform.saveFile(
         dialogTitle: 'حفظ نسخة ذاكرة الأوتاكو',
-        fileName: 'anime_memory_backup_${DateTime.now().millisecondsSinceEpoch}.zip',
+        fileName: 'anime_memory_backup_$ts.zip',
         type: FileType.custom,
         allowedExtensions: ['zip'],
+        bytes: zipBytes,
       );
-
-      if (output == null) {
-        try { await File(tempZipPath).delete(); } catch (_) {}
-        return 'تم إلغاء حفظ النسخة الاحتياطية.';
-      }
-
-      // ✅ انسخ الملف المؤقت إلى وجهة المستخدم (بدون تحميله في RAM)
-      String finalPath = output;
-      try {
-        if (output.startsWith('content://') || output.startsWith('file://')) {
-          finalPath = Uri.parse(output).toFilePath();
-        }
-      } catch (_) {}
-
-      try {
-        await File(tempZipPath).copy(finalPath);
-      } catch (e) {
-        try { await File(tempZipPath).delete(); } catch (_) {}
-        return 'تعذر حفظ ملف ZIP: $e';
-      }
 
       try { await File(tempZipPath).delete(); } catch (_) {}
 
+      if (output == null) return 'تم إلغاء حفظ النسخة الاحتياطية.';
       return 'تمت عملية إنشاء النسخة (مع الفيديوهات). تحقق من مكان الحفظ.';
     } catch (e) {
       try { await File(tempZipPath).delete(); } catch (_) {}
+      try { if (tempMetaFile != null) await tempMetaFile.delete(); } catch (_) {}
+      try { if (tempAnimeFile != null) await tempAnimeFile.delete(); } catch (_) {}
       return 'فشل إنشاء النسخة الاحتياطية: $e';
     }
   }
@@ -179,12 +174,12 @@ class BackupService {
       final sourceFile = File(sourcePath);
       if (!await sourceFile.exists()) return 'الملف المختار غير موجود.';
 
-      // ✅ الإصلاح الأساسي: قراءة ZIP بشكل stream (لا RAM)
+      // ✅ decodeBuffer مع InputFileStream (بدل decodeStream غير المتوفر في 3.6.1)
       final inputStream = ziplib.InputFileStream(sourcePath);
-      final archive = ziplib.ZipDecoder().decodeStream(inputStream);
+      final archive = ziplib.ZipDecoder().decodeBuffer(inputStream);
+      inputStream.close();
 
       final appDirectory = await getApplicationDocumentsDirectory();
-      // ✅ مجلدات دائمة (وليست مؤقتة)
       final videosDirectory = Directory('${appDirectory.path}/anime_videos');
       final coversDirectory = Directory('${appDirectory.path}/anime_images');
       final charactersDirectory = Directory('${appDirectory.path}/anime_characters');
@@ -204,19 +199,23 @@ class BackupService {
         if (!file.isFile) continue;
         final name = file.name.replaceAll('\\', '/');
 
-        if (name == 'metadata.json') {
-          final outputStream = ziplib.OutputMemoryStream();
-          file.writeContent(outputStream);
-          metadataDecoded = jsonDecode(utf8.decode(outputStream.getBytes()));
-          outputStream.close();
-          continue;
-        }
+        if (name == 'metadata.json' || name == 'animes.json') {
+          // ✅ قراءة مباشرة من file.content (بدل OutputMemoryStream)
+          final content = file.content;
+          Uint8List bytes;
+          if (content is Uint8List) {
+            bytes = content;
+          } else if (content is List<int>) {
+            bytes = Uint8List.fromList(content);
+          } else {
+            throw FormatException('نوع محتوى غير مدعوم: ${content.runtimeType}');
+          }
 
-        if (name == 'animes.json') {
-          final outputStream = ziplib.OutputMemoryStream();
-          file.writeContent(outputStream);
-          animeDecoded = jsonDecode(utf8.decode(outputStream.getBytes()));
-          outputStream.close();
+          if (name == 'metadata.json') {
+            metadataDecoded = jsonDecode(utf8.decode(bytes));
+          } else {
+            animeDecoded = jsonDecode(utf8.decode(bytes));
+          }
           continue;
         }
 
@@ -234,16 +233,13 @@ class BackupService {
         }
 
         if (targetPath != null) {
-          // ✅ كتابة مباشرة على القرص (لا RAM)
           final outputStream = ziplib.OutputFileStream(targetPath);
-          file.writeContent(outputStream);
+          file.writeContent(outputStream, freeMemory: true);
           outputStream.close();
           restoredPaths[name] = targetPath;
           createdFiles.add(File(targetPath));
         }
       }
-
-      inputStream.close();
 
       if (metadataDecoded == null || animeDecoded == null) {
         await _cleanupFiles(createdFiles);
