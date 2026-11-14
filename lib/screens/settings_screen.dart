@@ -275,9 +275,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required Future<Map<String, dynamic>> Function() action,
   }) async {
     if (bulkService.isRunning) return;
-    await overlayService.showOverlay(title: title);
 
-    // استخدام addListener بدلاً من listen
+    // محاولة فتح الطبقة العائمة
+    final overlayOpened = await overlayService.showOverlay(title: title);
+
+    // إذا رفض المستخدم الصلاحية، نظهر له تنبيهاً بسيطاً
+    if (!overlayOpened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('ℹ️ لتظهر النافذة العائمة، يرجى السماح للتطبيق "بالظهور فوق التطبيقات الأخرى" من إعدادات الهاتف.'),
+          duration: Duration(seconds: 5),
+        ),
+      );
+    }
+
     void progressListener() {
       final progress = bulkService.progress.value;
       if (progress != null) {
@@ -293,11 +304,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     try {
       final result = await action();
-      await overlayService.closeOverlay();
+      if (overlayOpened) await overlayService.closeOverlay();
       if (mounted) await _showDownloadResult(result);
     } finally {
       bulkService.progress.removeListener(progressListener);
-      await overlayService.closeOverlay();
+      if (overlayOpened) await overlayService.closeOverlay();
     }
   }
 
@@ -508,14 +519,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     setState(() => backupBusy = true);
-    await overlayService.showOverlay(title: restore ? 'استعادة شاملة' : 'نسخة شاملة');
+    
+    final overlayOpened = await overlayService.showOverlay(title: restore ? 'استعادة شاملة' : 'نسخة شاملة');
+    
     String result;
     try {
       result = restore ? await backupService.restoreBackup() : await backupService.createBackup();
     } catch (e) {
       result = 'حدث خطأ: $e';
     }
-    await overlayService.closeOverlay();
+    
+    if (overlayOpened) await overlayService.closeOverlay();
     if (!mounted) return;
     setState(() => backupBusy = false);
     await showDialog<void>(
@@ -551,14 +565,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (ok != true || !mounted) return;
     }
     setState(() => backupBusy = true);
-    await overlayService.showOverlay(title: restore ? 'استعادة خفيفة' : 'نسخة خفيفة');
+    
+    final overlayOpened = await overlayService.showOverlay(title: restore ? 'استعادة خفيفة' : 'نسخة خفيفة');
+    
     String result;
     try {
       result = restore ? await backupService.restoreLiteBackup() : await backupService.createLiteBackup();
     } catch (e) {
       result = 'حدث خطأ: $e';
     }
-    await overlayService.closeOverlay();
+    
+    if (overlayOpened) await overlayService.closeOverlay();
     if (!mounted) return;
     setState(() => backupBusy = false);
     await showDialog<void>(
