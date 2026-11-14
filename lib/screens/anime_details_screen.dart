@@ -64,10 +64,10 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
   void initState() {
     super.initState();
 
-    // 🆕 دوران 360° كامل ومستمر (8 ثوانٍ للفة كاملة)
+    // 🆕 دوران 360° كامل ومستمر
     _rotationController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 8),
+      duration: const Duration(seconds: 8), // 8 ثوانٍ للفة كاملة
     )..repeat();
 
     _rotationAnimation = Tween<double>(begin: 0, end: 2 * pi).animate(
@@ -261,7 +261,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
     final studiosController = TextEditingController(text: currentAnime.studios ?? '');
     double rating = currentAnime.rating;
     String? newImagePath = currentAnime.imagePath;
-    String? newBackImagePath = currentAnime.backImagePath;
+    String? newBackImagePath = currentAnime.backImagePath; // 🆕
 
     final result = await showDialog<bool>(
       context: context,
@@ -275,6 +275,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // الوجه الأمامي
                     GestureDetector(
                       onTap: () async {
                         final picked = await _picker.pickImage(
@@ -316,6 +317,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                           icon: const Icon(Icons.delete_outline, size: 16),
                           label: const Text('إزالة الصورة الأمامية')),
                     const SizedBox(height: 10),
+                    // 🆕 الوجه الخلفي
                     GestureDetector(
                       onTap: () async {
                         final picked = await _picker.pickImage(
@@ -428,7 +430,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
           ..watchedEpisodes = int.tryParse(watchedController.text) ?? 0
           ..rating = rating
           ..imagePath = newImagePath
-          ..backImagePath = newBackImagePath;
+          ..backImagePath = newBackImagePath; // 🆕
         await storage.saveAnimes(allAnimes);
         await _loadData();
       }
@@ -1435,7 +1437,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
   }
 
   // ══════════════════════════════════════════════════════════════
-  // 🆕 بطاقة الوجه (بدون ظل خارجي، الظل على الحاوية الأم)
+  // 🆕 بطاقة الوجه مع سُمك الكتاب (Spine)
   // ══════════════════════════════════════════════════════════════
   Widget _coverCard(String? path, {required bool isFront}) {
     final primaryColor = primaryColorNotifier.value;
@@ -1443,107 +1445,107 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
     return Container(
       width: 240,
       height: 360,
+      // نضيف هامش على اليمين لنترك مساحة لسمك الكتاب (الحواف)
+      margin: const EdgeInsets.only(right: 12),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          decoration: BoxDecoration(
-            border: Border.all(
-              color: isFront ? primaryColor.withOpacity(0.8) : Colors.purpleAccent.withOpacity(0.8),
-              width: 2.5
-            ),
-            color: Colors.black,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.8),
+            blurRadius: 20,
+            spreadRadius: 2,
+            offset: const Offset(5, 15),
           ),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              path != null && path.isNotEmpty && File(path).existsSync()
-                  ? Image.file(File(path), fit: BoxFit.cover)
-                  : Container(
-                      color: panel,
-                      child: const Icon(Icons.movie_creation_outlined,
-                          size: 65, color: Colors.white30),
-                    ),
-              Positioned.fill(
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        Colors.white.withOpacity(0.2),
-                        Colors.transparent,
-                        Colors.black.withOpacity(0.4),
-                      ],
-                      stops: const [0.0, 0.4, 1.0],
+        ],
+      ),
+      child: Stack(
+        children: [
+          // 🆕 1. سُمك الكتاب (الحافة/الصفحات)
+          Positioned(
+            right: -10, // يبرز للخارج كسُمك كتاب
+            top: 3,
+            bottom: 3,
+            child: Container(
+              width: 14,
+              decoration: BoxDecoration(
+                color: const Color(0xFFE0E0E0), // لون أوراق الكتاب
+                borderRadius: const BorderRadius.only(
+                  topRight: Radius.circular(4),
+                  bottomRight: Radius.circular(4),
+                ),
+                border: Border.all(color: Colors.black45, width: 1),
+                // خطوط تفصيلية لتبدو كأوراق متراصة
+                gradient: const LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [
+                    Color(0xFFE0E0E0),
+                    Colors.white,
+                    Color(0xFFBDBDBD),
+                  ],
+                  stops: [0.0, 0.5, 1.0],
+                ),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: List.generate(
+                  20,
+                  (index) => Container(height: 1, color: Colors.black12),
+                ),
+              ),
+            ),
+          ),
+
+          // 2. الغلاف الأمامي/الخلفي
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: isFront ? primaryColor.withOpacity(0.8) : Colors.purpleAccent.withOpacity(0.8), 
+                  width: 2.5
+                ),
+                color: Colors.black,
+              ),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  path != null && path.isNotEmpty && File(path).existsSync()
+                      ? Image.file(File(path), fit: BoxFit.cover)
+                      : Container(
+                          color: panel,
+                          child: const Icon(Icons.movie_creation_outlined,
+                              size: 65, color: Colors.white30),
+                        ),
+                  // لمعة زجاجية تعطي إحساس بانعكاس الضوء
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Colors.white.withOpacity(0.25),
+                            Colors.transparent,
+                            Colors.black.withOpacity(0.5),
+                          ],
+                          stops: const [0.0, 0.4, 1.0],
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ══════════════════════════════════════════════════════════════
-  // 🆕 بناء الكتاب السميك (3D Extrusion) مع الدوران الكامل
-  // ══════════════════════════════════════════════════════════════
-  Widget _buildThickBook(double angle) {
-    final isFront = cos(angle) >= 0;
-    final displayImagePath = isFront
-        ? currentAnime.imagePath
-        : (currentAnime.backImagePath ?? currentAnime.imagePath);
-
-    // أبعاد الكتاب
-    final double width = 240;
-    final double height = 360;
-    final double thickness = 20.0; // سمك الكتاب
-    final int pageLayers = 5;
-
-    return Transform(
-      alignment: Alignment.center,
-      transform: Matrix4.identity()
-        ..setEntry(3, 2, 0.0015) // Perspective (إحساس العمق)
-        ..rotateY(angle), // الدوران
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          // 1. الغلاف الخلفي (في أقصى العمق)
-          Transform(
-            transform: Matrix4.translationValues(0, 0, -thickness / 2),
-            child: Transform(
-              alignment: Alignment.center,
-              transform: Matrix4.identity()..scale(-1.0, 1.0, 1.0),
-              child: _coverCard(displayImagePath, isFront: false),
-            ),
-          ),
-
-          // 2. أوراق الكتاب (الصفحات) - تعطي تأثير السمك
-          for (int i = 0; i < pageLayers; i++)
-            Transform(
-              transform: Matrix4.translationValues(0, 0, -thickness / 2 + (i * thickness / (pageLayers - 1))),
-              child: Container(
-                width: width - 4, // أصغر قليلاً من الغلاف
-                height: height - 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey[300], // لون الأوراق
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.grey[400]!),
-                ),
+                ],
               ),
             ),
-
-          // 3. الغلاف الأمامي (في المقدمة Z = 0)
-          _coverCard(displayImagePath, isFront: true),
+          ),
         ],
       ),
     );
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // 🆕 دوران 360° كامل مع ظل أرضي ووجهين
+  // ══════════════════════════════════════════════════════════════
   Widget _coverWith3D() {
     return GestureDetector(
       onTap: _showImageZoom,
@@ -1552,28 +1554,39 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
         builder: (context, child) {
           final angle = _rotationAnimation.value;
           
-          // الظل الأرضي
-          final shadowScale = cos(angle).abs() * 0.6 + 0.4;
+          // تحديد ما إذا كنا نرى الوجه الأمامي أو الخلفي بناءً على جيب تمام الزاوية
+          final isFront = cos(angle) >= 0;
+
+          // إذا كنا في الوجه الخلفي، نستخدم الصورة الخلفية، وإذا لم توجد نستخدم الأمامية
+          final displayImagePath = isFront
+              ? currentAnime.imagePath
+              : (currentAnime.backImagePath ?? currentAnime.imagePath);
+
+          // إخفاء البطاقة تماماً عند الحافة (90 و 270 درجة) لجعل الانتقال أكثر واقعية
+          final opacity = cos(angle).abs().clamp(0.1, 1.0);
 
           return Container(
-            height: 450, // مساحة كافية للظل والدوران
-            margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            height: 420,
+            margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 15),
             child: Stack(
               alignment: Alignment.center,
               children: [
-                // 1. الظل الأرضي البيضاوي
+                // 1. الظل الأرضي (Ellipse Shadow)
                 Positioned(
-                  bottom: 30,
+                  bottom: 20,
                   child: Transform(
-                    transform: Matrix4.identity()..scale(shadowScale, 1.0),
+                    // نحرك الظل عكس اتجاه البطاقة ونضيق حجمه عند الحواف
+                    transform: Matrix4.identity()
+                      ..translate(angle * 20, 0.0)
+                      ..scale(cos(angle).abs() * 0.6 + 0.4, 1.0),
                     child: Container(
-                      width: 200,
+                      width: 220,
                       height: 25,
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(100),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.6),
+                            color: Colors.black.withOpacity(0.7),
                             blurRadius: 25,
                             spreadRadius: 5,
                           ),
@@ -1583,15 +1596,49 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                     ),
                   ),
                 ),
-
-                // 2. الكتاب السميك ثلاثي الأبعاد
-                _buildThickBook(angle),
+                
+                // 2. البطاقة الدوارة
+                Opacity(
+                  opacity: opacity,
+                  child: Transform(
+                    alignment: Alignment.center,
+                    transform: Matrix4.identity()
+                      ..setEntry(3, 2, 0.0015) // منظور 3D
+                      ..rotateY(angle), // الدوران الكامل 360
+                    child: isFront
+                        ? _coverCard(displayImagePath, isFront: true)
+                        : Transform(
+                            // عكس الصورة الخلفية أفقياً حتى تظهر بشكل صحيح وليس كصورة معكوسة
+                            alignment: Alignment.center,
+                            transform: Matrix4.identity()..scale(-1.0, 1.0, 1.0),
+                            child: _coverCard(displayImagePath, isFront: false),
+                          ),
+                  ),
+                ),
               ],
             ),
           );
         },
       ),
     );
+  }
+
+  Widget _cover() {
+    final path = currentAnime.imagePath;
+    if (path != null && path.isNotEmpty && File(path).existsSync()) {
+      return Container(
+        color: Colors.black26,
+        constraints: const BoxConstraints(maxHeight: 350),
+        child: Hero(
+            tag: 'anime_image_${currentAnime.id}',
+            child: Image.file(File(path), width: double.infinity, fit: BoxFit.contain)),
+      );
+    }
+    return Container(
+        height: 180,
+        width: double.infinity,
+        color: panel,
+        child: const Icon(Icons.movie_creation_outlined, size: 65, color: Colors.white30));
   }
 
   Widget _buildSeasonGridCard(Anime sub) {
