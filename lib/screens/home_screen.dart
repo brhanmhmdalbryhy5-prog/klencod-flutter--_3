@@ -12,10 +12,10 @@ import '../main.dart';
 import '../models/anime.dart';
 import '../services/storage_service.dart';
 import '../services/anime_api_service.dart';
+import '../widgets/manga_character.dart';
+import 'anime_details_screen.dart';
 import 'otaku_oracle_screen.dart';
 import 'random_picker_screen.dart';
-import 'statistics_screen.dart';
-import 'monthly_wrapped_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -29,12 +29,27 @@ class _HomeScreenState extends State<HomeScreen> {
   final AnimeApiService apiService = AnimeApiService();
   final ImagePicker imagePicker = ImagePicker();
 
+  // 🆕 مفتاح التحكم بالشخصية
+  final GlobalKey<MangaCharacterState> _charKey = GlobalKey<MangaCharacterState>();
+
   List<Anime> animes = [];
+  List<Anime> _allAnimes = [];
   bool loading = true;
   bool isAutoFetching = false;
 
-  final List<Color> colors = const [Color(0xFF741C2B), Color(0xFF247BA0), Color(0xFF7651A8), Color(0xFFB87928), Color(0xFF27866F), Color(0xFFB34E68)];
-  final List<String> allGenres = const ['أكشن', 'مغامرة', 'كوميدي', 'دراما', 'فانتازيا', 'رعب', 'إيتشي', 'ميكا', 'غموض', 'رومانسي', 'خيال علمي', 'شريحة من الحياة', 'رياضة', 'إثارة', 'حريم', 'مدرسي', 'شونين', 'سينين', 'جوسي', 'شوجو', 'قوى خارقة', 'تاريخي', 'موسيقي', 'نفسي', 'فامباير', 'سحر', 'حربي', 'فضاء', 'بوليسي', 'عائلي', 'ألعاب', 'فنون قتالية', 'ساموراي', 'شياطين', 'إيسيكاي'];
+  final List<Color> colors = const [
+    Color(0xFF741C2B), Color(0xFF247BA0), Color(0xFF7651A8),
+    Color(0xFFB87928), Color(0xFF27866F), Color(0xFFB34E68)
+  ];
+
+  final List<String> allGenres = const [
+    'أكشن', 'مغامرة', 'كوميدي', 'دراما', 'فانتازيا', 'رعب',
+    'إيتشي', 'ميكا', 'غموض', 'رومانسي', 'خيال علمي', 'شريحة من الحياة',
+    'رياضة', 'إثارة', 'حريم', 'مدرسي', 'شونين', 'سينين',
+    'جوسي', 'شوجو', 'قوى خارقة', 'تاريخي', 'موسيقي', 'نفسي',
+    'فامباير', 'سحر', 'حربي', 'فضاء', 'بوليسي', 'عائلي',
+    'ألعاب', 'فنون قتالية', 'ساموراي', 'شياطين', 'إيسيكاي'
+  ];
 
   @override
   void initState() {
@@ -44,7 +59,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _initialLoad() async {
     await loadData();
-
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getBool('auto_fetch_enabled') ?? false) {
       _autoFetchMissingData();
@@ -54,12 +68,25 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> loadData() async {
     final result = await storage.loadAnimes();
     if (!mounted) return;
-    setState(() { animes = result.where((a) => a.parentId == null).toList(); loading = false; });
+    setState(() {
+      _allAnimes = result;
+      animes = result.where((a) => a.parentId == null).toList();
+      loading = false;
+    });
+    // إخبار الشخصية بعدد الأنميات إذا كانت المكتبة فارغة
+    if (result.isEmpty && _charKey.currentState != null) {
+      _charKey.currentState!.showMessage('empty_library');
+    }
   }
 
   Future<void> _autoFetchMissingData() async {
     if (isAutoFetching) return;
-    final missingData = animes.where((a) => a.genre.trim().isEmpty || a.summary.trim().isEmpty || a.episodes == 0 || a.globalRating == null || a.releaseYear == null).toList();
+    final missingData = animes.where((a) =>
+        a.genre.trim().isEmpty ||
+        a.summary.trim().isEmpty ||
+        a.episodes == 0 ||
+        a.globalRating == null ||
+        a.releaseYear == null).toList();
     if (missingData.isEmpty) return;
 
     setState(() => isAutoFetching = true);
@@ -67,15 +94,33 @@ class _HomeScreenState extends State<HomeScreen> {
 
     for (var anime in missingData) {
       final data = await apiService.fetchAnimeData(anime.title);
-      if (data['genres'].isNotEmpty && anime.genre.trim().isEmpty) { anime.genre = data['genres'].join('، '); hasChanges = true; }
-      if (data['summary'].isNotEmpty && anime.summary.trim().isEmpty) { anime.summary = data['summary']; hasChanges = true; }
-      if (data['episodes'] > 0 && anime.episodes == 0) { anime.episodes = data['episodes']; hasChanges = true; }
-      if (data['globalRating'] != null && anime.globalRating == null) { anime.globalRating = data['globalRating']; hasChanges = true; }
-      if (data['releaseYear'] != null && anime.releaseYear == null) { anime.releaseYear = data['releaseYear']; hasChanges = true; }
+      if (data['genres'].isNotEmpty && anime.genre.trim().isEmpty) {
+        anime.genre = data['genres'].join('، ');
+        hasChanges = true;
+      }
+      if (data['summary'].isNotEmpty && anime.summary.trim().isEmpty) {
+        anime.summary = data['summary'];
+        hasChanges = true;
+      }
+      if (data['episodes'] > 0 && anime.episodes == 0) {
+        anime.episodes = data['episodes'];
+        hasChanges = true;
+      }
+      if (data['globalRating'] != null && anime.globalRating == null) {
+        anime.globalRating = data['globalRating'];
+        hasChanges = true;
+      }
+      if (data['releaseYear'] != null && anime.releaseYear == null) {
+        anime.releaseYear = data['releaseYear'];
+        hasChanges = true;
+      }
       await Future.delayed(const Duration(milliseconds: 800));
     }
 
-    if (hasChanges) { await storage.saveAnimes(animes); if (mounted) setState(() {}); }
+    if (hasChanges) {
+      await storage.saveAnimes(_allAnimes);
+      if (mounted) setState(() {});
+    }
     if (mounted) setState(() => isAutoFetching = false);
   }
 
@@ -89,12 +134,213 @@ class _HomeScreenState extends State<HomeScreen> {
     return rated.fold<double>(0, (sum, a) => sum + a.rating) / rated.length;
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // 🆕 استمر في المشاهدة
+  // ══════════════════════════════════════════════════════════════
+  List<Anime> get _continueWatchingList {
+    final inProgress = _allAnimes.where((a) {
+      return a.watchedEpisodes > 0 &&
+          (a.episodes == 0 || a.watchedEpisodes < a.episodes);
+    }).toList();
+
+    inProgress.sort((a, b) {
+      final dateA = DateTime.tryParse(a.date) ?? DateTime(2000);
+      final dateB = DateTime.tryParse(b.date) ?? DateTime(2000);
+      return dateB.compareTo(dateA);
+    });
+
+    return inProgress.take(5).toList();
+  }
+
+  Future<void> _incrementWatched(Anime anime) async {
+    if (anime.episodes > 0 && anime.watchedEpisodes >= anime.episodes) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('✅ هذا الأنمي مكتمل بالفعل'),
+              duration: Duration(seconds: 1)),
+        );
+      }
+      return;
+    }
+
+    HapticFeedback.lightImpact();
+    final all = await storage.loadAnimes();
+    final idx = all.indexWhere((a) => a.id == anime.id);
+    if (idx == -1) return;
+
+    all[idx].watchedEpisodes++;
+    final isNowComplete = all[idx].episodes > 0 &&
+        all[idx].watchedEpisodes >= all[idx].episodes;
+    if (isNowComplete) all[idx].status = 'مكتمل';
+    await storage.saveAnimes(all);
+    await loadData();
+
+    // 🆕 إخبار الشخصية
+    _charKey.currentState?.showMessage(
+        isNowComplete ? 'complete' : 'progress_congrats');
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(isNowComplete
+              ? '🎉 اكتمل ${anime.title}!'
+              : '➕ ${anime.title}: ${all[idx].watchedEpisodes}/${all[idx].episodes}'),
+          duration: const Duration(milliseconds: 1500),
+          backgroundColor: isNowComplete ? Colors.green : Colors.blue,
+        ),
+      );
+    }
+  }
+
+  Widget _buildContinueWatching(Color primaryColor) {
+    final list = _continueWatchingList;
+    if (list.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 20),
+        Row(
+          children: [
+            Icon(Icons.play_circle, color: primaryColor, size: 22),
+            const SizedBox(width: 8),
+            const Text('استمر في المشاهدة',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            const Spacer(),
+            Text('${list.length}',
+                style: const TextStyle(color: Colors.white54, fontSize: 12)),
+          ],
+        ),
+        const SizedBox(height: 12),
+        ...list.map((anime) => _buildContinueCard(anime, primaryColor)),
+        const SizedBox(height: 8),
+      ],
+    );
+  }
+
+  Widget _buildContinueCard(Anime anime, Color primaryColor) {
+    final progress = anime.episodes > 0
+        ? (anime.watchedEpisodes / anime.episodes).clamp(0.0, 1.0)
+        : 0.0;
+
+    final hasImage = anime.imagePath != null &&
+        File(anime.imagePath!).existsSync();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1B1F28),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: primaryColor.withOpacity(0.4), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+              color: primaryColor.withOpacity(0.2),
+              blurRadius: 15,
+              spreadRadius: 2)
+        ],
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (_) => AnimeDetailsScreen(anime: anime)),
+          );
+          await loadData();
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: hasImage
+                    ? Image.file(File(anime.imagePath!),
+                        width: 60, height: 80, fit: BoxFit.cover)
+                    : Container(
+                        width: 60,
+                        height: 80,
+                        color: primaryColor.withOpacity(0.2),
+                        child:
+                            Icon(Icons.movie, color: primaryColor, size: 28),
+                      ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(anime.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 14)),
+                    const SizedBox(height: 4),
+                    Text(
+                      'شاهدت ${anime.watchedEpisodes}/${anime.episodes == 0 ? "?" : anime.episodes}',
+                      style: const TextStyle(
+                          color: Colors.white54, fontSize: 11),
+                    ),
+                    const SizedBox(height: 6),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        minHeight: 6,
+                        backgroundColor: Colors.white12,
+                        valueColor:
+                            AlwaysStoppedAnimation<Color>(primaryColor),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Material(
+                color: primaryColor,
+                borderRadius: BorderRadius.circular(10),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: () => _incrementWatched(anime),
+                  child: const Padding(
+                    padding: EdgeInsets.all(10),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.add, color: Colors.white, size: 22),
+                        Text('+1',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // دوال الإضافة
+  // ══════════════════════════════════════════════════════════════
   Future<String> _saveImageLocally(String sourcePath) async {
     final directory = await getApplicationDocumentsDirectory();
     final imagesDirectory = Directory('${directory.path}/anime_images');
-    if (!await imagesDirectory.exists()) await imagesDirectory.create(recursive: true);
-    final extension = sourcePath.contains('.') ? sourcePath.substring(sourcePath.lastIndexOf('.')) : '.jpg';
-    final destinationPath = '${imagesDirectory.path}/${DateTime.now().microsecondsSinceEpoch}$extension';
+    if (!await imagesDirectory.exists()) {
+      await imagesDirectory.create(recursive: true);
+    }
+    final extension = sourcePath.contains('.')
+        ? sourcePath.substring(sourcePath.lastIndexOf('.'))
+        : '.jpg';
+    final destinationPath =
+        '${imagesDirectory.path}/${DateTime.now().microsecondsSinceEpoch}$extension';
     return (await File(sourcePath).copy(destinationPath)).path;
   }
 
@@ -120,14 +366,30 @@ class _HomeScreenState extends State<HomeScreen> {
                       value: selected.contains(genre),
                       activeColor: primaryColorNotifier.value,
                       checkColor: Colors.white,
-                      onChanged: (value) { setDialogState(() { if (value == true) selected.add(genre); else selected.remove(genre); }); },
+                      onChanged: (value) {
+                        setDialogState(() {
+                          if (value == true) {
+                            selected.add(genre);
+                          } else {
+                            selected.remove(genre);
+                          }
+                        });
+                      },
                     );
                   },
                 ),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إلغاء')),
-                FilledButton(style: FilledButton.styleFrom(backgroundColor: primaryColorNotifier.value), onPressed: () => Navigator.pop(dialogContext, selected.toList()), child: const Text('تأكيد')),
+                TextButton(
+                    onPressed: () => Navigator.pop(dialogContext),
+                    child: const Text('إلغاء')),
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                      backgroundColor: primaryColorNotifier.value),
+                  onPressed: () =>
+                      Navigator.pop(dialogContext, selected.toList()),
+                  child: const Text('تأكيد'),
+                ),
               ],
             );
           },
@@ -157,7 +419,8 @@ class _HomeScreenState extends State<HomeScreen> {
           builder: (context, setDialogState) {
             return AlertDialog(
               backgroundColor: const Color(0xFF1B1F28),
-              title: const Text('إضافة أنمي جديد', style: TextStyle(fontWeight: FontWeight.bold)),
+              title: const Text('إضافة أنمي جديد',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
               content: SizedBox(
                 width: 420,
                 child: SingleChildScrollView(
@@ -167,77 +430,204 @@ class _HomeScreenState extends State<HomeScreen> {
                       GestureDetector(
                         onTap: () async {
                           try {
-                            final image = await imagePicker.pickImage(source: ImageSource.gallery, imageQuality: 85);
-                            if (image != null) setDialogState(() => selectedImage = image);
-                          } catch (_) { if (!dialogContext.mounted) return; ScaffoldMessenger.of(dialogContext).showSnackBar(const SnackBar(content: Text('تعذر اختيار الصورة.'))); }
+                            final image = await imagePicker.pickImage(
+                                source: ImageSource.gallery, imageQuality: 85);
+                            if (image != null) {
+                              setDialogState(() => selectedImage = image);
+                            }
+                          } catch (_) {
+                            if (!dialogContext.mounted) return;
+                            ScaffoldMessenger.of(dialogContext).showSnackBar(
+                                const SnackBar(
+                                    content: Text('تعذر اختيار الصورة.')));
+                          }
                         },
                         child: Container(
-                          width: double.infinity, height: 155,
-                          decoration: BoxDecoration(color: const Color(0xFF111318), borderRadius: BorderRadius.circular(16), border: Border.all(color: primaryColorNotifier.value)),
+                          width: double.infinity,
+                          height: 155,
+                          decoration: BoxDecoration(
+                              color: const Color(0xFF111318),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                  color: primaryColorNotifier.value)),
                           clipBehavior: Clip.antiAlias,
                           child: selectedImage == null
-                              ? Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.add_photo_alternate_outlined, size: 42, color: primaryColorNotifier.value), const SizedBox(height: 9), const Text('اختر صورة للأنمي (اختياري)'), const SizedBox(height: 4), const Text('اضغط هنا لفتح المعرض', style: TextStyle(color: Colors.white54, fontSize: 12))])
-                              : Stack(fit: StackFit.expand, children: [Image.file(File(selectedImage!.path), fit: BoxFit.cover), Positioned(left: 8, top: 8, child: IconButton(onPressed: () => setDialogState(() => selectedImage = null), style: IconButton.styleFrom(backgroundColor: Colors.black87, foregroundColor: Colors.white), icon: const Icon(Icons.close)))]),
+                              ? Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                      Icon(
+                                          Icons.add_photo_alternate_outlined,
+                                          size: 42,
+                                          color:
+                                              primaryColorNotifier.value),
+                                      const SizedBox(height: 9),
+                                      const Text(
+                                          'اختر صورة للأنمي (اختياري)'),
+                                      const SizedBox(height: 4),
+                                      const Text(
+                                          'اضغط هنا لفتح المعرض',
+                                          style: TextStyle(
+                                              color: Colors.white54,
+                                              fontSize: 12))
+                                    ])
+                              : Stack(fit: StackFit.expand, children: [
+                                  Image.file(File(selectedImage!.path),
+                                      fit: BoxFit.cover),
+                                  Positioned(
+                                      left: 8,
+                                      top: 8,
+                                      child: IconButton(
+                                          onPressed: () => setDialogState(
+                                              () => selectedImage = null),
+                                          style: IconButton.styleFrom(
+                                              backgroundColor:
+                                                  Colors.black87,
+                                              foregroundColor:
+                                                  Colors.white),
+                                          icon: const Icon(Icons.close)))
+                                ]),
                         ),
                       ),
                       const SizedBox(height: 16),
-                      const Align(alignment: Alignment.centerRight, child: Text('المعلومات (كلها اختيارية)', style: TextStyle(color: Colors.white60, fontSize: 12))),
+                      const Align(
+                          alignment: Alignment.centerRight,
+                          child: Text('المعلومات (كلها اختيارية)',
+                              style: TextStyle(
+                                  color: Colors.white60, fontSize: 12))),
                       const SizedBox(height: 10),
-                      TextField(controller: titleController, decoration: const InputDecoration(labelText: 'اسم الأنمي (اختياري)', prefixIcon: Icon(Icons.movie_outlined))),
+                      TextField(
+                          controller: titleController,
+                          decoration: const InputDecoration(
+                              labelText: 'اسم الأنمي (اختياري)',
+                              prefixIcon: Icon(Icons.movie_outlined))),
                       const SizedBox(height: 12),
                       InkWell(
-                        onTap: () async { final newGenres = await _showGenrePicker(selectedGenres); if (newGenres != null) setDialogState(() => selectedGenres = newGenres); },
+                        onTap: () async {
+                          final newGenres =
+                              await _showGenrePicker(selectedGenres);
+                          if (newGenres != null) {
+                            setDialogState(
+                                () => selectedGenres = newGenres);
+                          }
+                        },
                         child: InputDecorator(
-                          decoration: const InputDecoration(labelText: 'التصنيفات (اختياري)', prefixIcon: Icon(Icons.category_outlined), suffixIcon: Icon(Icons.arrow_drop_down)),
-                          child: Text(selectedGenres.isEmpty ? 'لم يتم اختيار تصنيف' : selectedGenres.join('، '), style: TextStyle(color: selectedGenres.isEmpty ? Colors.white38 : Colors.white)),
+                          decoration: const InputDecoration(
+                              labelText: 'التصنيفات (اختياري)',
+                              prefixIcon: Icon(Icons.category_outlined),
+                              suffixIcon: Icon(Icons.arrow_drop_down)),
+                          child: Text(
+                            selectedGenres.isEmpty
+                                ? 'لم يتم اختيار تصنيف'
+                                : selectedGenres.join('، '),
+                            style: TextStyle(
+                                color: selectedGenres.isEmpty
+                                    ? Colors.white38
+                                    : Colors.white),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 12),
-                      TextField(controller: characterController, decoration: const InputDecoration(labelText: 'الشخصية المفضلة (اختياري)', prefixIcon: Icon(Icons.person_outline))),
+                      TextField(
+                          controller: characterController,
+                          decoration: const InputDecoration(
+                              labelText: 'الشخصية المفضلة (اختياري)',
+                              prefixIcon: Icon(Icons.person_outline))),
                       const SizedBox(height: 12),
                       Row(
                         children: [
-                          Expanded(child: TextField(controller: episodesController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'عدد الحلقات', prefixIcon: Icon(Icons.play_circle_outline)))),
+                          Expanded(
+                              child: TextField(
+                                  controller: episodesController,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(
+                                      labelText: 'عدد الحلقات',
+                                      prefixIcon: Icon(
+                                          Icons.play_circle_outline)))),
                           const SizedBox(width: 10),
-                          Expanded(child: TextField(controller: yearController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'سنة النزول', prefixIcon: Icon(Icons.calendar_today)))),
+                          Expanded(
+                              child: TextField(
+                                  controller: yearController,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(
+                                      labelText: 'سنة النزول',
+                                      prefixIcon: Icon(
+                                          Icons.calendar_today)))),
                         ],
                       ),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
                         value: status,
                         isExpanded: true,
-                        decoration: const InputDecoration(labelText: 'حالة المشاهدة (اختياري)'),
+                        decoration: const InputDecoration(
+                            labelText: 'حالة المشاهدة (اختياري)'),
                         items: const [
-                          DropdownMenuItem(value: '', child: Text('لم أحدد')),
-                          DropdownMenuItem(value: 'مكتمل', child: Text('مكتمل')),
-                          DropdownMenuItem(value: 'أتابعه', child: Text('أتابعه')),
-                          DropdownMenuItem(value: 'مخطط له', child: Text('مخطط له')),
-                          DropdownMenuItem(value: 'متوقف', child: Text('متوقف')),
+                          DropdownMenuItem(
+                              value: '', child: Text('لم أحدد')),
+                          DropdownMenuItem(
+                              value: 'مكتمل', child: Text('مكتمل')),
+                          DropdownMenuItem(
+                              value: 'أتابعه', child: Text('أتابعه')),
+                          DropdownMenuItem(
+                              value: 'مخطط له', child: Text('مخطط له')),
+                          DropdownMenuItem(
+                              value: 'متوقف', child: Text('متوقف')),
                         ],
-                        onChanged: (value) { if (value != null) setDialogState(() => status = value); },
+                        onChanged: (value) {
+                          if (value != null) {
+                            setDialogState(() => status = value);
+                          }
+                        },
                       ),
                       const SizedBox(height: 16),
                       Column(
                         children: [
-                          Text('تقييمك: ${rating.toStringAsFixed(1)} / 10', style: TextStyle(fontWeight: FontWeight.bold, color: primaryColorNotifier.value, fontSize: 16)),
+                          Text('تقييمك: ${rating.toStringAsFixed(1)} / 10',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: primaryColorNotifier.value,
+                                  fontSize: 16)),
                           Slider(
-                            value: rating, min: 0, max: 10, divisions: 20, label: rating.toStringAsFixed(1), activeColor: const Color(0xFFFFC857),
-                            onChanged: (value) { setDialogState(() => rating = value); },
+                            value: rating,
+                            min: 0,
+                            max: 10,
+                            divisions: 20,
+                            label: rating.toStringAsFixed(1),
+                            activeColor: const Color(0xFFFFC857),
+                            onChanged: (value) {
+                              setDialogState(() => rating = value);
+                            },
                           ),
                         ],
                       ),
                       const SizedBox(height: 12),
-                      TextField(controller: summaryController, maxLines: 3, decoration: const InputDecoration(labelText: 'ملخص القصة (اختياري)', alignLabelWithHint: true, prefixIcon: Icon(Icons.menu_book_outlined))),
+                      TextField(
+                          controller: summaryController,
+                          maxLines: 3,
+                          decoration: const InputDecoration(
+                              labelText: 'ملخص القصة (اختياري)',
+                              alignLabelWithHint: true,
+                              prefixIcon:
+                                  Icon(Icons.menu_book_outlined))),
                       const SizedBox(height: 12),
-                      TextField(controller: memoryController, maxLines: 3, decoration: const InputDecoration(labelText: 'ذكرياتك مع الأنمي (اختياري)', alignLabelWithHint: true, prefixIcon: Icon(Icons.auto_awesome_outlined))),
+                      TextField(
+                          controller: memoryController,
+                          maxLines: 3,
+                          decoration: const InputDecoration(
+                              labelText: 'ذكرياتك مع الأنمي (اختياري)',
+                              alignLabelWithHint: true,
+                              prefixIcon:
+                                  Icon(Icons.auto_awesome_outlined))),
                     ],
                   ),
                 ),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إلغاء')),
+                TextButton(
+                    onPressed: () => Navigator.pop(dialogContext),
+                    child: const Text('إلغاء')),
                 FilledButton(
-                  style: FilledButton.styleFrom(backgroundColor: primaryColorNotifier.value),
+                  style: FilledButton.styleFrom(
+                      backgroundColor: primaryColorNotifier.value),
                   onPressed: () {
                     final anime = Anime(
                       id: DateTime.now().microsecondsSinceEpoch.toString(),
@@ -274,32 +664,71 @@ class _HomeScreenState extends State<HomeScreen> {
     if (result == null) return;
 
     try {
-      if (selectedImage != null) result.imagePath = await _saveImageLocally(selectedImage!.path);
+      if (selectedImage != null) {
+        result.imagePath = await _saveImageLocally(selectedImage!.path);
+      }
+      _allAnimes.add(result);
       animes.add(result);
-      final saved = await storage.saveAnimes(animes);
+      final saved = await storage.saveAnimes(_allAnimes);
       if (!mounted) return;
+
+      // 🆕 إخبار الشخصية
+      if (saved) {
+        if (result.rating >= 8) {
+          _charKey.currentState?.showMessage('high_rate');
+        } else if (result.rating > 0 && result.rating < 5) {
+          _charKey.currentState?.showMessage('low_rate');
+        } else {
+          _charKey.currentState?.showMessage('add_anime');
+        }
+      }
+
       setState(() {});
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(saved ? 'تم حفظ الأنمي في مكتبتك' : 'تعذر حفظ البيانات.')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content:
+              Text(saved ? 'تم حفظ الأنمي في مكتبتك' : 'تعذر حفظ البيانات.')));
+
       final prefs = await SharedPreferences.getInstance();
       if (prefs.getBool('auto_fetch_enabled') ?? false) {
-        if (result.genre.isEmpty || result.summary.isEmpty || result.globalRating == null || result.releaseYear == null) { _autoFetchMissingData(); }
+        if (result.genre.isEmpty ||
+            result.summary.isEmpty ||
+            result.globalRating == null ||
+            result.releaseYear == null) {
+          _autoFetchMissingData();
+        }
       }
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تعذر حفظ الصورة أو البيانات.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تعذر حفظ الصورة أو البيانات.')));
     }
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // واجهات
+  // ══════════════════════════════════════════════════════════════
   Widget _animeImage(Anime anime, Color color) {
     final path = anime.imagePath;
     if (path != null && path.isNotEmpty && File(path).existsSync()) {
-      return ClipRRect(borderRadius: BorderRadius.circular(13), child: Image.file(File(path), width: 50, height: 50, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _imagePlaceholder(color)));
+      return ClipRRect(
+          borderRadius: BorderRadius.circular(13),
+          child: Image.file(File(path),
+              width: 50,
+              height: 50,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => _imagePlaceholder(color)));
     }
     return _imagePlaceholder(color);
   }
 
   Widget _imagePlaceholder(Color color) {
-    return Container(width: 50, height: 50, decoration: BoxDecoration(color: color.withOpacity(0.2), borderRadius: BorderRadius.circular(13)), child: Icon(Icons.movie_outlined, color: color));
+    return Container(
+        width: 50,
+        height: 50,
+        decoration: BoxDecoration(
+            color: color.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(13)),
+        child: Icon(Icons.movie_outlined, color: color));
   }
 
   Widget _oracleButton() {
@@ -307,24 +736,60 @@ class _HomeScreenState extends State<HomeScreen> {
       margin: const EdgeInsets.only(bottom: 20),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        gradient: LinearGradient(colors: [primaryColorNotifier.value, primaryColorNotifier.value.withOpacity(0.5), const Color(0xFF202431)], begin: Alignment.topRight, end: Alignment.bottomLeft),
-        border: Border.all(color: primaryColorNotifier.value.withOpacity(0.6), width: 1.5),
-        boxShadow: [BoxShadow(color: primaryColorNotifier.value.withOpacity(0.5), blurRadius: 25, spreadRadius: 5)],
+        gradient: LinearGradient(
+            colors: [
+              primaryColorNotifier.value,
+              primaryColorNotifier.value.withOpacity(0.5),
+              const Color(0xFF202431)
+            ],
+            begin: Alignment.topRight,
+            end: Alignment.bottomLeft),
+        border: Border.all(
+            color: primaryColorNotifier.value.withOpacity(0.6), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+              color: primaryColorNotifier.value.withOpacity(0.5),
+              blurRadius: 25,
+              spreadRadius: 5)
+        ],
       ),
       child: Material(
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(20),
         child: InkWell(
           borderRadius: BorderRadius.circular(20),
-          onTap: () { HapticFeedback.lightImpact(); Navigator.push(context, MaterialPageRoute(builder: (_) => const OtakuOracleScreen())); },
+          onTap: () {
+            HapticFeedback.lightImpact();
+            _charKey.currentState?.showMessage('thinking');
+            Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const OtakuOracleScreen()));
+          },
           child: const Padding(
             padding: EdgeInsets.all(17),
             child: Row(
               children: [
-                CircleAvatar(radius: 25, backgroundColor: Colors.white24, child: Icon(Icons.psychology_alt, color: Colors.white, size: 29)),
+                CircleAvatar(
+                    radius: 25,
+                    backgroundColor: Colors.white24,
+                    child: Icon(Icons.psychology_alt,
+                        color: Colors.white, size: 29)),
                 SizedBox(width: 13),
-                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('مرآة الأوتاكو', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900)), SizedBox(height: 5), Text('اكتشف ملامح ذوقك في عالم الأنمي', style: TextStyle(color: Colors.white70, fontSize: 12))])),
-                Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 18),
+                Expanded(
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                      Text('مرآة الأوتاكو',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900)),
+                      SizedBox(height: 5),
+                      Text('اكتشف ملامح ذوقك في عالم الأنمي',
+                          style: TextStyle(
+                              color: Colors.white70, fontSize: 12))
+                    ])),
+                Icon(Icons.arrow_back_ios_new,
+                    color: Colors.white, size: 18),
               ],
             ),
           ),
@@ -338,24 +803,55 @@ class _HomeScreenState extends State<HomeScreen> {
       margin: const EdgeInsets.only(bottom: 20),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        gradient: const LinearGradient(colors: [Color(0xFF247BA0), Color(0xFF27866F), Color(0xFF202431)], begin: Alignment.topRight, end: Alignment.bottomLeft),
-        border: Border.all(color: Colors.cyan.withOpacity(0.6), width: 1.5),
-        boxShadow: [BoxShadow(color: Colors.cyan.withOpacity(0.5), blurRadius: 25, spreadRadius: 5)],
+        gradient: const LinearGradient(
+            colors: [Color(0xFF247BA0), Color(0xFF27866F), Color(0xFF202431)],
+            begin: Alignment.topRight,
+            end: Alignment.bottomLeft),
+        border:
+            Border.all(color: Colors.cyan.withOpacity(0.6), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.cyan.withOpacity(0.5),
+              blurRadius: 25,
+              spreadRadius: 5)
+        ],
       ),
       child: Material(
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(20),
         child: InkWell(
           borderRadius: BorderRadius.circular(20),
-          onTap: () { HapticFeedback.lightImpact(); Navigator.push(context, MaterialPageRoute(builder: (_) => const RandomPickerScreen())); },
+          onTap: () {
+            HapticFeedback.lightImpact();
+            _charKey.currentState?.showMessage('random_pick');
+            Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const RandomPickerScreen()));
+          },
           child: const Padding(
             padding: EdgeInsets.all(17),
             child: Row(
               children: [
-                CircleAvatar(radius: 25, backgroundColor: Colors.white24, child: Icon(Icons.casino, color: Colors.white, size: 29)),
+                CircleAvatar(
+                    radius: 25,
+                    backgroundColor: Colors.white24,
+                    child: Icon(Icons.casino, color: Colors.white, size: 29)),
                 SizedBox(width: 13),
-                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('قرعة الأنمي 🎲', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900)), SizedBox(height: 5), Text('ماذا أشاهد الآن؟', style: TextStyle(color: Colors.white70, fontSize: 12))])),
-                Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 18),
+                Expanded(
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                      Text('قرعة الأنمي 🎲',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900)),
+                      SizedBox(height: 5),
+                      Text('ماذا أشاهد الآن؟',
+                          style: TextStyle(
+                              color: Colors.white70, fontSize: 12))
+                    ])),
+                Icon(Icons.arrow_back_ios_new,
+                    color: Colors.white, size: 18),
               ],
             ),
           ),
@@ -364,95 +860,44 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // 🆕 دالة لإنشاء انتقال بحركة انزلاق (للميزة 4: الرسوم المتحركة)
-  Route _createAnimatedRoute(Widget page) {
-    return PageRouteBuilder(
-      pageBuilder: (context, animation, secondaryAnimation) => page,
-      transitionsBuilder: (context, animation, secondaryAnimation, child) {
-        const begin = Offset(0.0, 1.0); // يبدأ من الأسفل
-        const end = Offset.zero;
-        const curve = Curves.easeInOutCubic;
-        var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
-        return SlideTransition(
-          position: animation.drive(tween),
-          child: FadeTransition(
-            opacity: animation,
-            child: child,
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildWrappedAndStatsButtons() {
-    return Row(
-      children: [
-        Expanded(
-          child: _actionButton(
-            title: 'إحصائياتي',
-            icon: Icons.analytics,
-            color: Colors.orangeAccent,
-            onTap: () => Navigator.push(context, _createAnimatedRoute(const StatisticsScreen())),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _actionButton(
-            title: 'ملخص الشهر',
-            icon: Icons.auto_awesome,
-            color: Colors.purpleAccent,
-            onTap: () => Navigator.push(context, _createAnimatedRoute(MonthlyWrappedScreen(animes: animes))),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _actionButton({required String title, required IconData icon, required Color color, required VoidCallback onTap}) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF1B1F28),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.5)),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: () { HapticFeedback.lightImpact(); onTap(); },
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          child: Column(
-            children: [
-              Icon(icon, color: color, size: 28),
-              const SizedBox(height: 8),
-              Text(title, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildSkeletonLoader() {
     return Column(
-      children: List.generate(5, (index) => 
-        Container(
-          margin: const EdgeInsets.only(bottom: 10), height: 70,
-          decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(17)),
-          child: Row(
-            children: [
-              Container(width: 50, height: 50, margin: const EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(13))),
-              Expanded(child: Column(
-                mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(width: 150, height: 14, color: Colors.white.withOpacity(0.1)),
-                  const SizedBox(height: 8),
-                  Container(width: 80, height: 10, color: Colors.white.withOpacity(0.05)),
-                ],
+      children: List.generate(
+          5,
+          (index) => Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                height: 70,
+                decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(17)),
+                child: Row(
+                  children: [
+                    Container(
+                        width: 50,
+                        height: 50,
+                        margin: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(13))),
+                    Expanded(
+                        child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                            width: 150,
+                            height: 14,
+                            color: Colors.white.withOpacity(0.1)),
+                        const SizedBox(height: 8),
+                        Container(
+                            width: 80,
+                            height: 10,
+                            color: Colors.white.withOpacity(0.05)),
+                      ],
+                    )),
+                  ],
+                ),
               )),
-            ],
-          ),
-        )
-      ),
     );
   }
 
@@ -461,29 +906,43 @@ class _HomeScreenState extends State<HomeScreen> {
     if (totalCount < 10) return const SizedBox.shrink();
 
     final List<Color> achColors = [
-      const Color(0xFFCD7F32), const Color(0xFFC0C0C0), const Color(0xFFFFD700), 
-      const Color(0xFF00E5FF), const Color(0xFFE040FB), const Color(0xFFFF5252), 
-      const Color(0xFF69F0AE), const Color(0xFFFFAB40), const Color(0xFF448AFF), 
+      const Color(0xFFCD7F32), const Color(0xFFC0C0C0), const Color(0xFFFFD700),
+      const Color(0xFF00E5FF), const Color(0xFFE040FB), const Color(0xFFFF5252),
+      const Color(0xFF69F0AE), const Color(0xFFFFAB40), const Color(0xFF448AFF),
       const Color(0xFFFF4081)
     ];
 
     final List<IconData> achIcons = [
       Icons.star_border, Icons.explore, Icons.local_cafe, Icons.psychology,
-      Icons.auto_awesome, Icons.verified, Icons.workspace_premium, Icons.military_tech,
-      Icons.diamond, Icons.emoji_events
+      Icons.auto_awesome, Icons.verified, Icons.workspace_premium,
+      Icons.military_tech, Icons.diamond, Icons.emoji_events
     ];
 
     final List<String> achTitles = [
-      'البداية', 'المستكشف', 'الباحث', 'المتذوق', 'الهاوي', 'المشجع', 'المحلل', 'الناقد', 'الأسطورة الصاعدة', 'الخبير',
-      'المبتدئ المعتمد', 'المغامر', 'جامع القصص', 'عاشق الأنمي', 'صائد الجواهر', 'المتابع', 'المراجع', 'المستشار', 'الأسطورة الشابة', 'الأسطورة',
-      'الجيل الثاني', 'الفارس', 'الحارس', 'المحارب', 'المنقذ', 'الساحر', 'العبقري', 'الوحش', 'الشيطان', 'الملاك',
-      'الأسطورة الملكية', 'الأسطورة الذهبية', 'الأسطورة الماسية', 'الأسطورة البلاتينية', 'الأسطورة النخبوية', 'الأسطورة النادرة', 'الأسطورة الفريدة', 'الأسطورة الأعظم', 'الأسطورة الأقوى', 'الأسطورة المطلقة',
-      'الحكيم', 'الفيلسوف', 'المعلم', 'المرشد', 'القائد', 'الزعيم', 'الملك', 'الإمبراطور', 'القيصر', 'الفرعون',
-      'بطل العالم', 'بطل الكون', 'بطل المجرة', 'بطل الأكوان', 'بطل الأبعاد', 'بطل الزمن', 'بطل الفضاء', 'بطل اللانهاية', 'بطل الخيال', 'بطل الواقع',
-      'التنين', 'الفينيق', 'العنقاء', 'الغول', 'الشيطان الأكبر', 'الملاك الأكبر', 'الإله', 'الخالد', 'الأبدي', 'اللامحدود',
-      'التيتان', 'العملاق', 'الجبار', 'الطاغية', 'المدمر', 'المحطم', 'الفاتح', 'الغازي', 'المنتصر', 'القاهر',
-      'المستنير', 'المتنور', 'المبدع', 'المبتكر', 'الرائد', 'السباق', 'الأول', 'الفريد', 'النادر', 'الأسطوري',
-      'الأسطورة الخالدة', 'الأسطورة الأبدية', 'الأسطورة اللامحدودة', 'الأسطورة الكونية', 'الأسطورة المجرية', 'الأسطورة الأبعادية', 'الأسطورة الزمنية', 'الأسطورة الفضائية', 'الأسطورة اللانهائية', 'إمبراطور الأوتاكو'
+      'البداية', 'المستكشف', 'الباحث', 'المتذوق', 'الهاوي', 'المشجع',
+      'المحلل', 'الناقد', 'الأسطورة الصاعدة', 'الخبير',
+      'المبتدئ المعتمد', 'المغامر', 'جامع القصص', 'عاشق الأنمي', 'صائد الجواهر',
+      'المتابع', 'المراجع', 'المستشار', 'الأسطورة الشابة', 'الأسطورة',
+      'الجيل الثاني', 'الفارس', 'الحارس', 'المحارب', 'المنقذ', 'الساحر',
+      'العبقري', 'الوحش', 'الشيطان', 'الملاك',
+      'الأسطورة الملكية', 'الأسطورة الذهبية', 'الأسطورة الماسية',
+      'الأسطورة البلاتينية', 'الأسطورة النخبوية', 'الأسطورة النادرة',
+      'الأسطورة الفريدة', 'الأسطورة الأعظم', 'الأسطورة الأقوى',
+      'الأسطورة المطلقة',
+      'الحكيم', 'الفيلسوف', 'المعلم', 'المرشد', 'القائد', 'الزعيم',
+      'الملك', 'الإمبراطور', 'القيصر', 'الفرعون',
+      'بطل العالم', 'بطل الكون', 'بطل المجرة', 'بطل الأكوان', 'بطل الأبعاد',
+      'بطل الزمن', 'بطل الفضاء', 'بطل اللانهاية', 'بطل الخيال', 'بطل الواقع',
+      'التنين', 'الفينيق', 'العنقاء', 'الغول', 'الشيطان الأكبر',
+      'الملاك الأكبر', 'الإله', 'الخالد', 'الأبدي', 'اللامحدود',
+      'التيتان', 'العملاق', 'الجبار', 'الطاغية', 'المدمر', 'المحطم',
+      'الفاتح', 'الغازي', 'المنتصر', 'القاهر',
+      'المستنير', 'المتنور', 'المبدع', 'المبتكر', 'الرائد', 'السباق',
+      'الأول', 'الفريد', 'النادر', 'الأسطوري',
+      'الأسطورة الخالدة', 'الأسطورة الأبدية', 'الأسطورة اللامحدودة',
+      'الأسطورة الكونية', 'الأسطورة المجرية', 'الأسطورة الأبعادية',
+      'الأسطورة الزمنية', 'الأسطورة الفضائية', 'الأسطورة اللانهائية',
+      'إمبراطور الأوتاكو'
     ];
 
     int index = (totalCount / 10).floor() - 1;
@@ -498,23 +957,35 @@ class _HomeScreenState extends State<HomeScreen> {
       margin: const EdgeInsets.only(top: 15),
       padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(16),
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: color.withOpacity(0.5)),
-        boxShadow: [BoxShadow(color: color.withOpacity(0.2), blurRadius: 15, spreadRadius: 2)],
+        boxShadow: [
+          BoxShadow(
+              color: color.withOpacity(0.2),
+              blurRadius: 15,
+              spreadRadius: 2)
+        ],
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(shape: BoxShape.circle, color: color.withOpacity(0.2)),
+            decoration: BoxDecoration(
+                shape: BoxShape.circle, color: color.withOpacity(0.2)),
             child: Icon(icon, color: color, size: 30),
           ),
           const SizedBox(width: 12),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('أحدث إنجاز لك', style: TextStyle(color: Colors.white54, fontSize: 12)),
-              Text(title, style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.bold)),
+              const Text('أحدث إنجاز لك',
+                  style: TextStyle(color: Colors.white54, fontSize: 12)),
+              Text(title,
+                  style: TextStyle(
+                      color: color,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold)),
             ],
           ),
         ],
@@ -527,25 +998,70 @@ class _HomeScreenState extends State<HomeScreen> {
     final primaryColor = primaryColorNotifier.value;
 
     return RefreshIndicator(
-      onRefresh: () async { 
-        await loadData(); 
+      onRefresh: () async {
+        await loadData();
         final prefs = await SharedPreferences.getInstance();
         if (prefs.getBool('auto_fetch_enabled') ?? false) {
-          await _autoFetchMissingData(); 
+          await _autoFetchMissingData();
         }
       },
       child: ListView(
         padding: const EdgeInsets.fromLTRB(18, 16, 18, 28),
         children: [
+          // ════ الرأس + الشخصية ════
           Row(
             children: [
-              Container(width: 48, height: 48, decoration: BoxDecoration(color: primaryColor, borderRadius: BorderRadius.circular(15), boxShadow: [BoxShadow(color: primaryColor.withOpacity(0.5), blurRadius: 12, spreadRadius: 2)]), child: const Icon(Icons.shield_outlined, color: Colors.white, size: 29)),
+              Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                      color: primaryColor,
+                      borderRadius: BorderRadius.circular(15),
+                      boxShadow: [
+                        BoxShadow(
+                            color: primaryColor.withOpacity(0.5),
+                            blurRadius: 12,
+                            spreadRadius: 2)
+                      ]),
+                  child: const Icon(Icons.shield_outlined,
+                      color: Colors.white, size: 29)),
               const SizedBox(width: 12),
-              const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('ذاكرة الأوتاكو', style: TextStyle(fontSize: 23, fontWeight: FontWeight.w900)), SizedBox(height: 3), Text('سجّل رحلتك. احفظ ذكرياتك.', style: TextStyle(color: Colors.white60, fontSize: 12))])),
-              IconButton(onPressed: addAnime, tooltip: 'إضافة أنمي', style: IconButton.styleFrom(backgroundColor: primaryColor, foregroundColor: Colors.white, elevation: 8, shadowColor: primaryColor.withOpacity(0.7)), icon: const Icon(Icons.add)),
+              const Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    Text('ذاكرة الأوتاكو',
+                        style: TextStyle(
+                            fontSize: 23, fontWeight: FontWeight.w900)),
+                    SizedBox(height: 3),
+                    Text('سجّل رحلتك. احفظ ذكرياتك.',
+                        style: TextStyle(
+                            color: Colors.white60, fontSize: 12))
+                  ])),
+              IconButton(
+                  onPressed: addAnime,
+                  tooltip: 'إضافة أنمي',
+                  style: IconButton.styleFrom(
+                      backgroundColor: primaryColor,
+                      foregroundColor: Colors.white,
+                      elevation: 8,
+                      shadowColor: primaryColor.withOpacity(0.7)),
+                  icon: const Icon(Icons.add)),
             ],
           ),
-          const SizedBox(height: 20),
+
+          const SizedBox(height: 16),
+
+          // ════ الشخصية العائمة ════
+          MangaCharacter(
+            key: _charKey,
+            size: 90,
+            initialMessage: 'welcome_back',
+          ),
+
+          const SizedBox(height: 16),
+
+          // ════ الأزرار العلوية ════
           Row(
             children: [
               Expanded(child: _oracleButton()),
@@ -554,91 +1070,238 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
 
-          // 🆕 أزرار الإحصائيات والتقرير الشهري
-          _buildWrappedAndStatsButtons(),
-          const SizedBox(height: 20),
-
+          // ════ بطاقة "سجلّك الخاص" ════
           Container(
             padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(gradient: LinearGradient(colors: [primaryColor, primaryColor.withOpacity(0.3), const Color(0xFF202431)], begin: Alignment.topRight, end: Alignment.bottomLeft), borderRadius: BorderRadius.circular(22), border: Border.all(color: primaryColor.withOpacity(0.4), width: 1.5), boxShadow: [BoxShadow(color: primaryColor.withOpacity(0.3), blurRadius: 20, spreadRadius: 3)]),
+            decoration: BoxDecoration(
+                gradient: LinearGradient(
+                    colors: [
+                      primaryColor,
+                      primaryColor.withOpacity(0.3),
+                      const Color(0xFF202431)
+                    ],
+                    begin: Alignment.topRight,
+                    end: Alignment.bottomLeft),
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(
+                    color: primaryColor.withOpacity(0.4), width: 1.5),
+                boxShadow: [
+                  BoxShadow(
+                      color: primaryColor.withOpacity(0.3),
+                      blurRadius: 20,
+                      spreadRadius: 3)
+                ]),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('سجلّك الخاص', style: TextStyle(color: Colors.white70)),
+                const Text('سجلّك الخاص',
+                    style: TextStyle(color: Colors.white70)),
                 const SizedBox(height: 10),
-                const Text('كل أنمي يترك أثرًا.', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w900)),
+                const Text('كل أنمي يترك أثرًا.',
+                    style: TextStyle(
+                        fontSize: 25, fontWeight: FontWeight.w900)),
                 const SizedBox(height: 8),
-                Text('لديك ${animes.length} أنمي في مجموعتك.', style: const TextStyle(color: Colors.white70)),
+                Text('لديك ${animes.length} أنمي في مجموعتك.',
+                    style: const TextStyle(color: Colors.white70)),
                 const SizedBox(height: 18),
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
                     onPressed: addAnime,
-                    style: FilledButton.styleFrom(backgroundColor: Colors.white, foregroundColor: primaryColor, padding: const EdgeInsets.symmetric(vertical: 13), elevation: 10, shadowColor: primaryColor.withOpacity(0.8), side: BorderSide(color: primaryColor.withOpacity(0.8), width: 1.5)),
+                    style: FilledButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: primaryColor,
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        elevation: 10,
+                        shadowColor: primaryColor.withOpacity(0.8),
+                        side: BorderSide(
+                            color: primaryColor.withOpacity(0.8),
+                            width: 1.5)),
                     icon: const Icon(Icons.add_circle_outline),
-                    label: const Text('أضف أنمي إلى مكتبتك', style: TextStyle(fontWeight: FontWeight.bold)),
+                    label: const Text('أضف أنمي إلى مكتبتك',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
                   ),
                 ),
               ],
             ),
           ),
 
+          // ════ الإنجاز ════
           _buildLatestAchievementCard(),
 
+          // ════ 🆕 استمر في المشاهدة ════
+          _buildContinueWatching(primaryColor),
+
+          // ════ الإحصائيات السريعة ════
           const SizedBox(height: 25),
-          const Text('إحصائياتك السريعة', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+          const Text('إحصائياتك',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
           const SizedBox(height: 13),
           GridView.count(
-            crossAxisCount: 2, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), mainAxisSpacing: 11, crossAxisSpacing: 11, childAspectRatio: 1.65,
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: 11,
+            crossAxisSpacing: 11,
+            childAspectRatio: 1.65,
             children: [
-              _statCard('إجمالي الأنميات', '${animes.length}', Icons.movie_creation_outlined, primaryColor),
-              _statCard('أنميات مكتملة', '$completed', Icons.verified_outlined, const Color(0xFF27866F)),
-              _statCard('أتابعها الآن', '$watching', Icons.play_circle_outline, const Color(0xFF247BA0)),
-              _statCard('مخطط لها', '$planned', Icons.bookmark_outline, const Color(0xFF8B65C6)),
+              _statCard('إجمالي الأنميات', '${animes.length}',
+                  Icons.movie_creation_outlined, primaryColor),
+              _statCard('أنميات مكتملة', '$completed',
+                  Icons.verified_outlined, const Color(0xFF27866F)),
+              _statCard('أتابعها الآن', '$watching',
+                  Icons.play_circle_outline, const Color(0xFF247BA0)),
+              _statCard('مخطط لها', '$planned', Icons.bookmark_outline,
+                  const Color(0xFF8B65C6)),
             ],
           ),
           const SizedBox(height: 14),
           Container(
             padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: const Color(0xFF1B1F28), borderRadius: BorderRadius.circular(17), border: Border.all(color: const Color(0xFFFFC857).withOpacity(0.3), width: 1), boxShadow: [BoxShadow(color: const Color(0xFFFFC857).withOpacity(0.2), blurRadius: 15, spreadRadius: 2)]),
-            child: Row(children: [const Icon(Icons.star_rounded, color: Color(0xFFFFC857), size: 32), const SizedBox(width: 12), const Expanded(child: Text('متوسط تقييماتك', style: TextStyle(fontWeight: FontWeight.bold))), Text('${averageRating.toStringAsFixed(1)} / 10', style: const TextStyle(color: Color(0xFFFFC857), fontSize: 19, fontWeight: FontWeight.w900))]),
+            decoration: BoxDecoration(
+                color: const Color(0xFF1B1F28),
+                borderRadius: BorderRadius.circular(17),
+                border: Border.all(
+                    color: const Color(0xFFFFC857).withOpacity(0.3),
+                    width: 1),
+                boxShadow: [
+                  BoxShadow(
+                      color: const Color(0xFFFFC857).withOpacity(0.2),
+                      blurRadius: 15,
+                      spreadRadius: 2)
+                ]),
+            child: Row(children: [
+              const Icon(Icons.star_rounded,
+                  color: Color(0xFFFFC857), size: 32),
+              const SizedBox(width: 12),
+              const Expanded(
+                  child: Text('متوسط تقييماتك',
+                      style: TextStyle(fontWeight: FontWeight.bold))),
+              Text('${averageRating.toStringAsFixed(1)} / 10',
+                  style: const TextStyle(
+                      color: Color(0xFFFFC857),
+                      fontSize: 19,
+                      fontWeight: FontWeight.w900))
+            ]),
           ),
+
+          // ════ الأحدث ════
           const SizedBox(height: 27),
-          Row(children: [const Expanded(child: Text('أضيفت مؤخرًا', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800))), Text('${animes.length} أنمي', style: const TextStyle(color: Colors.white54))]),
+          Row(children: [
+            const Expanded(
+                child: Text('أضيفت مؤخرًا',
+                    style: TextStyle(
+                        fontSize: 20, fontWeight: FontWeight.w800))),
+            Text('${animes.length} أنمي',
+                style: const TextStyle(color: Colors.white54))
+          ]),
           const SizedBox(height: 13),
-          if (loading) _buildSkeletonLoader()
+          if (loading)
+            _buildSkeletonLoader()
           else if (animes.isEmpty)
             Container(
               padding: const EdgeInsets.all(25),
-              decoration: BoxDecoration(color: const Color(0xFF1B1F28), borderRadius: BorderRadius.circular(18), border: Border.all(color: Colors.white10)),
-              child: const Column(children: [Icon(Icons.video_library_outlined, size: 43, color: Colors.white38), SizedBox(height: 12), Text('مكتبتك تبدأ من هنا', style: TextStyle(fontWeight: FontWeight.bold)), SizedBox(height: 6), Text('أضف أول أنمي وابدأ بتسجيل رحلتك.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white54))]),
+              decoration: BoxDecoration(
+                  color: const Color(0xFF1B1F28),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: Colors.white10)),
+              child: const Column(children: [
+                Icon(Icons.video_library_outlined,
+                    size: 43, color: Colors.white38),
+                SizedBox(height: 12),
+                Text('مكتبتك تبدأ من هنا',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                SizedBox(height: 6),
+                Text('أضف أول أنمي وابدأ بتسجيل رحلتك.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white54))
+              ]),
             )
           else
             ...animes.reversed.take(5).map((anime) {
               final color = colors[anime.colorIndex.abs() % colors.length];
-              final details = [if (anime.releaseYear != null) '${anime.releaseYear}', if (anime.status.isNotEmpty) anime.status, if (anime.episodes > 0) '${anime.episodes} حلقة'].join(' • ');
+              final details = [
+                if (anime.releaseYear != null) '${anime.releaseYear}',
+                if (anime.status.isNotEmpty) anime.status,
+                if (anime.episodes > 0) '${anime.episodes} حلقة'
+              ].join(' • ');
               final fontName = fontNotifier.value;
               final titleColor = titleColorNotifier.value;
               TextStyle textStyle;
-              if (fontName == 'Cairo') textStyle = GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.w900, color: titleColor);
-              else if (fontName == 'Tajawal') textStyle = GoogleFonts.tajawal(fontSize: 16, fontWeight: FontWeight.w900, color: titleColor);
-              else if (fontName == 'Almarai') textStyle = GoogleFonts.almarai(fontSize: 16, fontWeight: FontWeight.w900, color: titleColor);
-              else if (fontName == 'Changa') textStyle = GoogleFonts.changa(fontSize: 16, fontWeight: FontWeight.w900, color: titleColor);
-              else textStyle = TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: titleColor);
+              if (fontName == 'Cairo') {
+                textStyle = GoogleFonts.cairo(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                    color: titleColor);
+              } else if (fontName == 'Tajawal') {
+                textStyle = GoogleFonts.tajawal(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                    color: titleColor);
+              } else if (fontName == 'Almarai') {
+                textStyle = GoogleFonts.almarai(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                    color: titleColor);
+              } else if (fontName == 'Changa') {
+                textStyle = GoogleFonts.changa(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                    color: titleColor);
+              } else {
+                textStyle = TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                    color: titleColor);
+              }
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 10),
-                decoration: BoxDecoration(color: const Color(0xFF1B1F28), borderRadius: BorderRadius.circular(17), border: Border.all(color: color.withOpacity(0.4), width: 1), boxShadow: [BoxShadow(color: color.withOpacity(0.25), blurRadius: 15, spreadRadius: 2)]),
+                decoration: BoxDecoration(
+                    color: const Color(0xFF1B1F28),
+                    borderRadius: BorderRadius.circular(17),
+                    border:
+                        Border.all(color: color.withOpacity(0.4), width: 1),
+                    boxShadow: [
+                      BoxShadow(
+                          color: color.withOpacity(0.25),
+                          blurRadius: 15,
+                          spreadRadius: 2)
+                    ]),
                 child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                   leading: _animeImage(anime, color),
-                  title: Text(anime.title.trim().isEmpty ? 'أنمي بدون اسم' : anime.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: textStyle.copyWith(shadows: [Shadow(color: titleColor.withOpacity(0.6), blurRadius: 10)])),
-                  subtitle: Text(details.isEmpty ? 'لم تُضف معلومات بعد' : details, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                  title: Text(
+                      anime.title.trim().isEmpty
+                          ? 'أنمي بدون اسم'
+                          : anime.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: textStyle.copyWith(shadows: [
+                        Shadow(color: titleColor.withOpacity(0.6), blurRadius: 10)
+                      ])),
+                  subtitle: Text(
+                      details.isEmpty ? 'لم تُضف معلومات بعد' : details,
+                      style: const TextStyle(
+                          color: Colors.white54, fontSize: 12)),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (anime.rating > 0) ...[const Icon(Icons.star_rounded, size: 16, color: Color(0xFFFFC857)), Text('${anime.rating.toStringAsFixed(1)}/10', style: const TextStyle(fontSize: 12))],
-                      if (anime.globalRating != null) ...[const SizedBox(width: 8), const Icon(Icons.public, size: 14, color: Colors.cyan), Text(anime.globalRating!.toStringAsFixed(1), style: const TextStyle(fontSize: 12, color: Colors.cyan))],
+                      if (anime.rating > 0) ...[
+                        const Icon(Icons.star_rounded,
+                            size: 16, color: Color(0xFFFFC857)),
+                        Text('${anime.rating.toStringAsFixed(1)}/10',
+                            style: const TextStyle(fontSize: 12))
+                      ],
+                      if (anime.globalRating != null) ...[
+                        const SizedBox(width: 8),
+                        const Icon(Icons.public,
+                            size: 14, color: Colors.cyan),
+                        Text(anime.globalRating!.toStringAsFixed(1),
+                            style: const TextStyle(
+                                fontSize: 12, color: Colors.cyan))
+                      ],
                     ],
                   ),
                 ),
@@ -646,7 +1309,19 @@ class _HomeScreenState extends State<HomeScreen> {
             }),
           if (isAutoFetching) ...[
             const SizedBox(height: 10),
-            const Center(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2)), SizedBox(width: 8), Text('جارٍ جلب البيانات الناقصة في الخلفية...', style: TextStyle(color: Colors.white54, fontSize: 11))])),
+            const Center(
+                child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                  SizedBox(
+                      width: 15,
+                      height: 15,
+                      child: CircularProgressIndicator(strokeWidth: 2)),
+                  SizedBox(width: 8),
+                  Text('جارٍ جلب البيانات الناقصة في الخلفية...',
+                      style: TextStyle(
+                          color: Colors.white54, fontSize: 11))
+                ])),
           ],
         ],
       ),
@@ -656,13 +1331,34 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _statCard(String title, String value, IconData icon, Color color) {
     return Container(
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: const Color(0xFF1B1F28), borderRadius: BorderRadius.circular(17), border: Border.all(color: color.withOpacity(0.5), width: 1.5), boxShadow: [BoxShadow(color: color.withOpacity(0.4), blurRadius: 15, spreadRadius: 2)]),
+      decoration: BoxDecoration(
+          color: const Color(0xFF1B1F28),
+          borderRadius: BorderRadius.circular(17),
+          border: Border.all(color: color.withOpacity(0.5), width: 1.5),
+          boxShadow: [
+            BoxShadow(
+                color: color.withOpacity(0.4),
+                blurRadius: 15,
+                spreadRadius: 2)
+          ]),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Icon(icon, color: color, size: 24),
-          Row(children: [Expanded(child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white60, fontSize: 11))), Text(value, style: TextStyle(color: color, fontSize: 23, fontWeight: FontWeight.w900))]),
+          Row(children: [
+            Expanded(
+                child: Text(title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        color: Colors.white60, fontSize: 11))),
+            Text(value,
+                style: TextStyle(
+                    color: color,
+                    fontSize: 23,
+                    fontWeight: FontWeight.w900))
+          ]),
         ],
       ),
     );
