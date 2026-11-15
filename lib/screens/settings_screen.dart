@@ -25,6 +25,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool autoFetchEnabled = false;
   bool isCheckingHealth = false;
   bool isCompressing = false;
+  bool isClassifying = false;
 
   final BackupService backupService = BackupService();
   final AnimeApiService apiService = AnimeApiService();
@@ -53,9 +54,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await prefs.setBool('auto_dark_mode', value);
     isAutoDarkModeEnabled = value;
     checkAutoTheme();
-    if (!value) {
-      await _toggleTheme(darkMode);
-    }
+    if (!value) await _toggleTheme(darkMode);
   }
 
   Future<void> _toggleAutoFetch(bool value) async {
@@ -69,6 +68,163 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('isDarkMode', value);
     themeNotifier.value = value ? ThemeMode.dark : ThemeMode.light;
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // 🆕 فرز الأفلام تلقائياً
+  // ══════════════════════════════════════════════════════════════
+  Future<void> _autoClassifyMovies() async {
+    if (isClassifying) return;
+
+    final animes = await storage.loadAnimes();
+    final toCheck = animes.where((a) => a.parentId == null).toList();
+
+    if (toCheck.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('مكتبتك فارغة.')),
+      );
+      return;
+    }
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF1B1F28),
+        title: const Text('فرز الأفلام تلقائياً'),
+        content: Text(
+          'سيقوم التطبيق بفحص ${toCheck.length} أنمي عبر الإنترنت لتحديد إذا كان فيلماً مستقلاً أو مسلسلاً.\n\n'
+          'الأفلام المستقلة ستنتقل تلقائياً إلى تبويب "أفلام".\n\n'
+          '⚠️ قد تستغرق العملية عدة دقائق حسب سرعة الإنترنت.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('إلغاء')),
+          FilledButton(
+            style: FilledButton.styleFrom(
+                backgroundColor: primaryColorNotifier.value),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('ابدأ الفرز'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+
+    setState(() => isClassifying = true);
+
+    final progressNotifier = ValueNotifier<double>(0.0);
+    final currentNotifier = ValueNotifier<String>('جاري التحضير...');
+    bool dialogClosed = false;
+
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => AlertDialog(
+          backgroundColor: const Color(0xFF1B1F28),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.movie_filter, size: 50, color: Colors.orangeAccent),
+              const SizedBox(height: 16),
+              const Text('جاري فرز الأفلام...',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              const SizedBox(height: 12),
+              ValueListenableBuilder<String>(
+                valueListenable: currentNotifier,
+                builder: (context, value, _) => Text(value,
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center),
+              ),
+              const SizedBox(height: 12),
+              ValueListenableBuilder<double>(
+                valueListenable: progressNotifier,
+                builder: (context, value, _) => ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: LinearProgressIndicator(
+                    value: value, minHeight: 10,
+                    backgroundColor: Colors.white12,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                        primaryColorNotifier.value),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    int classifiedMovies = 0;
+    int classifiedSeries = 0;
+    int failed = 0;
+
+    try {
+      for (int i = 0; i < toCheck.length; i++) {
+        final anime = toCheck[i];
+        progressNotifier.value = (i + 1) / toCheck.length;
+        currentNotifier.value = '(${i + 1}/${toCheck.length}) ${anime.title}';
+
+        try {
+          final data = await apiService.fetchAnimeData(
+            anime.title,
+            skipTranslation: true,
+          );
+          final fetchedFormat = data['format'] as String?;
+          if (fetchedFormat != null) {
+            final idx = animes.indexWhere((a) => a.id == anime.id);
+            if (idx != -1) {
+              animes[idx].format = fetchedFormat;
+              if (fetchedFormat == 'MOVIE') classifiedMovies++;
+              else classifiedSeries++;
+            }
+          } else {
+            failed++;
+          }
+          await storage.saveAnimes(animes);
+          await Future.delayed(const Duration(milliseconds: 600));
+        } catch (_) {
+          failed++;
+        }
+      }
+
+      dialogClosed = true;
+      if (mounted) Navigator.pop(context);
+
+      if (!mounted) return;
+      await showDialog(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: const Color(0xFF1B1F28),
+          title: const Text('نتيجة الفرز'),
+          content: Text(
+            '🎬 تم تصنيف ${classifiedMovies} كفيلم مستقل.\n'
+            '📺 تم تصنيف ${classifiedSeries} كمسلسل.\n'
+            '❌ فشل تصنيف $failed أنمي (اسم غير دقيق أو غير موجود).\n\n'
+            '💡 الأفلام ظهرت الآن في تبويب "أفلام" داخل المكتبة.',
+            style: const TextStyle(height: 1.8),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('حسنًا'))
+          ],
+        ),
+      );
+    } catch (e) {
+      if (!dialogClosed && mounted) Navigator.pop(context);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('حدث خطأ: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => isClassifying = false);
+    }
   }
 
   Future<void> _checkHealth() async {
@@ -102,8 +258,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (isCompressing) return;
 
     final animes = await storage.loadAnimes();
-    final videosCount =
-        animes.where((a) => a.videoPath != null && a.videoPath!.isNotEmpty).length;
+    final videosCount = animes
+        .where((a) => a.videoPath != null && a.videoPath!.isNotEmpty)
+        .length;
 
     if (videosCount == 0) {
       if (!mounted) return;
@@ -119,8 +276,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         backgroundColor: const Color(0xFF1B1F28),
         title: const Text('ضغط الفيديوهات التذكارية'),
         content: Text(
-          'سيتم ضغط $videosCount فيديو بجودة متوسطة (720p) لتوفير مساحة التخزين.\n\n'
-          'ملاحظة: قد تقل الجودة قليلاً، لكن الحجم سينخفض بنسبة 50-70%.',
+          'سيتم ضغط $videosCount فيديو بجودة متوسطة (720p).\n\n'
+          'ملاحظة: قد تقل الجودة قليلاً، لكن الحجم سينخفض 50-70%.',
         ),
         actions: [
           TextButton(
@@ -240,28 +397,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             _exportOption(
-              icon: Icons.picture_as_pdf,
-              color: Colors.redAccent,
-              title: 'PDF احترافي',
-              subtitle: 'كتالوج قابل للطباعة',
-              onTap: () => Navigator.pop(dialogContext, 'pdf'),
-            ),
+                icon: Icons.picture_as_pdf,
+                color: Colors.redAccent,
+                title: 'PDF احترافي',
+                subtitle: 'كتالوج قابل للطباعة',
+                onTap: () => Navigator.pop(dialogContext, 'pdf')),
             const SizedBox(height: 8),
             _exportOption(
-              icon: Icons.table_chart,
-              color: Colors.greenAccent,
-              title: 'CSV (Excel)',
-              subtitle: 'جدول بيانات قابل للتعديل',
-              onTap: () => Navigator.pop(dialogContext, 'csv'),
-            ),
+                icon: Icons.table_chart,
+                color: Colors.greenAccent,
+                title: 'CSV (Excel)',
+                subtitle: 'جدول بيانات قابل للتعديل',
+                onTap: () => Navigator.pop(dialogContext, 'csv')),
             const SizedBox(height: 8),
             _exportOption(
-              icon: Icons.code,
-              color: Colors.blueAccent,
-              title: 'Markdown',
-              subtitle: 'للمدونات والمواقع',
-              onTap: () => Navigator.pop(dialogContext, 'md'),
-            ),
+                icon: Icons.code,
+                color: Colors.blueAccent,
+                title: 'Markdown',
+                subtitle: 'للمدونات والمواقع',
+                onTap: () => Navigator.pop(dialogContext, 'md')),
           ],
         ),
       ),
@@ -301,19 +455,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _exportOption({
-    required IconData icon,
-    required Color color,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-  }) {
+  Widget _exportOption(
+      {required IconData icon,
+      required Color color,
+      required String title,
+      required String subtitle,
+      required VoidCallback onTap}) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF111318),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.4)),
-      ),
+          color: const Color(0xFF111318),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withOpacity(0.4))),
       child: ListTile(
         onTap: onTap,
         leading: Icon(icon, color: color),
@@ -343,10 +495,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               itemCount: appThemeColors.length,
               itemBuilder: (context, index) {
                 final colorItem = appThemeColors[index];
-                final isSelected =
-                    colorItem.color.value == primaryColorNotifier.value.value;
+                final isSelected = colorItem.color.value ==
+                    primaryColorNotifier.value.value;
                 return GestureDetector(
-                  onTap: () => Navigator.pop(dialogContext, colorItem.color),
+                  onTap: () =>
+                      Navigator.pop(dialogContext, colorItem.color),
                   child: Tooltip(
                     message: colorItem.name,
                     child: Container(
@@ -354,8 +507,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         color: colorItem.color,
                         shape: BoxShape.circle,
                         border: Border.all(
-                            color:
-                                isSelected ? Colors.white : Colors.transparent,
+                            color: isSelected
+                                ? Colors.white
+                                : Colors.transparent,
                             width: 3),
                         boxShadow: [
                           BoxShadow(
@@ -419,12 +573,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _showTitleColorPicker() async {
     final colors = [
-      const Color(0xFFFFD700),
-      Colors.white,
-      Colors.cyan,
-      Colors.greenAccent,
-      Colors.pinkAccent,
-      Colors.orangeAccent
+      const Color(0xFFFFD700), Colors.white, Colors.cyan,
+      Colors.greenAccent, Colors.pinkAccent, Colors.orangeAccent
     ];
     final selectedColor = await showDialog<Color>(
       context: context,
@@ -433,14 +583,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           backgroundColor: const Color(0xFF1B1F28),
           title: const Text('اختر لون اسم الأنمي'),
           content: Wrap(
-            spacing: 10,
-            runSpacing: 10,
+            spacing: 10, runSpacing: 10,
             children: colors.map((color) {
               return GestureDetector(
                 onTap: () => Navigator.pop(dialogContext, color),
                 child: Container(
-                  width: 50,
-                  height: 50,
+                  width: 50, height: 50,
                   decoration: BoxDecoration(
                       color: color,
                       shape: BoxShape.circle,
@@ -598,7 +746,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         backgroundColor: const Color(0xFF1B1F28),
         title: const Text('تحميل البيانات الكاملة'),
         content: const Text(
-            'سيقوم التطبيق بجلب جميع البيانات والصور والمواسم والشخصيات لكل الأنميات في مكتبتك وحفظها محلياً.'),
+            'سيقوم التطبيق بجلب جميع البيانات والصور والمواسم والشخصيات لكل الأنميات وحفظها محلياً.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
@@ -622,7 +770,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         backgroundColor: const Color(0xFF1B1F28),
         title: const Text('تحميل المواسم والشخصيات فقط'),
         content: const Text(
-            'سيقوم التطبيق بجلب المواسم والأفلام المرتبطة والشخصيات الرئيسية لكل الأنميات في مكتبتك.'),
+            'سيقوم التطبيق بجلب المواسم والأفلام المرتبطة والشخصيات الرئيسية.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
@@ -647,7 +795,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         backgroundColor: const Color(0xFF1B1F28),
         title: const Text('جلب المواسم والأفلام فقط'),
         content: const Text(
-            'سيجلب المواسم والأفلام المرتبطة بكل أنمي، دون المساس بالشخصيات أو بيانات الأنمي الأصلية.'),
+            'سيجلب المواسم والأفلام المرتبطة بكل أنمي، دون المساس بالشخصيات.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
@@ -671,7 +819,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         backgroundColor: const Color(0xFF1B1F28),
         title: const Text('جلب شخصيات الأنمي فقط'),
         content: const Text(
-            'سيجلب شخصيات الأنمي الأصلي فقط، دون المساس بالمواسم أو بيانات الأنمي.'),
+            'سيجلب شخصيات الأنمي الأصلي فقط، دون المساس بالمواسم.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
@@ -743,7 +891,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         backgroundColor: const Color(0xFF1B1F28),
         title: const Text('جلب صور الأنمي (ملصقات)'),
         content: const Text(
-            'سيقوم التطبيق بجلب جميع الصور الترويجية المتاحة لكل الأنمي وحفظها محلياً.'),
+            'سيقوم التطبيق بجلب جميع الصور الترويجية المتاحة لكل الأنمي.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
@@ -1113,14 +1261,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     'يجلب المواسم والأفلام دون تعديل بيانات الأنمي الأصلي',
                 trailing:
                     const Icon(Icons.chevron_left, color: Colors.white38),
-                onTap:
-                    isDownloading ? null : _startSeasonsAndCharactersDownload),
+                onTap: isDownloading
+                    ? null
+                    : _startSeasonsAndCharactersDownload),
             const SizedBox(height: 10),
             _settingsTile(
                 icon: Icons.movie_filter_outlined,
                 color: const Color(0xFFE67E22),
                 title: 'جلب المواسم والأفلام فقط',
-                subtitle: 'يجلب المواسم والأفلام المرتبطة فقط (بدون شخصيات)',
+                subtitle:
+                    'يجلب المواسم والأفلام المرتبطة فقط (بدون شخصيات)',
                 trailing:
                     const Icon(Icons.chevron_left, color: Colors.white38),
                 onTap: isDownloading ? null : _startSeasonsOnlyDownload),
@@ -1157,16 +1307,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 icon: Icons.collections,
                 color: const Color(0xFF00ACC1),
                 title: 'جلب صور الأنمي (ملصقات)',
-                subtitle: 'يجلب صور ترويجية (5-10 صور) لكل أنمي',
+                subtitle: 'يجلب صور ترويجية لكل أنمي',
                 trailing:
                     const Icon(Icons.chevron_left, color: Colors.white38),
                 onTap: isDownloading ? null : _startScenesDownload),
 
             const SizedBox(height: 24),
-            const Text('أدوات الصيانة',
+            const Text('أدوات الصيانة والفرز',
                 style:
                     TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
             const SizedBox(height: 12),
+
+            // 🆕 زر فرز الأفلام
+            _settingsTile(
+                icon: Icons.movie_filter,
+                color: const Color(0xFFF39C12),
+                title: 'فرز الأفلام تلقائياً',
+                subtitle:
+                    'يفحص كل الأنمي ويصنف الأفلام المستقلة في تبويب "أفلام"',
+                trailing: isClassifying
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.chevron_left,
+                        color: Colors.white38),
+                onTap: (isClassifying || isDownloading)
+                    ? null
+                    : _autoClassifyMovies),
+
+            const SizedBox(height: 10),
             _settingsTile(
                 icon: Icons.health_and_safety_outlined,
                 color: Colors.tealAccent,
@@ -1282,11 +1452,75 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
             if (backupBusy) ...[
               const SizedBox(height: 16),
-              const Center(child: CircularProgressIndicator()),
-              const SizedBox(height: 8),
-              const Center(
-                  child: Text('جارٍ تجهيز البيانات...',
-                      style: TextStyle(color: Colors.white60))),
+              ValueListenableBuilder<BackupProgress?>(
+                valueListenable: backupService.progress,
+                builder: (context, progress, _) {
+                  final pct = progress?.percentage ?? 0.0;
+                  return Container(
+                    padding: const EdgeInsets.all(15),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1B1F28),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                          color: primaryColor.withOpacity(0.5)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(children: [
+                          Icon(
+                            progress?.isRestore == true
+                                ? Icons.restore
+                                : Icons.backup,
+                            color: Colors.cyan,
+                            size: 24,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              progress?.isRestore == true
+                                  ? 'جاري الاستعادة...'
+                                  : 'جاري الإنشاء...',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14),
+                            ),
+                          ),
+                          Text('${(pct * 100).toInt()}%',
+                              style: TextStyle(
+                                  color: primaryColor,
+                                  fontWeight: FontWeight.bold)),
+                        ]),
+                        const SizedBox(height: 10),
+                        Text(progress?.status ?? 'تجهيز...',
+                            style: const TextStyle(
+                                color: Colors.white70, fontSize: 11),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis),
+                        const SizedBox(height: 10),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: LinearProgressIndicator(
+                            value: pct,
+                            minHeight: 10,
+                            backgroundColor: Colors.white12,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                                primaryColor),
+                          ),
+                        ),
+                        if (progress != null && progress.total > 0) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                              '${progress.current} / ${progress.total}',
+                              style: const TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.white54)),
+                        ],
+                      ],
+                    ),
+                  );
+                },
+              ),
             ],
 
             const SizedBox(height: 24),
