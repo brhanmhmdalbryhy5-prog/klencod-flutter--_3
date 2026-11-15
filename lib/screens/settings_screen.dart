@@ -10,6 +10,7 @@ import '../services/video_compression_service.dart';
 import '../services/export_service.dart';
 import 'trash_screen.dart';
 import 'data_health_screen.dart';
+import 'backup_progress_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -21,12 +22,10 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool darkMode = true;
   bool autoDarkMode = false;
-  bool backupBusy = false;
   bool autoFetchEnabled = false;
   bool isCompressing = false;
   bool isClassifying = false;
 
-  final BackupService backupService = BackupService();
   final AnimeApiService apiService = AnimeApiService();
   final BulkDownloadService bulkService = BulkDownloadService();
   final StorageService storage = StorageService();
@@ -69,6 +68,80 @@ class _SettingsScreenState extends State<SettingsScreen> {
     themeNotifier.value = value ? ThemeMode.dark : ThemeMode.light;
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // 🆕 فتح نافذة النسخ الاحتياطي الكاملة
+  // ══════════════════════════════════════════════════════════════
+  Future<void> runBackupAction({required bool restore}) async {
+    if (restore) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: const Color(0xFF1B1F28),
+          title: const Text('استعادة نسخة احتياطية'),
+          content: const Text(
+              'ستُستبدل قائمة الأنميات الحالية بالأنميات الموجودة في النسخة الاحتياطية.\n\nهل تريد المتابعة؟'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('إلغاء')),
+            ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryColorNotifier.value,
+                    foregroundColor: Colors.white),
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('متابعة')),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+    }
+
+    // 🆕 فتح الشاشة الكاملة بدلاً من Dialog
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => BackupProgressScreen(isRestore: restore),
+      ),
+    );
+  }
+
+  Future<void> _runLiteBackup({required bool restore}) async {
+    if (restore) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: const Color(0xFF1B1F28),
+          title: const Text('استعادة النسخة الخفيفة'),
+          content: const Text(
+              'ستُستبدل بيانات الأنميات الحالية (الأغلفة والشخصيات).\nالفيديوهات والمشاهد والذكريات ستبقى كما هي.\n\nهل تريد المتابعة؟'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('إلغاء')),
+            ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryColorNotifier.value,
+                    foregroundColor: Colors.white),
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('متابعة')),
+          ],
+        ),
+      );
+      if (ok != true || !mounted) return;
+    }
+
+    // 🆕 فتح الشاشة الكاملة
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => BackupProgressScreen(isRestore: restore),
+      ),
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // فرز الأفلام
+  // ══════════════════════════════════════════════════════════════
   Future<void> _autoClassifyMovies() async {
     if (isClassifying) return;
 
@@ -198,9 +271,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           backgroundColor: const Color(0xFF1B1F28),
           title: const Text('نتيجة الفرز'),
           content: Text(
-            '🎬 تم تصنيف ${classifiedMovies} كفيلم مستقل.\n'
-            '📺 تم تصنيف ${classifiedSeries} كمسلسل.\n'
-            '❌ فشل تصنيف $failed أنمي (اسم غير دقيق أو غير موجود).\n\n'
+            '🎬 تم تصنيف $classifiedMovies كفيلم مستقل.\n'
+            '📺 تم تصنيف $classifiedSeries كمسلسل.\n'
+            '❌ فشل تصنيف $failed أنمي.\n\n'
             '💡 الأفلام ظهرت الآن في تبويب "أفلام" داخل المكتبة.',
             style: const TextStyle(height: 1.8),
           ),
@@ -223,6 +296,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // ضغط الفيديوهات
+  // ══════════════════════════════════════════════════════════════
   Future<void> _compressAllVideos() async {
     if (isCompressing) return;
 
@@ -356,6 +432,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // التصدير
+  // ══════════════════════════════════════════════════════════════
   Future<void> _showExportDialog() async {
     final choice = await showDialog<String>(
       context: context,
@@ -391,7 +470,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
 
     if (choice == null || !mounted) return;
-    setState(() => backupBusy = true);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
 
     final exportService = ExportService();
     String result;
@@ -408,7 +492,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     if (!mounted) return;
-    setState(() => backupBusy = false);
+    Navigator.pop(context);
+
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -446,6 +531,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // منتقي الألوان والخطوط
+  // ══════════════════════════════════════════════════════════════
   Future<void> _showColorPicker() async {
     final selectedColor = await showDialog<Color>(
       context: context,
@@ -581,6 +669,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // نتائج التحميل
+  // ══════════════════════════════════════════════════════════════
   Future<void> _showDownloadResult(Map<String, dynamic> result) async {
     final updated = result['updated'] ?? 0;
     final failed = result['failed'] ?? 0;
@@ -708,6 +799,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // أزرار التحميل
+  // ══════════════════════════════════════════════════════════════
   Future<void> _startBulkDownload() async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -905,110 +999,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         SnackBar(content: Text('تم مسح التصنيفات من $count أنمي.')));
   }
 
-  Future<void> runBackupAction({required bool restore}) async {
-    if (backupBusy) return;
-    if (restore) {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          backgroundColor: const Color(0xFF1B1F28),
-          title: const Text('استعادة نسخة احتياطية'),
-          content: const Text(
-              'ستُستبدل قائمة الأنميات الحالية بالأنميات الموجودة في النسخة الاحتياطية.\n\nهل تريد المتابعة؟'),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(dialogContext, false),
-                child: const Text('إلغاء')),
-            ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: primaryColorNotifier.value,
-                    foregroundColor: Colors.white),
-                onPressed: () => Navigator.pop(dialogContext, true),
-                child: const Text('متابعة')),
-          ],
-        ),
-      );
-      if (confirmed != true || !mounted) return;
-    }
-
-    setState(() => backupBusy = true);
-    String result;
-    try {
-      result = restore
-          ? await backupService.restoreBackup()
-          : await backupService.createBackup();
-    } catch (e) {
-      result = 'حدث خطأ: $e';
-    }
-    if (!mounted) return;
-    setState(() => backupBusy = false);
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: const Color(0xFF1B1F28),
-        title: Text(restore ? 'نتيجة الاستعادة' : 'نتيجة النسخ الاحتياطي'),
-        content: Text(result),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('حسنًا'))
-        ],
-      ),
-    );
-  }
-
-  Future<void> _runLiteBackup({required bool restore}) async {
-    if (backupBusy) return;
-    if (restore) {
-      final ok = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: const Color(0xFF1B1F28),
-          title: const Text('استعادة النسخة الخفيفة'),
-          content: const Text(
-              'ستُستبدل بيانات الأنميات الحالية (الأغلفة والشخصيات).\nالفيديوهات والمشاهد والذكريات ستبقى كما هي.\n\nهل تريد المتابعة؟'),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('إلغاء')),
-            ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: primaryColorNotifier.value,
-                    foregroundColor: Colors.white),
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('متابعة')),
-          ],
-        ),
-      );
-      if (ok != true || !mounted) return;
-    }
-    setState(() => backupBusy = true);
-    String result;
-    try {
-      result = restore
-          ? await backupService.restoreLiteBackup()
-          : await backupService.createLiteBackup();
-    } catch (e) {
-      result = 'حدث خطأ: $e';
-    }
-    if (!mounted) return;
-    setState(() => backupBusy = false);
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1B1F28),
-        title: Text(restore
-            ? 'نتيجة استعادة النسخة الخفيفة'
-            : 'نتيجة النسخة الخفيفة'),
-        content: Text(result),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('حسنًا'))
-        ],
-      ),
-    );
-  }
-
   void showAbout() {
     showAboutDialog(
       context: context,
@@ -1025,6 +1015,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // الواجهة
+  // ══════════════════════════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
     final primaryColor = primaryColorNotifier.value;
@@ -1305,8 +1298,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     : _autoClassifyMovies),
 
             const SizedBox(height: 10),
-            
-            // 🆕 الزر المعدل - يفتح الشاشة الجديدة
             _settingsTile(
                 icon: Icons.health_and_safety_outlined,
                 color: Colors.tealAccent,
@@ -1368,6 +1359,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 style:
                     TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
             const SizedBox(height: 12),
+
+            // 🆕 النسخة الشاملة - تفتح النافذة الكاملة
             _settingsTile(
                 icon: Icons.backup_outlined,
                 color: const Color(0xFF35B77A),
@@ -1376,10 +1369,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     'كل شيء (بيانات + صور + شخصيات + مشاهد + فيديوهات)',
                 trailing:
                     const Icon(Icons.chevron_left, color: Colors.white38),
-                onTap: backupBusy
-                    ? null
-                    : () => runBackupAction(restore: false)),
+                onTap: () => runBackupAction(restore: false)),
+
             const SizedBox(height: 10),
+            // 🆕 الاستعادة الشاملة - تفتح النافذة الكاملة
             _settingsTile(
                 icon: Icons.settings_backup_restore,
                 color: const Color(0xFFFFC857),
@@ -1387,10 +1380,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 subtitle: 'استرجاع كل شيء',
                 trailing:
                     const Icon(Icons.chevron_left, color: Colors.white38),
-                onTap: backupBusy
-                    ? null
-                    : () => runBackupAction(restore: true)),
+                onTap: () => runBackupAction(restore: true)),
+
             const SizedBox(height: 10),
+            // 🆕 النسخة الخفيفة - تفتح النافذة الكاملة
             _settingsTile(
                 icon: Icons.backup_outlined,
                 color: const Color(0xFF2196F3),
@@ -1398,10 +1391,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 subtitle: 'بدون فيديوهات/مشاهد/ذكريات — أسرع وأصغر',
                 trailing:
                     const Icon(Icons.chevron_left, color: Colors.white38),
-                onTap: backupBusy
-                    ? null
-                    : () => _runLiteBackup(restore: false)),
+                onTap: () => _runLiteBackup(restore: false)),
+
             const SizedBox(height: 10),
+            // 🆕 استعادة النسخة الخفيفة - تفتح النافذة الكاملة
             _settingsTile(
                 icon: Icons.restore,
                 color: const Color(0xFF03A9F4),
@@ -1409,9 +1402,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 subtitle: 'استرجاع البيانات والأغلفة والشخصيات فقط',
                 trailing:
                     const Icon(Icons.chevron_left, color: Colors.white38),
-                onTap: backupBusy
-                    ? null
-                    : () => _runLiteBackup(restore: true)),
+                onTap: () => _runLiteBackup(restore: true)),
+
             const SizedBox(height: 10),
             _settingsTile(
                 icon: Icons.ios_share,
@@ -1420,80 +1412,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 subtitle: 'PDF احترافي أو CSV (Excel) أو Markdown',
                 trailing:
                     const Icon(Icons.chevron_left, color: Colors.white38),
-                onTap: backupBusy ? null : _showExportDialog),
-
-            if (backupBusy) ...[
-              const SizedBox(height: 16),
-              ValueListenableBuilder<BackupProgress?>(
-                valueListenable: backupService.progress,
-                builder: (context, progress, _) {
-                  final pct = progress?.percentage ?? 0.0;
-                  return Container(
-                    padding: const EdgeInsets.all(15),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1B1F28),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                          color: primaryColor.withOpacity(0.5)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(children: [
-                          Icon(
-                            progress?.isRestore == true
-                                ? Icons.restore
-                                : Icons.backup,
-                            color: Colors.cyan,
-                            size: 24,
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              progress?.isRestore == true
-                                  ? 'جاري الاستعادة...'
-                                  : 'جاري الإنشاء...',
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14),
-                            ),
-                          ),
-                          Text('${(pct * 100).toInt()}%',
-                              style: TextStyle(
-                                  color: primaryColor,
-                                  fontWeight: FontWeight.bold)),
-                        ]),
-                        const SizedBox(height: 10),
-                        Text(progress?.status ?? 'تجهيز...',
-                            style: const TextStyle(
-                                color: Colors.white70, fontSize: 11),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis),
-                        const SizedBox(height: 10),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: LinearProgressIndicator(
-                            value: pct,
-                            minHeight: 10,
-                            backgroundColor: Colors.white12,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                                primaryColor),
-                          ),
-                        ),
-                        if (progress != null && progress.total > 0) ...[
-                          const SizedBox(height: 6),
-                          Text(
-                              '${progress.current} / ${progress.total}',
-                              style: const TextStyle(
-                                  fontSize: 10,
-                                  color: Colors.white54)),
-                        ],
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ],
+                onTap: _showExportDialog),
 
             const SizedBox(height: 24),
             const Text('حول التطبيق',
