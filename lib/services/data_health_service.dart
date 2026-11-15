@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:path_provider/path_provider.dart'; // 🆕 السطر المفقود
 import '../models/anime.dart';
 import 'storage_service.dart';
 
@@ -29,9 +30,9 @@ extension HealthIssueTypeExtension on HealthIssueType {
 
   int get severity {
     switch (this) {
-      case HealthIssueType.emptyTitle: return 3; // خطير
-      case HealthIssueType.duplicate: return 2;  // متوسط
-      default: return 1;                          // خفيف
+      case HealthIssueType.emptyTitle: return 3;
+      case HealthIssueType.duplicate: return 2;
+      default: return 1;
     }
   }
 }
@@ -53,20 +54,17 @@ class HealthIssue {
 }
 
 class DataHealthReport {
-  // أعداد
   final int totalAnimes;
   final int totalCharacters;
   final int totalScenes;
   final int totalVideos;
-  
-  // مساحة التخزين
+
   final int coverBytes;
   final int videoBytes;
   final int characterBytes;
   final int sceneBytes;
   final int memoryBytes;
 
-  // مشاكل
   final List<HealthIssue> issues;
   final int fixedCount;
   final int healthScore;
@@ -135,7 +133,6 @@ class DataHealthService {
     }
   }
 
-  /// فحص شامل للمكتبة + إصلاح تلقائي اختياري
   Future<DataHealthReport> scan({
     bool autoFix = false,
     void Function(int current, int total, String status)? onProgress,
@@ -159,10 +156,10 @@ class DataHealthService {
     for (int i = 0; i < animes.length; i++) {
       final anime = animes[i];
       if (onProgress != null) {
-        onProgress(i + 1, animes.length, anime.title.isEmpty ? 'بدون اسم' : anime.title);
+        onProgress(i + 1, animes.length,
+            anime.title.isEmpty ? 'بدون اسم' : anime.title);
       }
 
-      // 1. الاسم
       if (anime.title.trim().isEmpty) {
         issues.add(HealthIssue(
           animeId: anime.id,
@@ -171,12 +168,10 @@ class DataHealthService {
           type: HealthIssueType.emptyTitle,
         ));
       } else {
-        // كشف المكررات
         final key = anime.title.trim().toLowerCase();
         titleCount[key] = (titleCount[key] ?? 0) + 1;
       }
 
-      // 2. التصنيف
       if (anime.genre.trim().isEmpty) {
         issues.add(HealthIssue(
           animeId: anime.id,
@@ -186,7 +181,6 @@ class DataHealthService {
         ));
       }
 
-      // 3. الغلاف الأمامي
       if (anime.imagePath != null && anime.imagePath!.isNotEmpty) {
         if (await _fileExists(anime.imagePath)) {
           coverBytes += await _fileSize(anime.imagePath);
@@ -204,7 +198,6 @@ class DataHealthService {
         }
       }
 
-      // 4. الغلاف الخلفي
       if (anime.backImagePath != null && anime.backImagePath!.isNotEmpty) {
         if (await _fileExists(anime.backImagePath)) {
           coverBytes += await _fileSize(anime.backImagePath);
@@ -222,7 +215,6 @@ class DataHealthService {
         }
       }
 
-      // 5. الفيديو
       if (anime.videoPath != null && anime.videoPath!.isNotEmpty) {
         totalVideos++;
         if (await _fileExists(anime.videoPath)) {
@@ -241,7 +233,6 @@ class DataHealthService {
         }
       }
 
-      // 6. الشخصيات
       for (int j = 0; j < anime.characters.length; j++) {
         totalCharacters++;
         final char = anime.characters[j];
@@ -264,7 +255,6 @@ class DataHealthService {
         }
       }
 
-      // 7. المشاهد
       for (int k = 0; k < anime.scenes.length; k++) {
         totalScenes++;
         final scene = anime.scenes[k];
@@ -288,7 +278,6 @@ class DataHealthService {
       }
     }
 
-    // كشف المكررات الفعلية
     titleCount.forEach((title, count) {
       if (count > 1) {
         issues.add(HealthIssue(
@@ -300,7 +289,6 @@ class DataHealthService {
       }
     });
 
-    // حساب حجم الذكريات
     try {
       final dir = await getApplicationDocumentsDirectory();
       final memDir = Directory('${dir.path}/anime_memory_photos');
@@ -317,7 +305,6 @@ class DataHealthService {
       await _storage.saveAnimes(animes);
     }
 
-    // حساب صحة المكتبة
     int score = 100;
     for (final issue in issues) {
       score -= issue.type.severity * 2;
