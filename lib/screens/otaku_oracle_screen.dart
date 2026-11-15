@@ -20,7 +20,8 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
   final StorageService storage = StorageService();
   final ScrollController _achievementsController = ScrollController();
 
-  List<Anime> animes = [];
+  List<Anime> _allAnimes = []; // 🆕 جميع الأعمال (الأصلية + المواسم + الأفلام)
+  List<Anime> animes = []; // الأنميات الأصلية فقط (لحساب الإنجازات ونسبة الإكمال)
   bool loading = true;
 
   static const Color background = Color(0xFF111318);
@@ -55,7 +56,11 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
   Future<void> loadData() async {
     final saved = await storage.loadAnimes();
     if (!mounted) return;
-    setState(() { animes = saved.where((a) => a.parentId == null).toList(); loading = false; });
+    setState(() {
+      _allAnimes = saved; // 🆕 تخزين كل شيء (بما فيها المواسم والأفلام)
+      animes = saved.where((a) => a.parentId == null).toList(); // الأصلية فقط
+      loading = false;
+    });
   }
 
   List<Anime> get ratedAnimes => animes.where((anime) => anime.rating > 0).toList();
@@ -65,7 +70,17 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
     return ratedAnimes.fold<double>(0, (sum, anime) => sum + anime.rating) / ratedAnimes.length;
   }
 
-  int get totalEpisodesWatched => animes.where((a) => a.status == 'مكتمل').fold<int>(0, (sum, a) => sum + a.episodes);
+  // 🆕 حساب الحلقات المشاهدة لجميع الأعمال (الأصلية + المواسم + الأفلام)
+  int get totalEpisodesWatched {
+    return _allAnimes.fold<int>(0, (sum, a) {
+      // إذا كان مكتملاً، نأخذ إجمالي الحلقات كاملة
+      if (a.status == 'مكتمل') {
+        return sum + (a.episodes > 0 ? a.episodes : a.watchedEpisodes);
+      }
+      // إذا لم يكن مكتملاً، نأخذ الحلقات التي شاهدها فقط
+      return sum + a.watchedEpisodes;
+    });
+  }
 
   double get completionRate {
     if (animes.isEmpty) return 0;
@@ -84,14 +99,14 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
 
   Widget _buildAchievements() {
     int totalCount = animes.length;
-    
+
     final List<Color> colors = [
       const Color(0xFFCD7F32), const Color(0xFFC0C0C0), const Color(0xFFFFD700), 
       const Color(0xFF00E5FF), const Color(0xFFE040FB), const Color(0xFFFF5252), 
       const Color(0xFF69F0AE), const Color(0xFFFFAB40), const Color(0xFF448AFF), 
       const Color(0xFFFF4081)
     ];
-    
+
     final List<IconData> icons = [
       Icons.star_border, Icons.explore, Icons.local_cafe, Icons.psychology,
       Icons.auto_awesome, Icons.verified, Icons.workspace_premium, Icons.military_tech,
@@ -206,7 +221,8 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
       crossAxisCount: 2, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), mainAxisSpacing: 10, crossAxisSpacing: 10, childAspectRatio: 1.5,
       children: [
         _statCard('إجمالي الأنميات', '${animes.length}', Icons.movie, const Color(0xFF247BA0)),
-        _statCard('الحلقات المشاهدة', '$totalEpisodesWatched', Icons.play_circle_fill, const Color(0xFF8B65C6)),
+        // 🆕 تم تغيير العنوان ليوضح أنه يشمل المواسم والأفلام
+        _statCard('الحلقات (شاملة المواسم)', '$totalEpisodesWatched', Icons.play_circle_fill, const Color(0xFF8B65C6)),
         _statCard('نسبة الإكمال', '${completionRate.toStringAsFixed(0)}%', Icons.donut_large, const Color(0xFF00ACC1)),
         _statCard('متوسط تقييمك', ratedAnimes.isEmpty ? '—' : averageRating.toStringAsFixed(1), Icons.insights, const Color(0xFF27866F)),
       ],
