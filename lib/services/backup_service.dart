@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:archive/archive_io.dart' as ziplib;
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -12,29 +13,65 @@ import '../models/anime.dart';
 import 'storage_service.dart';
 import 'notification_service.dart';
 
+class BackupProgress {
+  final int current;
+  final int total;
+  final String status;
+  final bool isRestore;
+
+  BackupProgress({
+    required this.current,
+    required this.total,
+    required this.status,
+    required this.isRestore,
+  });
+
+  double get percentage => total == 0 ? 0 : (current / total).clamp(0.0, 1.0);
+}
+
 class BackupService {
   static const String characterPrefix = 'anime_character_image_';
   final NotificationService _notif = NotificationService();
 
+  final ValueNotifier<BackupProgress?> progress = ValueNotifier(null);
+
   int _processedItems = 0;
   int _totalItems = 1;
   DateTime _lastNotifyTime = DateTime.fromMillisecondsSinceEpoch(0);
+  bool _isRestore = false;
 
-  void _resetProgress(int total) {
+  void _resetProgress(int total, {bool isRestore = false}) {
     _processedItems = 0;
     _totalItems = total < 1 ? 1 : total;
     _lastNotifyTime = DateTime.fromMillisecondsSinceEpoch(0);
+    _isRestore = isRestore;
+    progress.value = BackupProgress(
+      current: 0,
+      total: _totalItems,
+      status: 'تجهيز البيانات...',
+      isRestore: isRestore,
+    );
+  }
+
+  void _clearProgress() {
+    progress.value = null;
   }
 
   Future<void> _maybeNotify(String currentItem) async {
     _processedItems++;
     final now = DateTime.now();
-    if (now.difference(_lastNotifyTime).inMilliseconds > 700 ||
+    if (now.difference(_lastNotifyTime).inMilliseconds > 200 ||
         _processedItems == _totalItems) {
       _lastNotifyTime = now;
+      progress.value = BackupProgress(
+        current: _processedItems,
+        total: _totalItems,
+        status: currentItem,
+        isRestore: _isRestore,
+      );
       try {
         await _notif.showProgress(
-          title: 'جارٍ العمل...',
+          title: _isRestore ? 'جاري الاستعادة...' : 'جاري الإنشاء...',
           body: currentItem,
           progress: _processedItems,
           total: _totalItems,
@@ -43,9 +80,6 @@ class BackupService {
     }
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // 1️⃣ النسخة الشاملة الكاملة
-  // ══════════════════════════════════════════════════════════════
   Future<String> createBackup() async {
     final tempDir = await getTemporaryDirectory();
     final ts = DateTime.now().millisecondsSinceEpoch;
@@ -54,6 +88,7 @@ class BackupService {
     final tempAnimeFile = File('${tempDir.path}/animes_$ts.json');
 
     try {
+      _resetProgress(1, isRestore: false);
       try {
         await _notif.showProgress(
           title: 'جارٍ إنشاء النسخة الاحتياطية...',
@@ -66,7 +101,7 @@ class BackupService {
       final animes = await StorageService().loadAnimes();
       final prefs = await SharedPreferences.getInstance();
 
-      _resetProgress(animes.length * 5 + prefs.getKeys().length + 5);
+      _resetProgress(animes.length * 5 + prefs.getKeys().length + 5, isRestore: false);
 
       final encoder = ziplib.ZipFileEncoder();
       encoder.create(tempZipPath);
@@ -207,33 +242,34 @@ class BackupService {
       try { await tempMetaFile.delete(); } catch (_) {}
       try { await tempAnimeFile.delete(); } catch (_) {}
 
+      progress.value = BackupProgress(
+        current: _totalItems, total: _totalItems,
+        status: 'جاري حفظ ملف ZIP...', isRestore: false,
+      );
+
       final saveResult = await _saveLargeFileToDisk(
-        tempZipPath,
-        'anime_memory_backup_$ts.zip',
+        tempZipPath, 'anime_memory_backup_$ts.zip',
       );
       try { await File(tempZipPath).delete(); } catch (_) {}
 
-      try {
-        await _notif.showCompleted(body: 'تم إنشاء النسخة وحفظها بنجاح.');
-      } catch (_) {}
-
+      try { await _notif.showCompleted(body: 'تم إنشاء النسخة وحفظها بنجاح.'); } catch (_) {}
+      _clearProgress();
       return saveResult;
     } catch (e) {
       try { await tempMetaFile.delete(); } catch (_) {}
       try { await tempAnimeFile.delete(); } catch (_) {}
       try { await File(tempZipPath).delete(); } catch (_) {}
       try { await _notif.showFailed(body: 'حدث خطأ: $e'); } catch (_) {}
+      _clearProgress();
       return 'فشل إنشاء النسخة الاحتياطية: $e';
     }
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // 2️⃣ استعادة النسخة الشاملة
-  // ══════════════════════════════════════════════════════════════
   Future<String> restoreBackup() async {
     final createdFiles = <File>[];
 
     try {
+      _resetProgress(1, isRestore: true);
       try {
         await _notif.showProgress(
           title: 'جارٍ استعادة النسخة...',
@@ -252,12 +288,13 @@ class BackupService {
       );
       if (selection == null || selection.files.isEmpty) {
         try { await _notif.cancelProgress(); } catch (_) {}
+        _clearProgress();
         return 'تم إلغاء الاستعادة.';
       }
 
       final sourcePath = selection.files.single.path;
-      if (sourcePath == null) return 'تعذر الوصول إلى الملف.';
-      if (!await File(sourcePath).exists()) return 'الملف غير موجود.';
+      if (sourcePath == null) { _clearProgress(); return 'تعذر الوصول إلى الملف.'; }
+      if (!await File(sourcePath).exists()) { _clearProgress(); return 'الملف غير موجود.'; }
 
       final inputStream = ziplib.InputFileStream(sourcePath);
       final archive = ziplib.ZipDecoder().decodeStream(inputStream);
@@ -281,7 +318,7 @@ class BackupService {
       Map<String, dynamic>? metadataDecoded;
       List<dynamic>? animeDecoded;
       final ts = DateTime.now().millisecondsSinceEpoch;
-      _resetProgress(archive.length);
+      _resetProgress(archive.length, isRestore: true);
 
       for (final file in archive) {
         if (!file.isFile) continue;
@@ -296,7 +333,6 @@ class BackupService {
             bytes = Uint8List.fromList(content);
           }
           if (bytes == null) continue;
-
           if (name == 'metadata.json') {
             metadataDecoded = jsonDecode(utf8.decode(bytes));
           } else {
@@ -344,6 +380,7 @@ class BackupService {
 
       if (metadataDecoded == null || animeDecoded == null) {
         await _cleanup(createdFiles);
+        _clearProgress();
         try { await _notif.showFailed(body: 'النسخة غير مكتملة.'); } catch (_) {}
         return 'النسخة غير مكتملة.';
       }
@@ -358,10 +395,8 @@ class BackupService {
       for (final anime in animes) {
         final c = coverAssets[anime.id];
         anime.imagePath = c is String ? restoredPaths[c] : null;
-
         final bc = backCoverAssets[anime.id];
         anime.backImagePath = bc is String ? restoredPaths[bc] : null;
-
         final v = videoAssets[anime.id];
         anime.videoPath = v is String ? restoredPaths[v] : null;
 
@@ -372,7 +407,6 @@ class BackupService {
             ch['imagePath'] = restoredPaths[assetName];
           }
         }
-
         for (final scene in anime.scenes) {
           final sPath = scene['imagePath'] as String?;
           if (sPath != null && sPath.startsWith('backup://')) {
@@ -385,6 +419,7 @@ class BackupService {
       final saved = await StorageService().saveAnimes(animes);
       if (!saved) {
         await _cleanup(createdFiles);
+        _clearProgress();
         try { await _notif.showFailed(body: 'تعذر حفظ البيانات.'); } catch (_) {}
         return 'تعذر حفظ بيانات الأنميات.';
       }
@@ -398,21 +433,17 @@ class BackupService {
         if (p != null) await prefs.setString(entry.key, p);
       }
 
-      try {
-        await _notif.showCompleted(body: 'تم استعادة ${animes.length} أنمي بنجاح.');
-      } catch (_) {}
-
+      try { await _notif.showCompleted(body: 'تم استعادة ${animes.length} أنمي بنجاح.'); } catch (_) {}
+      _clearProgress();
       return '✅ تمت استعادة جميع البيانات بنجاح.';
     } catch (e) {
       await _cleanup(createdFiles);
+      _clearProgress();
       try { await _notif.showFailed(body: 'خطأ أثناء الاستعادة: $e'); } catch (_) {}
       return 'فشلت الاستعادة: $e';
     }
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // 3️⃣ 🆕 نسخة خفيفة (شخصيات + أغلفة + بيانات — بدون فيديو/مشاهد/ذكريات)
-  // ══════════════════════════════════════════════════════════════
   Future<String> createLiteBackup() async {
     final tempDir = await getTemporaryDirectory();
     final ts = DateTime.now().millisecondsSinceEpoch;
@@ -421,17 +452,9 @@ class BackupService {
     final tempAnimeFile = File('${tempDir.path}/lite_animes_$ts.json');
 
     try {
-      try {
-        await _notif.showProgress(
-          title: 'جارٍ إنشاء النسخة الخفيفة...',
-          body: 'تجهيز البيانات...',
-          progress: 0,
-          total: 1,
-        );
-      } catch (_) {}
-
+      _resetProgress(1, isRestore: false);
       final animes = await StorageService().loadAnimes();
-      _resetProgress(animes.length * 2 + 5);
+      _resetProgress(animes.length * 3 + 5, isRestore: false);
 
       final encoder = ziplib.ZipFileEncoder();
       encoder.create(tempZipPath);
@@ -491,10 +514,8 @@ class BackupService {
         }
         item['characters'] = updatedCharacters;
 
-        // ❌ لا فيديو، لا مشاهد
         item['videoPath'] = null;
         item['scenes'] = <Map<String, dynamic>>[];
-
         animeJson.add(item);
       }
 
@@ -517,37 +538,26 @@ class BackupService {
       try { await tempAnimeFile.delete(); } catch (_) {}
 
       final saveResult = await _saveLargeFileToDisk(
-        tempZipPath,
-        'anime_memory_lite_backup_$ts.zip',
+        tempZipPath, 'anime_memory_lite_backup_$ts.zip',
       );
       try { await File(tempZipPath).delete(); } catch (_) {}
 
-      try { await _notif.showCompleted(body: 'تم إنشاء النسخة الخفيفة.'); } catch (_) {}
+      _clearProgress();
       return saveResult;
     } catch (e) {
       try { await tempMetaFile.delete(); } catch (_) {}
       try { await tempAnimeFile.delete(); } catch (_) {}
       try { await File(tempZipPath).delete(); } catch (_) {}
-      try { await _notif.showFailed(body: 'خطأ: $e'); } catch (_) {}
+      _clearProgress();
       return 'فشل إنشاء النسخة الخفيفة: $e';
     }
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // 4️⃣ 🆕 استعادة النسخة الخفيفة
-  // ══════════════════════════════════════════════════════════════
   Future<String> restoreLiteBackup() async {
     final createdFiles = <File>[];
 
     try {
-      try {
-        await _notif.showProgress(
-          title: 'جارٍ استعادة النسخة الخفيفة...',
-          body: 'اختيار الملف...',
-          progress: 0,
-          total: 1,
-        );
-      } catch (_) {}
+      _resetProgress(1, isRestore: true);
 
       final selection = await FilePicker.platform.pickFiles(
         dialogTitle: 'اختر النسخة الخفيفة',
@@ -557,13 +567,13 @@ class BackupService {
         allowMultiple: false,
       );
       if (selection == null || selection.files.isEmpty) {
-        try { await _notif.cancelProgress(); } catch (_) {}
+        _clearProgress();
         return 'تم إلغاء الاستعادة.';
       }
 
       final sourcePath = selection.files.single.path;
-      if (sourcePath == null) return 'تعذر الوصول إلى الملف.';
-      if (!await File(sourcePath).exists()) return 'الملف غير موجود.';
+      if (sourcePath == null) { _clearProgress(); return 'تعذر الوصول إلى الملف.'; }
+      if (!await File(sourcePath).exists()) { _clearProgress(); return 'الملف غير موجود.'; }
 
       final inputStream = ziplib.InputFileStream(sourcePath);
       final archive = ziplib.ZipDecoder().decodeStream(inputStream);
@@ -578,7 +588,7 @@ class BackupService {
       Map<String, dynamic>? metadataDecoded;
       List<dynamic>? animeDecoded;
       final ts = DateTime.now().millisecondsSinceEpoch;
-      _resetProgress(archive.length);
+      _resetProgress(archive.length, isRestore: true);
 
       for (final file in archive) {
         if (!file.isFile) continue;
@@ -620,6 +630,7 @@ class BackupService {
 
       if (metadataDecoded == null || animeDecoded == null) {
         await _cleanup(createdFiles);
+        _clearProgress();
         return 'النسخة غير مكتملة.';
       }
 
@@ -632,7 +643,6 @@ class BackupService {
         if (c is String && restoredPaths[c] != null) anime.imagePath = restoredPaths[c];
         final bc = backCoverAssets[anime.id];
         if (bc is String && restoredPaths[bc] != null) anime.backImagePath = restoredPaths[bc];
-
         for (final ch in anime.characters) {
           final chPath = ch['imagePath'] as String?;
           if (chPath != null && chPath.startsWith('backup://')) {
@@ -646,14 +656,15 @@ class BackupService {
       final saved = await StorageService().saveAnimes(animes);
       if (!saved) {
         await _cleanup(createdFiles);
+        _clearProgress();
         return 'تعذر حفظ البيانات.';
       }
 
-      try { await _notif.showCompleted(body: 'تم استعادة ${animes.length} أنمي (خفيفة).'); } catch (_) {}
-      return '✅ تمت استعادة النسخة الخفيفة (بيانات + أغلفة + شخصيات) بنجاح.';
+      _clearProgress();
+      return '✅ تمت استعادة النسخة الخفيفة بنجاح.';
     } catch (e) {
       await _cleanup(createdFiles);
-      try { await _notif.showFailed(body: 'خطأ: $e'); } catch (_) {}
+      _clearProgress();
       return 'فشلت الاستعادة: $e';
     }
   }
@@ -666,10 +677,7 @@ class BackupService {
         subject: 'نسخة احتياطية - ذاكرة الأوتاكو',
         text: 'احفظ هذه النسخة في التنزيلات أو Google Drive.',
       );
-
-      if (result.status == ShareResultStatus.dismissed) {
-        return 'تم إلغاء حفظ النسخة.';
-      }
+      if (result.status == ShareResultStatus.dismissed) return 'تم إلغاء حفظ النسخة.';
       return '✅ تم إنشاء النسخة. تم فتح نافذة المشاركة لحفظها.';
     } catch (e) {
       try {
