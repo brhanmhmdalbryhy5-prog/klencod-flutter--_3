@@ -745,6 +745,7 @@ class BackupService {
       Map<String, dynamic>? metadata;
       List<dynamic>? animeList;
       final ts = DateTime.now().millisecondsSinceEpoch;
+      int fileIndex = 0; // 🆕 عداد لتوليد أسماء فريدة وقصيرة
 
       for (final file in archive) {
         _checkCancelled();
@@ -773,32 +774,30 @@ class BackupService {
           continue;
         }
 
+        fileIndex++; // 🆕 زيادة العداد
+
         String? targetPath;
         String label = 'استعادة ملف';
+        final ext = _extension(name);
+        final unique = '${ts}_$fileIndex'; // 🆕 اسم قصير وفريد
 
         if (name.startsWith('covers/')) {
-          targetPath =
-              '${coversDir.path}/r_${ts}_${_sanitize(name.split('/').last)}';
+          targetPath = '${coversDir.path}/cover_$unique.$ext';
           label = 'غلاف';
         } else if (name.startsWith('videos/')) {
-          targetPath =
-              '${videosDir.path}/r_${ts}_${_sanitize(name.split('/').last)}';
+          targetPath = '${videosDir.path}/video_$unique.$ext';
           label = 'فيديو';
         } else if (name.startsWith('char_imgs/')) {
-          targetPath =
-              '${charImgsDir.path}/r_${ts}_${_sanitize(name.split('/').last)}';
+          targetPath = '${charImgsDir.path}/char_$unique.$ext';
           label = 'شخصية';
         } else if (name.startsWith('characters/')) {
-          targetPath =
-              '${charsDir.path}/r_${ts}_${_sanitize(name.split('/').last)}';
+          targetPath = '${charsDir.path}/saved_char_$unique.$ext';
           label = 'شخصية';
         } else if (name.startsWith('scenes/')) {
-          targetPath =
-              '${scenesDir.path}/r_${ts}_${_sanitize(name.split('/').last)}';
+          targetPath = '${scenesDir.path}/scene_$unique.$ext';
           label = 'مشهد';
         } else if (name.startsWith('memories/')) {
-          targetPath =
-              '${memDir.path}/r_${ts}_${_sanitize(name.split('/').last)}';
+          targetPath = '${memDir.path}/memory_$unique.$ext';
           label = 'ذكرى';
         }
 
@@ -976,6 +975,7 @@ class BackupService {
       Map<String, dynamic>? metadata;
       List<dynamic>? animeList;
       final ts = DateTime.now().millisecondsSinceEpoch;
+      int fileIndex = 0; // 🆕 عداد لتوليد أسماء فريدة وقصيرة
 
       for (final file in archive) {
         _checkCancelled();
@@ -1004,15 +1004,18 @@ class BackupService {
           continue;
         }
 
+        fileIndex++; // 🆕 زيادة العداد
+
         String? targetPath;
         String label = 'استعادة ملف';
+        final ext = _extension(name);
+        final unique = '${ts}_$fileIndex'; // 🆕 اسم قصير وفريد
+
         if (name.startsWith('covers/')) {
-          targetPath =
-              '${coversDir.path}/lite_r_${ts}_${_sanitize(name.split('/').last)}';
+          targetPath = '${coversDir.path}/lite_cover_$unique.$ext';
           label = 'غلاف';
         } else if (name.startsWith('char_imgs/')) {
-          targetPath =
-              '${charImgsDir.path}/lite_r_${ts}_${_sanitize(name.split('/').last)}';
+          targetPath = '${charImgsDir.path}/lite_char_$unique.$ext';
           label = 'شخصية';
         }
 
@@ -1129,7 +1132,7 @@ class BackupService {
       // إذا فشل (مثلاً Google Drive) → انتقل للمشاركة
     }
 
-    // 2. احتياطي: نافذة المشاركة (API متوافق مع share_plus 7-9)
+    // 2. احتياطي: نافذة المشاركة
     try {
       final result = await Share.shareXFiles(
         [XFile(tempPath)],
