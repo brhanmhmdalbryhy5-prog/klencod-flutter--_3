@@ -32,10 +32,14 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   static const String _sortKey = 'anime_library_sort';
   static const String _viewKey = 'anime_library_view';
+  static const String _swipeKey = 'anime_swipe_enabled';
 
   // 🆕 تحديد متعدد
   bool _selectionMode = false;
   final Set<String> _selectedAnimeIds = {};
+
+  // 🆕 تفعيل السحب
+  bool _swipeEnabled = true;
 
   final List<String> allGenres = const [
     'أكشن', 'مغامرة', 'كوميدي', 'دراما', 'فانتازيا', 'رعب',
@@ -46,8 +50,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
     'ألعاب', 'فنون قتالية', 'ساموراي', 'شياطين', 'إيسيكاي',
   ];
 
-  List<Anime> animes = [];        // فقط الرئيسية
-  List<Anime> _allAnimes = [];    // كل شيء (بما فيها المواسم)
+  List<Anime> animes = [];
+  List<Anime> _allAnimes = [];
   String selectedStatus = 'الكل';
   String selectedType = 'الكل';
   double selectedRatingFilter = 0;
@@ -97,6 +101,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       setState(() {
         sortMode = prefs.getString(_sortKey) ?? 'newest';
         viewMode = prefs.getInt(_viewKey) ?? 0;
+        _swipeEnabled = prefs.getBool(_swipeKey) ?? true;
       });
     } catch (_) {}
   }
@@ -106,6 +111,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_sortKey, sortMode);
       await prefs.setInt(_viewKey, viewMode);
+      await prefs.setBool(_swipeKey, _swipeEnabled);
     } catch (_) {}
   }
 
@@ -144,7 +150,153 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   // ══════════════════════════════════════════════════════════════
-  // 🆕 منطق التحديد المتعدد
+  // 🆕 Swipe Actions
+  // ══════════════════════════════════════════════════════════════
+  Future<void> _incrementWatched(Anime anime) async {
+    if (anime.episodes > 0 && anime.watchedEpisodes >= anime.episodes) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ هذا الأنمي مكتمل بالفعل'),
+            duration: Duration(seconds: 1),
+          ),
+        );
+      }
+      return;
+    }
+
+    HapticFeedback.lightImpact();
+    final allAnimes = await storage.loadAnimes();
+    final idx = allAnimes.indexWhere((a) => a.id == anime.id);
+    if (idx == -1) return;
+
+    allAnimes[idx].watchedEpisodes++;
+    final isNowComplete = anime.episodes > 0 &&
+        allAnimes[idx].watchedEpisodes >= anime.episodes;
+    if (isNowComplete) allAnimes[idx].status = 'مكتمل';
+    await storage.saveAnimes(allAnimes);
+    await loadAnimes();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(isNowComplete
+              ? '🎉 اكتمل ${anime.title}!'
+              : '➕ ${anime.title}: ${allAnimes[idx].watchedEpisodes}/${anime.episodes}'),
+          duration: const Duration(milliseconds: 1200),
+          backgroundColor: isNowComplete ? Colors.green : Colors.blue,
+        ),
+      );
+    }
+  }
+
+  // 🆕 تقييم سريع بالنجوم
+  Future<void> _quickSetRating(Anime anime, double newRating) async {
+    HapticFeedback.selectionClick();
+    final allAnimes = await storage.loadAnimes();
+    final idx = allAnimes.indexWhere((a) => a.id == anime.id);
+    if (idx == -1) return;
+
+    // إذا نفس التقييم → مسحه (إلغاء)
+    if ((allAnimes[idx].rating - newRating).abs() < 0.1) {
+      allAnimes[idx].rating = 0;
+    } else {
+      allAnimes[idx].rating = newRating;
+    }
+    await storage.saveAnimes(allAnimes);
+    await loadAnimes();
+  }
+
+  // 🆕 غلاف للسحب
+  Widget _wrapWithSwipe(Anime anime, Widget child) {
+    if (_selectionMode || !_swipeEnabled) return child;
+
+    return Dismissible(
+      key: ValueKey('swipe_${anime.id}'),
+      direction: DismissDirection.horizontal,
+      background: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFF5364).withOpacity(0.9),
+          borderRadius: BorderRadius.circular(18),
+        ),
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 24),
+        child: const Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.favorite, color: Colors.white, size: 32),
+            SizedBox(height: 4),
+            Text('المفضلة',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold)),
+          ],
+        ),
+      ),
+      secondaryBackground: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: Colors.green.withOpacity(0.9),
+          borderRadius: BorderRadius.circular(18),
+        ),
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.only(left: 24),
+        child: const Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.add_circle, color: Colors.white, size: 32),
+            SizedBox(height: 4),
+            Text('+1 حلقة',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold)),
+          ],
+        ),
+      ),
+      confirmDismiss: (direction) async {
+        if (direction == DismissDirection.startToEnd) {
+          await _incrementWatched(anime);
+        } else if (direction == DismissDirection.endToStart) {
+          await toggleFavorite(anime);
+        }
+        return false;
+      },
+      child: child,
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // 🆕 نجوم التقييم السريع
+  // ══════════════════════════════════════════════════════════════
+  Widget _buildQuickRating(Anime anime, {bool lightText = false}) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(5, (index) {
+        final starValue = (index + 1) * 2.0;
+        final isFilled = anime.rating >= starValue - 0.5;
+        return GestureDetector(
+          onTap: () => _quickSetRating(anime, starValue),
+          behavior: HitTestBehavior.opaque,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 1, vertical: 2),
+            child: Icon(
+              isFilled ? Icons.star : Icons.star_border,
+              color: const Color(0xFFFFC857),
+              size: 16,
+            ),
+          ),
+        );
+      }),
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // منطق التحديد المتعدد
   // ══════════════════════════════════════════════════════════════
   void _toggleSelectionMode() {
     HapticFeedback.selectionClick();
@@ -252,26 +404,23 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   // ══════════════════════════════════════════════════════════════
-  // 🆕 منطق الفلترة (مع إصلاح "قيد المشاهدة")
+  // منطق الفلترة
   // ══════════════════════════════════════════════════════════════
   List<Anime> get filteredAnimes {
     final query = searchText.trim().toLowerCase();
 
-    // 🆕 مصدر البيانات: يشمل المواسم في "قيد المشاهدة"
     final List<Anime> sourceList;
     if (selectedStatus == 'قيد المشاهدة (تقدم)') {
       sourceList = _allAnimes.where((a) {
         final hasProgress = a.watchedEpisodes > 0 &&
             (a.episodes == 0 || a.watchedEpisodes < a.episodes);
         if (a.parentId == null) {
-          // أنمي رئيسي: له تقدم أم لا، أو أي موسم له تقدم
           if (hasProgress) return true;
           return _allAnimes.any((s) =>
               s.parentId == a.id &&
               s.watchedEpisodes > 0 &&
               (s.episodes == 0 || s.watchedEpisodes < s.episodes));
         } else {
-          // موسم: فقط إذا كان له تقدم
           return hasProgress;
         }
       }).toList();
@@ -572,7 +721,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
-  // 🆕 معالج النقر (يدعم وضع التحديد)
   void _onCardTap(Anime anime) {
     if (_selectionMode) {
       _toggleAnimeSelection(anime.id);
@@ -590,7 +738,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     if (mounted) await loadAnimes();
   }
 
-  // 🆕 checkbox للتحديد
   Widget _selectionCheckbox(Anime anime) {
     final isSelected = _selectedAnimeIds.contains(anime.id);
     return Container(
@@ -645,26 +792,23 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   Future<void> toggleFavorite(Anime anime) async {
     HapticFeedback.selectionClick();
-    final oldValue = anime.favorite;
-    setState(() => anime.favorite = !oldValue);
-
     final allAnimes = await storage.loadAnimes();
     final idx = allAnimes.indexWhere((a) => a.id == anime.id);
-    if (idx != -1) {
-      allAnimes[idx].favorite = anime.favorite;
-    }
+    if (idx == -1) return;
+
+    allAnimes[idx].favorite = !allAnimes[idx].favorite;
+    final isFav = allAnimes[idx].favorite;
     final saved = await storage.saveAnimes(allAnimes);
+    await loadAnimes();
 
     if (!mounted) return;
-    if (!saved) {
-      setState(() => anime.favorite = oldValue);
+    if (saved) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(isFav ? '❤️ أضيف إلى المفضلة' : 'أزيل من المفضلة'),
+          duration: const Duration(milliseconds: 1000)));
+    } else {
       ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('تعذر حفظ التغيير')));
-    } else {
-      setState(() {});
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(
-              anime.favorite ? 'أضيف إلى المفضلة' : 'أزيل من المفضلة')));
     }
   }
 
@@ -1282,6 +1426,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           _buildAnimeTitle(anime.title),
+                          const SizedBox(height: 4),
+                          _buildQuickRating(anime),
                           const SizedBox(height: 6),
                           Text(
                               anime.genre.isEmpty
@@ -1301,19 +1447,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                           ],
                           Row(
                             children: [
-                              if (anime.rating > 0) ...[
-                                const SizedBox(height: 5),
-                                const Icon(Icons.star,
-                                    size: 16,
-                                    color: Color(0xFFFFC857)),
-                                const SizedBox(width: 4),
-                                Text(
-                                    '${anime.rating.toStringAsFixed(1)}/10',
-                                    style:
-                                        const TextStyle(fontSize: 12)),
-                              ],
                               if (anime.globalRating != null) ...[
-                                const SizedBox(width: 10),
                                 const SizedBox(height: 5),
                                 const Icon(Icons.public,
                                     size: 14, color: Colors.cyan),
@@ -1415,44 +1549,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _buildAnimeTitle(anime.title, fontSize: 13),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
+                  _buildQuickRating(anime),
+                  const SizedBox(height: 2),
                   Text(
                       anime.genre.isEmpty ? 'بدون تصنيف' : anime.genre,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                           color: Colors.white54, fontSize: 11)),
-                  Row(
-                    children: [
-                      if (anime.releaseYear != null) ...[
-                        const SizedBox(height: 4),
-                        Text('${anime.releaseYear}',
-                            style: const TextStyle(
-                                fontSize: 11,
-                                color: Colors.white54))
-                      ],
-                      if (anime.rating > 0) ...[
-                        const SizedBox(width: 8),
-                        const SizedBox(height: 4),
-                        const Icon(Icons.star,
-                            size: 14, color: Color(0xFFFFC857)),
-                        const SizedBox(width: 3),
-                        Text('${anime.rating.toStringAsFixed(1)}',
-                            style: const TextStyle(fontSize: 11))
-                      ],
-                      if (anime.globalRating != null) ...[
-                        const SizedBox(width: 8),
-                        const SizedBox(height: 4),
-                        const Icon(Icons.public,
-                            size: 12, color: Colors.cyan),
-                        const SizedBox(width: 3),
-                        Text(
-                            '${anime.globalRating!.toStringAsFixed(1)}',
-                            style: const TextStyle(
-                                fontSize: 11, color: Colors.cyan))
-                      ],
-                    ],
-                  ),
                   _buildProgressBar(anime),
                 ],
               ),
@@ -1523,7 +1628,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
-  // 🆕 إصلاح: البطاقة السينمائية تدعم النقر + التحديد
   Widget _buildCinematicCard(Anime anime) {
     final imagePath = anime.imagePath;
 
@@ -1588,18 +1692,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                 style: const TextStyle(
                                     color: Colors.white70,
                                     fontSize: 12))),
-                        if (anime.rating > 0)
-                          Row(children: [
-                            const Icon(Icons.star,
-                                size: 16, color: Color(0xFFFFC857)),
-                            const SizedBox(width: 4),
-                            Text(
-                                '${anime.rating.toStringAsFixed(1)}',
-                                style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold))
-                          ]),
+                        _buildQuickRating(anime, lightText: true),
                       ],
                     ),
                     _buildProgressBar(anime, onImage: true),
@@ -1675,6 +1768,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       children: [
                         _buildAnimeTitle(anime.title, fontSize: 14),
                         const SizedBox(height: 4),
+                        _buildQuickRating(anime),
+                        const SizedBox(height: 4),
                         Text(
                             anime.genre.isEmpty
                                 ? 'بدون تصنيف'
@@ -1686,15 +1781,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       ],
                     ),
                   ),
-                  if (anime.rating > 0) ...[
-                    const Icon(Icons.star,
-                        size: 14, color: Color(0xFFFFC857)),
-                    const SizedBox(width: 4),
-                    Text(anime.rating.toStringAsFixed(1),
-                        style: const TextStyle(
-                            color: Colors.white, fontSize: 12)),
-                    const SizedBox(width: 10),
-                  ],
                   if (!_selectionMode) _animeMenu(anime),
                 ],
               ),
@@ -1787,18 +1873,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
   Widget _buildToolbar() {
     IconData getViewIcon() {
       switch (viewMode) {
-        case 0:
-          return Icons.view_agenda_outlined;
-        case 1:
-          return Icons.grid_view_rounded;
-        case 2:
-          return Icons.apps;
-        case 3:
-          return Icons.view_carousel_outlined;
-        case 4:
-          return Icons.view_headline;
-        default:
-          return Icons.view_agenda_outlined;
+        case 0: return Icons.view_agenda_outlined;
+        case 1: return Icons.grid_view_rounded;
+        case 2: return Icons.apps;
+        case 3: return Icons.view_carousel_outlined;
+        case 4: return Icons.view_headline;
+        default: return Icons.view_agenda_outlined;
       }
     }
 
@@ -1812,23 +1892,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
               _saveLibraryPreferences();
             },
             itemBuilder: (context) => const [
-              PopupMenuItem(
-                  value: 'newest', child: Text('الأحدث إضافة')),
-              PopupMenuItem(
-                  value: 'oldest', child: Text('الأقدم إضافة')),
-              PopupMenuItem(
-                  value: 'titleAsc', child: Text('الاسم: أ ← ي')),
-              PopupMenuItem(
-                  value: 'titleDesc', child: Text('الاسم: ي ← أ')),
-              PopupMenuItem(
-                  value: 'rating', child: Text('الأعلى تقييمًا')),
-              PopupMenuItem(
-                  value: 'favorites', child: Text('المفضلة أولًا')),
+              PopupMenuItem(value: 'newest', child: Text('الأحدث إضافة')),
+              PopupMenuItem(value: 'oldest', child: Text('الأقدم إضافة')),
+              PopupMenuItem(value: 'titleAsc', child: Text('الاسم: أ ← ي')),
+              PopupMenuItem(value: 'titleDesc', child: Text('الاسم: ي ← أ')),
+              PopupMenuItem(value: 'rating', child: Text('الأعلى تقييمًا')),
+              PopupMenuItem(value: 'favorites', child: Text('المفضلة أولًا')),
               PopupMenuItem(value: 'random', child: Text('عشوائي 🎲')),
             ],
             child: Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 12, vertical: 11),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
               decoration: BoxDecoration(
                   color: const Color(0xFF1B1F28),
                   borderRadius: BorderRadius.circular(12),
@@ -1836,9 +1909,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
               child: Row(children: [
                 const Icon(Icons.sort, size: 19),
                 const SizedBox(width: 8),
-                Expanded(
-                    child: Text(sortLabel,
-                        overflow: TextOverflow.ellipsis)),
+                Expanded(child: Text(sortLabel, overflow: TextOverflow.ellipsis)),
                 const Icon(Icons.keyboard_arrow_down)
               ]),
             ),
@@ -1854,38 +1925,30 @@ class _LibraryScreenState extends State<LibraryScreen> {
             tooltip: 'تغيير العرض',
             onPressed: () {
               HapticFeedback.lightImpact();
-              setState(() {
-                viewMode = (viewMode + 1) % 5;
-              });
+              setState(() => viewMode = (viewMode + 1) % 5);
               _saveLibraryPreferences();
             },
-            icon: Icon(getViewIcon(),
-                color: const Color(0xFFFFC857)),
+            icon: Icon(getViewIcon(), color: const Color(0xFFFFC857)),
           ),
         ),
         const SizedBox(width: 10),
-        // 🆕 زر التحديد المتعدد
         Container(
           decoration: BoxDecoration(
-            color: _selectionMode
-                ? primaryColorNotifier.value
-                : const Color(0xFF1B1F28),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
               color: _selectionMode
                   ? primaryColorNotifier.value
-                  : Colors.white12,
-              width: _selectionMode ? 2 : 1,
-            ),
-          ),
+                  : const Color(0xFF1B1F28),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                  color: _selectionMode
+                      ? primaryColorNotifier.value
+                      : Colors.white12,
+                  width: _selectionMode ? 2 : 1)),
           child: IconButton(
             tooltip: _selectionMode ? 'إلغاء التحديد' : 'تحديد متعدد',
             onPressed: _toggleSelectionMode,
             icon: Icon(
               _selectionMode ? Icons.close : Icons.checklist,
-              color: _selectionMode
-                  ? Colors.white
-                  : const Color(0xFFFFC857),
+              color: _selectionMode ? Colors.white : const Color(0xFFFFC857),
             ),
           ),
         ),
@@ -1934,7 +1997,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
-  // 🆕 شريط الإجراءات السفلي في وضع التحديد
   Widget _buildSelectionActionBar(Color primaryColor) {
     return Positioned(
       bottom: 16,
@@ -1945,8 +2007,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         decoration: BoxDecoration(
           color: const Color(0xFF1B1F28),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-              color: primaryColor.withOpacity(0.6), width: 2),
+          border: Border.all(color: primaryColor.withOpacity(0.6), width: 2),
           boxShadow: [
             BoxShadow(
                 color: primaryColor.withOpacity(0.4),
@@ -1959,11 +2020,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
             Icon(Icons.check_circle, color: primaryColor, size: 24),
             const SizedBox(width: 10),
             Expanded(
-              child: Text(
-                '${_selectedAnimeIds.length} محدد',
-                style: const TextStyle(
-                    fontWeight: FontWeight.bold, fontSize: 14),
-              ),
+              child: Text('${_selectedAnimeIds.length} محدد',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 14)),
             ),
             if (_selectedAnimeIds.isNotEmpty)
               IconButton(
@@ -1975,19 +2034,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
             IconButton(
               tooltip: 'تحديد الكل',
               onPressed: _selectAllVisible,
-              icon: const Icon(Icons.select_all,
-                  color: Colors.cyan, size: 20),
+              icon: const Icon(Icons.select_all, color: Colors.cyan, size: 20),
             ),
             const SizedBox(width: 4),
             FilledButton.icon(
               style: FilledButton.styleFrom(
                 backgroundColor: primaryColor,
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               ),
-              onPressed: _selectedAnimeIds.isEmpty
-                  ? null
-                  : _markSelectedAsCompleted,
+              onPressed: _selectedAnimeIds.isEmpty ? null : _markSelectedAsCompleted,
               icon: const Icon(Icons.done_all, size: 18),
               label: Text('إكمال (${_selectedAnimeIds.length})',
                   style: const TextStyle(fontSize: 11)),
@@ -2021,8 +2076,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
               const Icon(Icons.video_library_outlined,
                   size: 50, color: Colors.white38),
               const SizedBox(height: 12),
-              Text(
-                  animes.isEmpty ? 'مكتبتك فارغة' : 'لا توجد نتائج مطابقة',
+              Text(animes.isEmpty ? 'مكتبتك فارغة' : 'لا توجد نتائج مطابقة',
                   style: const TextStyle(
                       fontSize: 17, fontWeight: FontWeight.bold)),
               const SizedBox(height: 6),
@@ -2040,36 +2094,40 @@ class _LibraryScreenState extends State<LibraryScreen> {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: items.length,
-              gridDelegate:
-                  const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 10,
-                      mainAxisSpacing: 12,
-                      childAspectRatio: 0.58),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 12,
+                  childAspectRatio: 0.55),
               itemBuilder: (context, index) =>
-                  _buildGridCard(items[index]));
+                  _wrapWithSwipe(items[index], _buildGridCard(items[index])));
         case 2:
           return GridView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: items.length,
-              gridDelegate:
-                  const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 3,
-                      crossAxisSpacing: 8,
-                      mainAxisSpacing: 8,
-                      childAspectRatio: 0.6),
-              itemBuilder: (context, index) =>
-                  _buildCompactGridCard(items[index]));
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                  childAspectRatio: 0.6),
+              itemBuilder: (context, index) => _wrapWithSwipe(
+                  items[index], _buildCompactGridCard(items[index])));
         case 3:
           return Column(
-              children: items.map(_buildCinematicCard).toList());
+              children: items
+                  .map((a) => _wrapWithSwipe(a, _buildCinematicCard(a)))
+                  .toList());
         case 4:
           return Column(
-              children: items.map(_buildCompactListCard).toList());
+              children: items
+                  .map((a) => _wrapWithSwipe(a, _buildCompactListCard(a)))
+                  .toList());
         case 0:
         default:
-          return Column(children: items.map(_buildRowCard).toList());
+          return Column(
+              children:
+                  items.map((a) => _wrapWithSwipe(a, _buildRowCard(a))).toList());
       }
     }
 
@@ -2085,8 +2143,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     duration: const Duration(milliseconds: 500),
                     curve: Curves.easeInOut);
               },
-              child: const Icon(Icons.keyboard_arrow_up,
-                  color: Colors.white),
+              child: const Icon(Icons.keyboard_arrow_up, color: Colors.white),
             )
           : null,
       body: Stack(
@@ -2110,8 +2167,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       style: TextStyle(
                           fontSize: 27, fontWeight: FontWeight.w900)),
                   const SizedBox(height: 6),
-                  Text(
-                      'كل أعمالك في مكان واحد • ${animes.length} أنمي',
+                  Text('كل أعمالك في مكان واحد • ${animes.length} أنمي',
                       style: const TextStyle(color: Colors.white60)),
                   const SizedBox(height: 22),
                   Row(
@@ -2167,17 +2223,14 @@ class _LibraryScreenState extends State<LibraryScreen> {
                               color: primaryColor.withOpacity(0.4))),
                       child: Row(
                         children: [
-                          Icon(Icons.filter_alt,
-                              color: primaryColor, size: 18),
+                          Icon(Icons.filter_alt, color: primaryColor, size: 18),
                           const SizedBox(width: 8),
                           Expanded(
-                            child: Text(
-                              'فلتر متقدم نشط',
-                              style: TextStyle(
-                                  color: primaryColor,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold),
-                            ),
+                            child: Text('فلتر متقدم نشط',
+                                style: TextStyle(
+                                    color: primaryColor,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold)),
                           ),
                           GestureDetector(
                             onTap: () {
@@ -2227,14 +2280,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     child: ListView(
                       scrollDirection: Axis.horizontal,
                       children: [
-                        'الكل',
-                        'مكتمل',
-                        'أتابعه',
-                        'مخطط له',
-                        'متوقف',
-                        'المفضلة',
-                        'جُلب تلقائياً',
-                        'بدون تصنيف',
+                        'الكل', 'مكتمل', 'أتابعه', 'مخطط له', 'متوقف',
+                        'المفضلة', 'جُلب تلقائياً', 'بدون تصنيف',
                         'قيد المشاهدة (تقدم)'
                       ].map((status) {
                         final selected = selectedStatus == status;
@@ -2246,9 +2293,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                             selectedColor: primaryColor,
                             backgroundColor: const Color(0xFF1B1F28),
                             side: BorderSide(
-                                color: selected
-                                    ? primaryColor
-                                    : Colors.white12),
+                                color: selected ? primaryColor : Colors.white12),
                             onSelected: (_) {
                               HapticFeedback.selectionClick();
                               setState(() => selectedStatus = status);
@@ -2264,14 +2309,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     child: ListView(
                       scrollDirection: Axis.horizontal,
                       children: [
-                        'كل التقييمات',
-                        '10', '9.5', '9', '8.5', '8', '7.5', '7',
-                        '6.5', '6', '5.5', '5', '4.5', '4', '3.5', '3',
+                        'كل التقييمات', '10', '9.5', '9', '8.5', '8', '7.5',
+                        '7', '6.5', '6', '5.5', '5', '4.5', '4', '3.5', '3',
                         '2.5', '2', '1.5', '1', '0.5'
                       ].map((rate) {
-                        final val = rate == 'كل التقييمات'
-                            ? 0.0
-                            : double.parse(rate);
+                        final val =
+                            rate == 'كل التقييمات' ? 0.0 : double.parse(rate);
                         final selected = selectedRatingFilter == val;
                         return Padding(
                           padding: const EdgeInsets.only(left: 8),
@@ -2285,13 +2328,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                     ? const Color(0xFFFFC857)
                                     : Colors.white12),
                             labelStyle: TextStyle(
-                                color: selected
-                                    ? Colors.black
-                                    : Colors.white),
+                                color:
+                                    selected ? Colors.black : Colors.white),
                             onSelected: (_) {
                               HapticFeedback.selectionClick();
-                              setState(
-                                  () => selectedRatingFilter = val);
+                              setState(() => selectedRatingFilter = val);
                             },
                           ),
                         );
