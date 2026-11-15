@@ -7,9 +7,9 @@ import '../services/anime_api_service.dart';
 import '../services/bulk_download_service.dart';
 import '../services/storage_service.dart';
 import '../services/video_compression_service.dart';
-import '../services/data_health_service.dart';
 import '../services/export_service.dart';
 import 'trash_screen.dart';
+import 'data_health_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -23,7 +23,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool autoDarkMode = false;
   bool backupBusy = false;
   bool autoFetchEnabled = false;
-  bool isCheckingHealth = false;
   bool isCompressing = false;
   bool isClassifying = false;
 
@@ -70,9 +69,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     themeNotifier.value = value ? ThemeMode.dark : ThemeMode.light;
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // 🆕 فرز الأفلام تلقائياً
-  // ══════════════════════════════════════════════════════════════
   Future<void> _autoClassifyMovies() async {
     if (isClassifying) return;
 
@@ -225,33 +221,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } finally {
       if (mounted) setState(() => isClassifying = false);
     }
-  }
-
-  Future<void> _checkHealth() async {
-    if (isCheckingHealth) return;
-    setState(() => isCheckingHealth = true);
-    final result = await DataHealthService().checkAndFix();
-    if (!mounted) return;
-    setState(() => isCheckingHealth = false);
-
-    await showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF1B1F28),
-        title: const Text('تقرير فحص البيانات'),
-        content: Text(
-          'إجمالي الأنميات: ${result.totalAnimes}\n\n'
-          '✅ تم إصلاح ${result.fixedPaths} مسار (صور/فيديو مفقود).\n'
-          '⚠️ عدد التنبيهات: ${result.issues.length}',
-          style: const TextStyle(height: 1.6),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('حسناً'))
-        ],
-      ),
-    );
   }
 
   Future<void> _compressAllVideos() async {
@@ -1318,7 +1287,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
             const SizedBox(height: 12),
 
-            // 🆕 زر فرز الأفلام
             _settingsTile(
                 icon: Icons.movie_filter,
                 color: const Color(0xFFF39C12),
@@ -1337,19 +1305,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     : _autoClassifyMovies),
 
             const SizedBox(height: 10),
+            
+            // 🆕 الزر المعدل - يفتح الشاشة الجديدة
             _settingsTile(
                 icon: Icons.health_and_safety_outlined,
                 color: Colors.tealAccent,
                 title: 'فحص صحة البيانات',
-                subtitle: 'يبحث عن صور/فيديوات مفقودة ويصلحها',
-                trailing: isCheckingHealth
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.chevron_left,
-                        color: Colors.white38),
-                onTap: isCheckingHealth ? null : _checkHealth),
+                subtitle: 'تقرير شامل مع رسوم بيانية وإصلاح تلقائي',
+                trailing:
+                    const Icon(Icons.chevron_left, color: Colors.white38),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const DataHealthScreen()),
+                  );
+                }),
+
             const SizedBox(height: 10),
             _settingsTile(
                 icon: Icons.compress,
