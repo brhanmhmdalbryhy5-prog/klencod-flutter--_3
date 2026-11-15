@@ -190,15 +190,59 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
-  // 🆕 تقييم سريع بالنجوم
+  // 🆕 تقييم سريع بالنجوم (10 نجوم مع رسالة تأكيد)
   Future<void> _quickSetRating(Anime anime, double newRating) async {
     HapticFeedback.selectionClick();
+
+    final isSameRating = (anime.rating - newRating).abs() < 0.1;
+
+    // 🆕 رسالة تأكيد قبل تغيير التقييم
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF1B1F28),
+        title: Row(
+          children: [
+            Icon(
+              isSameRating ? Icons.star_border : Icons.star,
+              color: const Color(0xFFFFC857),
+            ),
+            const SizedBox(width: 8),
+            Text(isSameRating ? 'إلغاء التقييم' : 'تأكيد التقييم'),
+          ],
+        ),
+        content: Text(
+          isSameRating
+              ? 'سيتم إزالة التقييم الحالي (${anime.rating.toStringAsFixed(1)}) '
+                  'من "${anime.title}".\n\nهل تريد المتابعة؟'
+              : 'سيتم تغيير تقييم "${anime.title}"\n'
+                  'من ${anime.rating.toStringAsFixed(1)} '
+                  'إلى ${newRating.toStringAsFixed(1)} من 10.\n\n'
+                  'هل تريد المتابعة؟',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: primaryColorNotifier.value,
+            ),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('تأكيد'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
     final allAnimes = await storage.loadAnimes();
     final idx = allAnimes.indexWhere((a) => a.id == anime.id);
     if (idx == -1) return;
 
-    // إذا نفس التقييم → مسحه (إلغاء)
-    if ((allAnimes[idx].rating - newRating).abs() < 0.1) {
+    if (isSameRating) {
       allAnimes[idx].rating = 0;
     } else {
       allAnimes[idx].rating = newRating;
@@ -271,23 +315,23 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   // ══════════════════════════════════════════════════════════════
-  // 🆕 نجوم التقييم السريع
+  // 🆕 نجوم التقييم السريع (10 نجوم)
   // ══════════════════════════════════════════════════════════════
   Widget _buildQuickRating(Anime anime, {bool lightText = false}) {
     return Row(
       mainAxisSize: MainAxisSize.min,
-      children: List.generate(5, (index) {
-        final starValue = (index + 1) * 2.0;
+      children: List.generate(10, (index) {
+        final starValue = (index + 1) * 1.0; // 10 نجوم = قيم من 1.0 إلى 10.0
         final isFilled = anime.rating >= starValue - 0.5;
         return GestureDetector(
           onTap: () => _quickSetRating(anime, starValue),
           behavior: HitTestBehavior.opaque,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 1, vertical: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 2),
             child: Icon(
               isFilled ? Icons.star : Icons.star_border,
               color: const Color(0xFFFFC857),
-              size: 16,
+              size: 14,
             ),
           ),
         );
