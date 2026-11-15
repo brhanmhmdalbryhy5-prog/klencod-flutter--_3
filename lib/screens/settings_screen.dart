@@ -26,6 +26,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool isCompressing = false;
   bool isClassifying = false;
 
+  // 🆕 حالة الأقسام القابلة للطي (التخصيص مفتوح افتراضياً)
+  final Set<String> _expandedSections = {'customization'};
+
   final AnimeApiService apiService = AnimeApiService();
   final BulkDownloadService bulkService = BulkDownloadService();
   final StorageService storage = StorageService();
@@ -69,7 +72,83 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   // ══════════════════════════════════════════════════════════════
-  // 🆕 فتح نافذة النسخ الاحتياطي الكاملة
+  // 🆕 Widget لقسم قابل للطي
+  // ══════════════════════════════════════════════════════════════
+  Widget _buildSection({
+    required String id,
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+    required List<Widget> children,
+  }) {
+    final isExpanded = _expandedSections.contains(id);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1B1F28),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: color.withOpacity(0.35), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+              color: color.withOpacity(0.15), blurRadius: 20, spreadRadius: 2),
+        ],
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: isExpanded,
+          onExpansionChanged: (value) {
+            setState(() {
+              if (value) {
+                _expandedSections.add(id);
+              } else {
+                _expandedSections.remove(id);
+              }
+            });
+          },
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          childrenPadding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
+          iconColor: color,
+          collapsedIconColor: color,
+          leading: Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [color.withOpacity(0.3), color.withOpacity(0.1)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: color.withOpacity(0.5)),
+            ),
+            child: Icon(icon, color: color, size: 22),
+          ),
+          title: Text(
+            title,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: color,
+              fontSize: 16,
+            ),
+          ),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              subtitle,
+              style: const TextStyle(color: Colors.white54, fontSize: 11),
+            ),
+          ),
+          children: children,
+        ),
+      ),
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // التنقل للنسخ الاحتياطي
   // ══════════════════════════════════════════════════════════════
   Future<void> runBackupAction({required bool restore}) async {
     if (restore) {
@@ -96,7 +175,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (confirmed != true || !mounted) return;
     }
 
-    // 🆕 فتح الشاشة الكاملة بدلاً من Dialog
     await Navigator.push(
       context,
       MaterialPageRoute(
@@ -130,7 +208,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (ok != true || !mounted) return;
     }
 
-    // 🆕 فتح الشاشة الكاملة
     await Navigator.push(
       context,
       MaterialPageRoute(
@@ -196,15 +273,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.movie_filter, size: 50, color: Colors.orangeAccent),
+              const Icon(Icons.movie_filter,
+                  size: 50, color: Colors.orangeAccent),
               const SizedBox(height: 16),
               const Text('جاري فرز الأفلام...',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  style:
+                      TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
               const SizedBox(height: 12),
               ValueListenableBuilder<String>(
                 valueListenable: currentNotifier,
                 builder: (context, value, _) => Text(value,
-                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    style:
+                        const TextStyle(color: Colors.white70, fontSize: 12),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center),
@@ -215,7 +295,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 builder: (context, value, _) => ClipRRect(
                   borderRadius: BorderRadius.circular(8),
                   child: LinearProgressIndicator(
-                    value: value, minHeight: 10,
+                    value: value,
+                    minHeight: 10,
                     backgroundColor: Colors.white12,
                     valueColor: AlwaysStoppedAnimation<Color>(
                         primaryColorNotifier.value),
@@ -248,8 +329,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             final idx = animes.indexWhere((a) => a.id == anime.id);
             if (idx != -1) {
               animes[idx].format = fetchedFormat;
-              if (fetchedFormat == 'MOVIE') classifiedMovies++;
-              else classifiedSeries++;
+              if (fetchedFormat == 'MOVIE') {
+                classifiedMovies++;
+              } else {
+                classifiedSeries++;
+              }
             }
           } else {
             failed++;
@@ -274,7 +358,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             '🎬 تم تصنيف $classifiedMovies كفيلم مستقل.\n'
             '📺 تم تصنيف $classifiedSeries كمسلسل.\n'
             '❌ فشل تصنيف $failed أنمي.\n\n'
-            '💡 الأفلام ظهرت الآن في تبويب "أفلام" داخل المكتبة.',
+            '💡 الأفلام ظهرت الآن في تبويب "أفلام".',
             style: const TextStyle(height: 1.8),
           ),
           actions: [
@@ -354,7 +438,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.compress, size: 50, color: Colors.purpleAccent),
+              const Icon(Icons.compress,
+                  size: 50, color: Colors.purpleAccent),
               const SizedBox(height: 16),
               const Text('جاري ضغط الفيديوهات...',
                   style:
@@ -540,7 +625,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (dialogContext) {
         return AlertDialog(
           backgroundColor: const Color(0xFF1B1F28),
-          title: const Text('اختر لون التطبيق', style: TextStyle(fontSize: 18)),
+          title:
+              const Text('اختر لون التطبيق', style: TextStyle(fontSize: 18)),
           content: SizedBox(
             width: double.maxFinite,
             height: 450,
@@ -609,7 +695,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             children: fonts.map((font) {
               return ListTile(
                 title: Text(font,
-                    style: TextStyle(fontFamily: font, color: Colors.white)),
+                    style:
+                        TextStyle(fontFamily: font, color: Colors.white)),
                 trailing: fontNotifier.value == font
                     ? const Icon(Icons.check, color: Colors.green)
                     : null,
@@ -640,12 +727,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           backgroundColor: const Color(0xFF1B1F28),
           title: const Text('اختر لون اسم الأنمي'),
           content: Wrap(
-            spacing: 10, runSpacing: 10,
+            spacing: 10,
+            runSpacing: 10,
             children: colors.map((color) {
               return GestureDetector(
                 onTap: () => Navigator.pop(dialogContext, color),
                 child: Container(
-                  width: 50, height: 50,
+                  width: 50,
+                  height: 50,
                   decoration: BoxDecoration(
                       color: color,
                       shape: BoxShape.circle,
@@ -1016,7 +1105,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   // ══════════════════════════════════════════════════════════════
-  // الواجهة
+  // الواجهة الرئيسية
   // ══════════════════════════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
@@ -1032,13 +1121,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return ListView(
           padding: const EdgeInsets.all(18),
           children: [
+            // ─── الرأس ───────────────────────────────────
             const Text('الإعدادات',
                 style:
                     TextStyle(fontSize: 28, fontWeight: FontWeight.w900)),
             const SizedBox(height: 7),
             const Text('تحكّم في تطبيقك وبياناتك.',
                 style: TextStyle(color: Colors.white60)),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
+
+            // ─── بطاقة التطبيق ───────────────────────────
             Container(
               padding: const EdgeInsets.all(19),
               decoration: BoxDecoration(
@@ -1059,7 +1151,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ]),
               child: const Row(
                 children: [
-                  Icon(Icons.shield_outlined, size: 46, color: Colors.white),
+                  Icon(Icons.shield_outlined,
+                      size: 46, color: Colors.white),
                   SizedBox(width: 14),
                   Expanded(
                       child: Column(
@@ -1077,8 +1170,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
 
+            const SizedBox(height: 16),
+
+            // ─── شريط التحميل النشط (يظهر فقط أثناء التحميل) ────
             if (isDownloading) ...[
-              const SizedBox(height: 20),
               Container(
                 padding: const EdgeInsets.all(15),
                 decoration: BoxDecoration(
@@ -1123,322 +1218,357 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               foregroundColor: Colors.redAccent,
                               side: const BorderSide(
                                   color: Colors.redAccent)),
-                          icon: const Icon(Icons.stop_circle_outlined),
+                          icon:
+                              const Icon(Icons.stop_circle_outlined),
                           label: const Text('إيقاف العملية')),
                     ),
                   ],
                 ),
               ),
+              const SizedBox(height: 16),
             ],
 
-            const SizedBox(height: 25),
-            const Text('التخصيص',
-                style:
-                    TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 12),
-
-            _settingsTile(
-                icon: Icons.dark_mode_outlined,
-                color: primaryColor,
-                title: 'الوضع الليلي التلقائي',
-                subtitle: autoDarkMode
-                    ? 'مُفعّل (يتغير حسب وقت اليوم)'
-                    : 'معطّل',
-                trailing: Switch(
-                    value: autoDarkMode,
-                    activeColor: primaryColor,
-                    onChanged: _toggleAutoDark),
-                onTap: null),
-            const SizedBox(height: 10),
-            _settingsTile(
-                icon: Icons.palette_outlined,
-                color: primaryColor,
-                title: 'المظهر اليدوي',
-                subtitle: darkMode ? 'الوضع الداكن' : 'الوضع الفاتح',
-                trailing: Switch(
-                    value: darkMode,
-                    activeColor: primaryColor,
-                    onChanged: autoDarkMode ? null : _toggleTheme),
-                onTap: null),
-            const SizedBox(height: 10),
-            _settingsTile(
-                icon: Icons.color_lens_outlined,
-                color: primaryColor,
-                title: 'لون التطبيق',
-                subtitle: 'تغيير اللون الأساسي',
-                trailing:
-                    const Icon(Icons.chevron_left, color: Colors.white38),
-                onTap: _showColorPicker),
-            const SizedBox(height: 10),
-            _settingsTile(
-                icon: Icons.font_download_outlined,
-                color: primaryColor,
-                title: 'خط اسم الأنمي',
-                subtitle: 'اختيار الخط المفضل',
-                trailing:
-                    const Icon(Icons.chevron_left, color: Colors.white38),
-                onTap: _showFontPicker),
-            const SizedBox(height: 10),
-            _settingsTile(
-                icon: Icons.format_color_text,
-                color: titleColorNotifier.value,
-                title: 'لون اسم الأنمي',
-                subtitle: 'تغيير لون النص',
-                trailing:
-                    const Icon(Icons.chevron_left, color: Colors.white38),
-                onTap: _showTitleColorPicker),
-
-            const SizedBox(height: 24),
-            const Text('التحميل والتحديث',
-                style:
-                    TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 12),
-            _settingsTile(
-                icon: Icons.sync,
-                color: const Color(0xFFFF9F43),
-                title: 'التحديث التلقائي عند فتح التطبيق',
-                subtitle: autoFetchEnabled
-                    ? 'مُفعّل'
-                    : 'معطّل (التطبيق لا يعمل إلا بأمرك)',
-                trailing: Switch(
-                    value: autoFetchEnabled,
-                    activeColor: primaryColor,
-                    onChanged: _toggleAutoFetch),
-                onTap: null),
-            const SizedBox(height: 10),
-            _settingsTile(
-                icon: Icons.cloud_download_outlined,
-                color: const Color(0xFF3A91B5),
-                title: 'تحميل شامل (بيانات + صور + مواسم)',
-                subtitle: 'يجلب كل شيء ويحفظه محلياً',
-                trailing:
-                    const Icon(Icons.chevron_left, color: Colors.white38),
-                onTap: isDownloading ? null : _startBulkDownload),
-            const SizedBox(height: 10),
-            _settingsTile(
-                icon: Icons.groups_outlined,
-                color: Colors.purpleAccent,
-                title: 'تحميل المواسم والشخصيات فقط',
-                subtitle:
-                    'يجلب المواسم والأفلام دون تعديل بيانات الأنمي الأصلي',
-                trailing:
-                    const Icon(Icons.chevron_left, color: Colors.white38),
-                onTap: isDownloading
-                    ? null
-                    : _startSeasonsAndCharactersDownload),
-            const SizedBox(height: 10),
-            _settingsTile(
-                icon: Icons.movie_filter_outlined,
-                color: const Color(0xFFE67E22),
-                title: 'جلب المواسم والأفلام فقط',
-                subtitle:
-                    'يجلب المواسم والأفلام المرتبطة فقط (بدون شخصيات)',
-                trailing:
-                    const Icon(Icons.chevron_left, color: Colors.white38),
-                onTap: isDownloading ? null : _startSeasonsOnlyDownload),
-            const SizedBox(height: 10),
-            _settingsTile(
-                icon: Icons.people_alt_outlined,
-                color: Colors.purpleAccent,
-                title: 'جلب شخصيات الأنمي فقط',
-                subtitle: 'يجلب شخصيات الأنمي الأصلي فقط (بدون مواسم)',
-                trailing:
-                    const Icon(Icons.chevron_left, color: Colors.white38),
-                onTap: isDownloading ? null : _startCharactersOnlyDownload),
-            const SizedBox(height: 10),
-            _settingsTile(
-                icon: Icons.image_outlined,
-                color: const Color(0xFF9B59B6),
-                title: 'تحميل الصور المفقودة فقط',
-                subtitle: 'يحمل الصور غير المحفوظة',
-                trailing:
-                    const Icon(Icons.chevron_left, color: Colors.white38),
-                onTap: isDownloading ? null : _startImagesDownload),
-            const SizedBox(height: 10),
-            _settingsTile(
-                icon: Icons.auto_fix_high,
-                color: const Color(0xFF00BFA5),
-                title: 'تنشيط صور الشخصيات والمواسم',
-                subtitle:
-                    'يجلب كل صورة مفقودة (أغلفة + شخصيات) لكل الأنميات والمواسم',
-                trailing:
-                    const Icon(Icons.chevron_left, color: Colors.white38),
-                onTap: isDownloading ? null : _startMissingImagesDownload),
-            const SizedBox(height: 10),
-            _settingsTile(
-                icon: Icons.collections,
-                color: const Color(0xFF00ACC1),
-                title: 'جلب صور الأنمي (ملصقات)',
-                subtitle: 'يجلب صور ترويجية لكل أنمي',
-                trailing:
-                    const Icon(Icons.chevron_left, color: Colors.white38),
-                onTap: isDownloading ? null : _startScenesDownload),
-
-            const SizedBox(height: 24),
-            const Text('أدوات الصيانة والفرز',
-                style:
-                    TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 12),
-
-            _settingsTile(
-                icon: Icons.movie_filter,
-                color: const Color(0xFFF39C12),
-                title: 'فرز الأفلام تلقائياً',
-                subtitle:
-                    'يفحص كل الأنمي ويصنف الأفلام المستقلة في تبويب "أفلام"',
-                trailing: isClassifying
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.chevron_left,
+            // ═══════════════════════════════════════════════
+            // 1️⃣ قسم التخصيص
+            // ═══════════════════════════════════════════════
+            _buildSection(
+              id: 'customization',
+              title: 'التخصيص',
+              subtitle: 'المظهر والألوان والخطوط',
+              icon: Icons.palette_outlined,
+              color: primaryColor,
+              children: [
+                _settingsTile(
+                    icon: Icons.dark_mode_outlined,
+                    color: primaryColor,
+                    title: 'الوضع الليلي التلقائي',
+                    subtitle: autoDarkMode
+                        ? 'مُفعّل (يتغير حسب وقت اليوم)'
+                        : 'معطّل',
+                    trailing: Switch(
+                        value: autoDarkMode,
+                        activeColor: primaryColor,
+                        onChanged: _toggleAutoDark),
+                    onTap: null),
+                const SizedBox(height: 10),
+                _settingsTile(
+                    icon: Icons.palette_outlined,
+                    color: primaryColor,
+                    title: 'المظهر اليدوي',
+                    subtitle: darkMode ? 'الوضع الداكن' : 'الوضع الفاتح',
+                    trailing: Switch(
+                        value: darkMode,
+                        activeColor: primaryColor,
+                        onChanged: autoDarkMode ? null : _toggleTheme),
+                    onTap: null),
+                const SizedBox(height: 10),
+                _settingsTile(
+                    icon: Icons.color_lens_outlined,
+                    color: primaryColor,
+                    title: 'لون التطبيق',
+                    subtitle: 'تغيير اللون الأساسي',
+                    trailing: const Icon(Icons.chevron_left,
                         color: Colors.white38),
-                onTap: (isClassifying || isDownloading)
-                    ? null
-                    : _autoClassifyMovies),
-
-            const SizedBox(height: 10),
-            _settingsTile(
-                icon: Icons.health_and_safety_outlined,
-                color: Colors.tealAccent,
-                title: 'فحص صحة البيانات',
-                subtitle: 'تقرير شامل مع رسوم بيانية وإصلاح تلقائي',
-                trailing:
-                    const Icon(Icons.chevron_left, color: Colors.white38),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const DataHealthScreen()),
-                  );
-                }),
-
-            const SizedBox(height: 10),
-            _settingsTile(
-                icon: Icons.compress,
-                color: const Color(0xFF9C27B0),
-                title: 'ضغط الفيديوهات التذكارية',
-                subtitle: 'يقلل حجم الفيديوهات 50-70% لتوفير المساحة',
-                trailing: isCompressing
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.chevron_left,
+                    onTap: _showColorPicker),
+                const SizedBox(height: 10),
+                _settingsTile(
+                    icon: Icons.font_download_outlined,
+                    color: primaryColor,
+                    title: 'خط اسم الأنمي',
+                    subtitle: 'اختيار الخط المفضل',
+                    trailing: const Icon(Icons.chevron_left,
                         color: Colors.white38),
-                onTap: (isCompressing || isDownloading)
-                    ? null
-                    : _compressAllVideos),
+                    onTap: _showFontPicker),
+                const SizedBox(height: 10),
+                _settingsTile(
+                    icon: Icons.format_color_text,
+                    color: titleColorNotifier.value,
+                    title: 'لون اسم الأنمي',
+                    subtitle: 'تغيير لون النص',
+                    trailing: const Icon(Icons.chevron_left,
+                        color: Colors.white38),
+                    onTap: _showTitleColorPicker),
+              ],
+            ),
 
-            const SizedBox(height: 10),
-            _settingsTile(
-                icon: Icons.delete_sweep_outlined,
-                color: const Color(0xFFFF5A65),
-                title: 'مسح جميع التصنيفات',
-                subtitle: 'حذف التصنيفات من جميع الأنميات',
-                trailing:
-                    const Icon(Icons.chevron_left, color: Colors.white38),
-                onTap: _clearAllGenres),
-            const SizedBox(height: 10),
-            _settingsTile(
-                icon: Icons.delete_outline,
-                color: const Color(0xFFFFB74D),
-                title: 'سلة المهملات',
-                subtitle: 'استعادة الأنميات المحذوفة',
-                trailing:
-                    const Icon(Icons.chevron_left, color: Colors.white38),
-                onTap: () {
-                  Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => const TrashScreen()));
-                }),
+            // ═══════════════════════════════════════════════
+            // 2️⃣ قسم التحميل والتحديث
+            // ═══════════════════════════════════════════════
+            _buildSection(
+              id: 'downloads',
+              title: 'التحميل والتحديث',
+              subtitle: 'جلب البيانات والصور من الإنترنت',
+              icon: Icons.cloud_download_outlined,
+              color: const Color(0xFF3A91B5),
+              children: [
+                _settingsTile(
+                    icon: Icons.sync,
+                    color: const Color(0xFFFF9F43),
+                    title: 'التحديث التلقائي عند فتح التطبيق',
+                    subtitle: autoFetchEnabled
+                        ? 'مُفعّل'
+                        : 'معطّل (التطبيق لا يعمل إلا بأمرك)',
+                    trailing: Switch(
+                        value: autoFetchEnabled,
+                        activeColor: primaryColor,
+                        onChanged: _toggleAutoFetch),
+                    onTap: null),
+                const SizedBox(height: 10),
+                _settingsTile(
+                    icon: Icons.cloud_download_outlined,
+                    color: const Color(0xFF3A91B5),
+                    title: 'تحميل شامل',
+                    subtitle: 'بيانات + صور + مواسم + شخصيات',
+                    trailing: const Icon(Icons.chevron_left,
+                        color: Colors.white38),
+                    onTap: isDownloading ? null : _startBulkDownload),
+                const SizedBox(height: 10),
+                _settingsTile(
+                    icon: Icons.groups_outlined,
+                    color: Colors.purpleAccent,
+                    title: 'تحميل المواسم والشخصيات فقط',
+                    subtitle:
+                        'يجلب المواسم والأفلام دون تعديل بيانات الأنمي',
+                    trailing: const Icon(Icons.chevron_left,
+                        color: Colors.white38),
+                    onTap: isDownloading
+                        ? null
+                        : _startSeasonsAndCharactersDownload),
+                const SizedBox(height: 10),
+                _settingsTile(
+                    icon: Icons.movie_filter_outlined,
+                    color: const Color(0xFFE67E22),
+                    title: 'جلب المواسم والأفلام فقط',
+                    subtitle: 'بدون شخصيات',
+                    trailing: const Icon(Icons.chevron_left,
+                        color: Colors.white38),
+                    onTap: isDownloading
+                        ? null
+                        : _startSeasonsOnlyDownload),
+                const SizedBox(height: 10),
+                _settingsTile(
+                    icon: Icons.people_alt_outlined,
+                    color: Colors.purpleAccent,
+                    title: 'جلب شخصيات الأنمي فقط',
+                    subtitle: 'بدون مواسم',
+                    trailing: const Icon(Icons.chevron_left,
+                        color: Colors.white38),
+                    onTap: isDownloading
+                        ? null
+                        : _startCharactersOnlyDownload),
+                const SizedBox(height: 10),
+                _settingsTile(
+                    icon: Icons.image_outlined,
+                    color: const Color(0xFF9B59B6),
+                    title: 'تحميل الصور المفقودة فقط',
+                    subtitle: 'يحمل الصور غير المحفوظة',
+                    trailing: const Icon(Icons.chevron_left,
+                        color: Colors.white38),
+                    onTap: isDownloading ? null : _startImagesDownload),
+                const SizedBox(height: 10),
+                _settingsTile(
+                    icon: Icons.auto_fix_high,
+                    color: const Color(0xFF00BFA5),
+                    title: 'تنشيط صور الشخصيات والمواسم',
+                    subtitle:
+                        'يجلب كل صورة مفقودة لكل الأنميات والمواسم',
+                    trailing: const Icon(Icons.chevron_left,
+                        color: Colors.white38),
+                    onTap: isDownloading
+                        ? null
+                        : _startMissingImagesDownload),
+                const SizedBox(height: 10),
+                _settingsTile(
+                    icon: Icons.collections,
+                    color: const Color(0xFF00ACC1),
+                    title: 'جلب صور الأنمي (ملصقات)',
+                    subtitle: 'صور ترويجية لكل أنمي',
+                    trailing: const Icon(Icons.chevron_left,
+                        color: Colors.white38),
+                    onTap: isDownloading ? null : _startScenesDownload),
+              ],
+            ),
 
-            const SizedBox(height: 24),
-            const Text('النسخ الاحتياطي والتصدير',
-                style:
-                    TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 12),
+            // ═══════════════════════════════════════════════
+            // 3️⃣ قسم أدوات الصيانة والفرز
+            // ═══════════════════════════════════════════════
+            _buildSection(
+              id: 'maintenance',
+              title: 'أدوات الصيانة والفرز',
+              subtitle: 'فحص، ضغط، فرز، وتنظيف',
+              icon: Icons.build_circle_outlined,
+              color: const Color(0xFFF39C12),
+              children: [
+                _settingsTile(
+                    icon: Icons.movie_filter,
+                    color: const Color(0xFFF39C12),
+                    title: 'فرز الأفلام تلقائياً',
+                    subtitle:
+                        'يفحص كل الأنمي ويصنف الأفلام المستقلة في تبويب "أفلام"',
+                    trailing: isClassifying
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2))
+                        : const Icon(Icons.chevron_left,
+                            color: Colors.white38),
+                    onTap: (isClassifying || isDownloading)
+                        ? null
+                        : _autoClassifyMovies),
+                const SizedBox(height: 10),
+                _settingsTile(
+                    icon: Icons.health_and_safety_outlined,
+                    color: Colors.tealAccent,
+                    title: 'فحص صحة البيانات',
+                    subtitle: 'تقرير شامل مع رسوم بيانية وإصلاح تلقائي',
+                    trailing: const Icon(Icons.chevron_left,
+                        color: Colors.white38),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const DataHealthScreen()),
+                      );
+                    }),
+                const SizedBox(height: 10),
+                _settingsTile(
+                    icon: Icons.compress,
+                    color: const Color(0xFF9C27B0),
+                    title: 'ضغط الفيديوهات التذكارية',
+                    subtitle: 'يقلل حجم الفيديوهات 50-70%',
+                    trailing: isCompressing
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2))
+                        : const Icon(Icons.chevron_left,
+                            color: Colors.white38),
+                    onTap: (isCompressing || isDownloading)
+                        ? null
+                        : _compressAllVideos),
+                const SizedBox(height: 10),
+                _settingsTile(
+                    icon: Icons.delete_sweep_outlined,
+                    color: const Color(0xFFFF5A65),
+                    title: 'مسح جميع التصنيفات',
+                    subtitle: 'حذف التصنيفات من جميع الأنميات',
+                    trailing: const Icon(Icons.chevron_left,
+                        color: Colors.white38),
+                    onTap: _clearAllGenres),
+                const SizedBox(height: 10),
+                _settingsTile(
+                    icon: Icons.delete_outline,
+                    color: const Color(0xFFFFB74D),
+                    title: 'سلة المهملات',
+                    subtitle: 'استعادة الأنميات المحذوفة',
+                    trailing: const Icon(Icons.chevron_left,
+                        color: Colors.white38),
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const TrashScreen()));
+                    }),
+              ],
+            ),
 
-            // 🆕 النسخة الشاملة - تفتح النافذة الكاملة
-            _settingsTile(
-                icon: Icons.backup_outlined,
-                color: const Color(0xFF35B77A),
-                title: 'إنشاء نسخة احتياطية شاملة',
-                subtitle:
-                    'كل شيء (بيانات + صور + شخصيات + مشاهد + فيديوهات)',
-                trailing:
-                    const Icon(Icons.chevron_left, color: Colors.white38),
-                onTap: () => runBackupAction(restore: false)),
+            // ═══════════════════════════════════════════════
+            // 4️⃣ قسم النسخ الاحتياطي والتصدير
+            // ═══════════════════════════════════════════════
+            _buildSection(
+              id: 'backup',
+              title: 'النسخ الاحتياطي والتصدير',
+              subtitle: 'حماية بياناتك واسترجاعها',
+              icon: Icons.backup_outlined,
+              color: const Color(0xFF35B77A),
+              children: [
+                _settingsTile(
+                    icon: Icons.backup_outlined,
+                    color: const Color(0xFF35B77A),
+                    title: 'إنشاء نسخة احتياطية شاملة',
+                    subtitle:
+                        'كل شيء (بيانات + صور + شخصيات + مشاهد + فيديوهات)',
+                    trailing: const Icon(Icons.chevron_left,
+                        color: Colors.white38),
+                    onTap: () => runBackupAction(restore: false)),
+                const SizedBox(height: 10),
+                _settingsTile(
+                    icon: Icons.settings_backup_restore,
+                    color: const Color(0xFFFFC857),
+                    title: 'استعادة النسخة الشاملة',
+                    subtitle: 'استرجاع كل شيء',
+                    trailing: const Icon(Icons.chevron_left,
+                        color: Colors.white38),
+                    onTap: () => runBackupAction(restore: true)),
+                const SizedBox(height: 10),
+                _settingsTile(
+                    icon: Icons.backup_outlined,
+                    color: const Color(0xFF2196F3),
+                    title: 'نسخة خفيفة',
+                    subtitle: 'بيانات + شخصيات + أغلفة (بدون فيديوهات)',
+                    trailing: const Icon(Icons.chevron_left,
+                        color: Colors.white38),
+                    onTap: () => _runLiteBackup(restore: false)),
+                const SizedBox(height: 10),
+                _settingsTile(
+                    icon: Icons.restore,
+                    color: const Color(0xFF03A9F4),
+                    title: 'استعادة النسخة الخفيفة',
+                    subtitle: 'استرجاع البيانات والأغلفة والشخصيات فقط',
+                    trailing: const Icon(Icons.chevron_left,
+                        color: Colors.white38),
+                    onTap: () => _runLiteBackup(restore: true)),
+                const SizedBox(height: 10),
+                _settingsTile(
+                    icon: Icons.ios_share,
+                    color: const Color(0xFF00BCD4),
+                    title: 'تصدير المكتبة',
+                    subtitle: 'PDF احترافي أو CSV (Excel) أو Markdown',
+                    trailing: const Icon(Icons.chevron_left,
+                        color: Colors.white38),
+                    onTap: _showExportDialog),
+              ],
+            ),
 
-            const SizedBox(height: 10),
-            // 🆕 الاستعادة الشاملة - تفتح النافذة الكاملة
-            _settingsTile(
-                icon: Icons.settings_backup_restore,
-                color: const Color(0xFFFFC857),
-                title: 'استعادة النسخة الشاملة',
-                subtitle: 'استرجاع كل شيء',
-                trailing:
-                    const Icon(Icons.chevron_left, color: Colors.white38),
-                onTap: () => runBackupAction(restore: true)),
+            // ═══════════════════════════════════════════════
+            // 5️⃣ قسم حول التطبيق
+            // ═══════════════════════════════════════════════
+            _buildSection(
+              id: 'about',
+              title: 'حول التطبيق',
+              subtitle: 'معلومات وترخيص',
+              icon: Icons.info_outline,
+              color: const Color(0xFFFFC857),
+              children: [
+                _settingsTile(
+                    icon: Icons.info_outline,
+                    color: const Color(0xFFFFC857),
+                    title: 'عن ذاكرة الأوتاكو',
+                    subtitle: 'معلومات عن التطبيق',
+                    trailing: const Icon(Icons.chevron_left,
+                        color: Colors.white38),
+                    onTap: showAbout),
+              ],
+            ),
 
-            const SizedBox(height: 10),
-            // 🆕 النسخة الخفيفة - تفتح النافذة الكاملة
-            _settingsTile(
-                icon: Icons.backup_outlined,
-                color: const Color(0xFF2196F3),
-                title: 'نسخة خفيفة (بيانات + شخصيات + أغلفة)',
-                subtitle: 'بدون فيديوهات/مشاهد/ذكريات — أسرع وأصغر',
-                trailing:
-                    const Icon(Icons.chevron_left, color: Colors.white38),
-                onTap: () => _runLiteBackup(restore: false)),
-
-            const SizedBox(height: 10),
-            // 🆕 استعادة النسخة الخفيفة - تفتح النافذة الكاملة
-            _settingsTile(
-                icon: Icons.restore,
-                color: const Color(0xFF03A9F4),
-                title: 'استعادة النسخة الخفيفة',
-                subtitle: 'استرجاع البيانات والأغلفة والشخصيات فقط',
-                trailing:
-                    const Icon(Icons.chevron_left, color: Colors.white38),
-                onTap: () => _runLiteBackup(restore: true)),
-
-            const SizedBox(height: 10),
-            _settingsTile(
-                icon: Icons.ios_share,
-                color: const Color(0xFF00BCD4),
-                title: 'تصدير المكتبة',
-                subtitle: 'PDF احترافي أو CSV (Excel) أو Markdown',
-                trailing:
-                    const Icon(Icons.chevron_left, color: Colors.white38),
-                onTap: _showExportDialog),
-
-            const SizedBox(height: 24),
-            const Text('حول التطبيق',
-                style:
-                    TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 12),
-            _settingsTile(
-                icon: Icons.info_outline,
-                color: const Color(0xFFFFC857),
-                title: 'عن ذاكرة الأوتاكو',
-                subtitle: 'معلومات عن التطبيق',
-                trailing:
-                    const Icon(Icons.chevron_left, color: Colors.white38),
-                onTap: showAbout),
-            const SizedBox(height: 28),
+            const SizedBox(height: 20),
             const Center(
                 child: Text('صُنع للأوتاكو، ليحفظ كل ذكرى.',
                     textAlign: TextAlign.center,
                     style:
                         TextStyle(color: Colors.white38, fontSize: 12))),
+            const SizedBox(height: 10),
           ],
         );
       },
     );
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // Tiles (كما هي - لم تتغير)
+  // ══════════════════════════════════════════════════════════════
   Widget _settingsTile(
       {required IconData icon,
       required Color color,
@@ -1448,33 +1578,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
       required VoidCallback? onTap}) {
     return Container(
       decoration: BoxDecoration(
-          color: const Color(0xFF1B1F28),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withOpacity(0.4), width: 1),
-          boxShadow: [
-            BoxShadow(
-                color: color.withOpacity(0.3),
-                blurRadius: 15,
-                spreadRadius: 2)
-          ]),
+          color: const Color(0xFF111318),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: color.withOpacity(0.3), width: 1)),
       child: ListTile(
         onTap: onTap,
         contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         leading: Container(
-            width: 43,
-            height: 43,
+            width: 40,
+            height: 40,
             decoration: BoxDecoration(
                 color: color.withOpacity(0.14),
-                borderRadius: BorderRadius.circular(12)),
-            child: Icon(icon, color: color)),
+                borderRadius: BorderRadius.circular(10)),
+            child: Icon(icon, color: color, size: 20)),
         title: Text(title,
-            style: const TextStyle(fontWeight: FontWeight.bold)),
+            style: const TextStyle(
+                fontWeight: FontWeight.bold, fontSize: 13)),
         subtitle: Padding(
-            padding: const EdgeInsets.only(top: 4),
+            padding: const EdgeInsets.only(top: 3),
             child: Text(subtitle,
                 style: const TextStyle(
-                    color: Colors.white54, fontSize: 11))),
+                    color: Colors.white54, fontSize: 10))),
         trailing: trailing,
       ),
     );
