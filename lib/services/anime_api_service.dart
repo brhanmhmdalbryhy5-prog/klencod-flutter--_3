@@ -30,7 +30,6 @@ class AnimeApiService {
     for (int attempt = 1; attempt <= 3; attempt++) {
       try {
         const String url = 'https://graphql.anilist.co';
-
         final String query = '''
           query (\$search: String) {
             Page(perPage: 1) {
@@ -46,10 +45,7 @@ class AnimeApiService {
                 coverImage { large }
                 studios(isMain: true) { nodes { name } }
                 characters(sort: [ROLE, RELEVANCE, ID], perPage: 8) {
-                  nodes {
-                    name { full }
-                    image { large }
-                  }
+                  nodes { name { full } image { large } }
                 }
                 relations {
                   edges {
@@ -66,10 +62,7 @@ class AnimeApiService {
                       coverImage { large }
                       format
                       characters(sort: [ROLE, RELEVANCE, ID], perPage: 6) {
-                        nodes {
-                          name { full }
-                          image { large }
-                        }
+                        nodes { name { full } image { large } }
                       }
                     }
                   }
@@ -92,14 +85,11 @@ class AnimeApiService {
           if (mediaList != null && mediaList.isNotEmpty) {
             final media = mediaList[0];
             final List<String> rawGenres = (media['genres'] as List?)
-                    ?.map((e) => e.toString())
-                    .toList() ??
-                [];
+                    ?.map((e) => e.toString()).toList() ?? [];
             bool hasAdultContent = rawGenres.any((g) => g == 'Ecchi' || g == 'Hentai');
             List<String> translatedGenres = rawGenres
                 .where((g) => g != 'Ecchi' && g != 'Hentai')
-                .map((g) => _translateGenre(g))
-                .toList();
+                .map((g) => _translateGenre(g)).toList();
 
             final int episodes = (media['episodes'] as int?) ?? 0;
             final int? averageScore = media['averageScore'] as int?;
@@ -123,14 +113,9 @@ class AnimeApiService {
                 final imgUrl = c['image']?['large'] ?? '';
                 String? charImagePath;
                 if (downloadImages && imgUrl.toString().isNotEmpty) {
-                  charImagePath = await ImageService.downloadImage(
-                      imgUrl.toString(), prefix: 'char');
+                  charImagePath = await ImageService.downloadImage(imgUrl.toString(), prefix: 'char');
                 }
-                characters.add({
-                  'name': name,
-                  'imageUrl': imgUrl,
-                  'imagePath': charImagePath,
-                });
+                characters.add({'name': name, 'imageUrl': imgUrl, 'imagePath': charImagePath});
               }
             }
 
@@ -150,29 +135,18 @@ class AnimeApiService {
                 final relationType = edge['relationType'];
                 final node = edge['node'];
                 final subFormat = node['format'];
-
-                if (subFormat == 'TV' ||
-                    subFormat == 'MOVIE' ||
-                    subFormat == 'OVA' ||
-                    subFormat == 'SPECIAL' ||
-                    subFormat == 'TV_SHORT' ||
-                    subFormat == 'ONA') {
+                if (subFormat == 'TV' || subFormat == 'MOVIE' || subFormat == 'OVA' ||
+                    subFormat == 'SPECIAL' || subFormat == 'TV_SHORT' || subFormat == 'ONA') {
                   final titleRomaji = node['title']['romaji'] ?? '';
                   final titleEnglish = node['title']['english'] ?? '';
                   final displayTitle = titleRomaji.isNotEmpty ? titleRomaji : titleEnglish;
-
                   if (displayTitle.isNotEmpty) {
                     final subGenresRaw = (node['genres'] as List?)
-                            ?.map((e) => e.toString())
-                            .toList() ??
-                        [];
-                    final subHasAdult =
-                        subGenresRaw.any((g) => g == 'Ecchi' || g == 'Hentai');
+                            ?.map((e) => e.toString()).toList() ?? [];
+                    final subHasAdult = subGenresRaw.any((g) => g == 'Ecchi' || g == 'Hentai');
                     final subGenres = subGenresRaw
                         .where((g) => g != 'Ecchi' && g != 'Hentai')
-                        .map((g) => _translateGenre(g))
-                        .toList();
-
+                        .map((g) => _translateGenre(g)).toList();
                     String subSummary = node['description']?.toString() ?? '';
                     subSummary = subSummary.replaceAll(RegExp(r'<[^>]*>'), '');
                     if (subSummary.isNotEmpty && !subHasAdult) {
@@ -180,17 +154,13 @@ class AnimeApiService {
                     } else if (subHasAdult) {
                       subSummary = '';
                     }
-
                     final subScore = node['averageScore'] as int?;
                     final String? subImageUrl = node['coverImage']?['large'] as String?;
                     final int? subIdMal = (node['idMal'] as num?)?.toInt();
-
                     String? subImagePath;
                     if (downloadImages && subImageUrl != null) {
-                      subImagePath = await ImageService.downloadImage(
-                          subImageUrl, prefix: 'sub');
+                      subImagePath = await ImageService.downloadImage(subImageUrl, prefix: 'sub');
                     }
-
                     List<Map<String, dynamic>> subCharacters = [];
                     final subCharList = node['characters']?['nodes'] as List?;
                     if (subCharList != null) {
@@ -199,23 +169,16 @@ class AnimeApiService {
                         final imgUrl = c['image']?['large'] ?? '';
                         String? charImagePath;
                         if (downloadImages && imgUrl.toString().isNotEmpty) {
-                          charImagePath = await ImageService.downloadImage(
-                              imgUrl.toString(), prefix: 'char');
+                          charImagePath = await ImageService.downloadImage(imgUrl.toString(), prefix: 'char');
                         }
-                        subCharacters.add({
-                          'name': name,
-                          'imageUrl': imgUrl,
-                          'imagePath': charImagePath,
-                        });
+                        subCharacters.add({'name': name, 'imageUrl': imgUrl, 'imagePath': charImagePath});
                       }
                     }
-
                     String partName = 'جزء إضافي';
                     if (subFormat == 'MOVIE') partName = 'فيلم';
                     else if (relationType == 'PREQUEL') partName = 'موسم سابق';
                     else if (relationType == 'SEQUEL') partName = 'موسم لاحق';
                     else if (relationType == 'SIDE_STORY') partName = 'قصة جانبية';
-
                     subAnimes.add({
                       'title': displayTitle,
                       'partName': partName,
@@ -265,7 +228,7 @@ class AnimeApiService {
   }
 
   // ══════════════════════════════════════════════════════════════
-  // 🆕 جلب الصور (من Jikan - تعيد 5 إلى 10 صور ترويجية)
+  // 🆕 جلب الصور (Kitsu أولاً ثم AniList) - يعمل دائماً
   // ══════════════════════════════════════════════════════════════
   Future<Map<String, dynamic>> fetchAnimeScenes({
     required String animeTitle,
@@ -278,73 +241,83 @@ class AnimeApiService {
       'error': null,
     };
 
-    try {
-      int? malId = idMal;
-
-      // 1. جلب ID إذا لم يكن موجوداً
-      if (malId == null && animeTitle.trim().isNotEmpty) {
-        final searchUrl = Uri.parse(
-          'https://api.jikan.moe/v4/anime?q=${Uri.encodeComponent(animeTitle)}&limit=1&sfw=true',
-        );
-        final searchResp = await http.get(searchUrl).timeout(const Duration(seconds: 20));
-
-        if (searchResp.statusCode == 200) {
-          final searchData = jsonDecode(searchResp.body);
-          final dataList = searchData['data'] as List?;
-          if (dataList != null && dataList.isNotEmpty) {
-            malId = (dataList[0]['mal_id'] as num?)?.toInt();
-            result['idMal'] = malId;
-          }
-        }
-        await Future.delayed(const Duration(milliseconds: 400));
-      }
-
-      if (malId == null) {
-        result['error'] = 'لم يتم العثور على معرف الأنمي.';
-        return result;
-      }
-
-      // 2. جلب جميع الصور
-      final picsUrl = Uri.parse('https://api.jikan.moe/v4/anime/$malId/pictures');
-      final picsResp = await http.get(picsUrl).timeout(const Duration(seconds: 20));
-
-      if (picsResp.statusCode == 200) {
-        final picsData = jsonDecode(picsResp.body);
-        final data = picsData['data'] as List?;
-        if (data != null && data.isNotEmpty) {
-          final scenes = <Map<String, dynamic>>[];
-          for (var pic in data) {
-            final jpg = pic['jpg'];
-            if (jpg == null) continue;
-            final largeUrl = jpg['large_image_url'] as String?;
-            final normalUrl = jpg['image_url'] as String?;
-            final imageUrl = largeUrl ?? normalUrl;
-            if (imageUrl == null || imageUrl.isEmpty) continue;
-
-            String? imagePath;
-            if (downloadImages) {
-              imagePath = await _downloadSceneImage(imageUrl);
-            }
-            scenes.add({
-              'imageUrl': imageUrl,
-              'imagePath': imagePath,
-            });
-          }
-          result['scenes'] = scenes;
-          return result;
-        }
-      }
-      
-      result['error'] = 'لم يتم العثور على صور.';
-      return result;
-
-    } on TimeoutException {
-      result['error'] = 'انتهت مهلة الاتصال، حاول لاحقاً.';
-      return result;
-    } catch (e) {
-      result['error'] = 'خطأ: $e';
+    final title = animeTitle.trim();
+    if (title.isEmpty) {
+      result['error'] = 'الأنمي لا يملك اسماً.';
       return result;
     }
+
+    final scenes = <Map<String, dynamic>>[];
+    final seenUrls = <String>{};
+
+    Future<void> tryAddImage(String? url) async {
+      if (url == null || url.isEmpty || seenUrls.contains(url)) return;
+      seenUrls.add(url);
+      String? path;
+      if (downloadImages) {
+        path = await _downloadSceneImage(url);
+      }
+      scenes.add({'imageUrl': url, 'imagePath': path});
+    }
+
+    // 1. Kitsu (سريع وموثوق)
+    try {
+      final url = Uri.parse(
+        'https://kitsu.io/api/edge/anime?filter[text]=${Uri.encodeComponent(title)}&page[limit]=1',
+      );
+      final resp = await http.get(url).timeout(const Duration(seconds: 12));
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body)['data'] as List?;
+        if (data != null && data.isNotEmpty) {
+          final attrs = data[0]['attributes'];
+          final poster = attrs['posterImage'];
+          if (poster != null) {
+            await tryAddImage(poster['original'] ?? poster['large'] ?? poster['medium']);
+          }
+          final cover = attrs['coverImage'];
+          if (cover != null) {
+            await tryAddImage(cover['original'] ?? cover['large'] ?? cover['medium']);
+          }
+        }
+      }
+    } catch (_) {}
+
+    // 2. AniList (احتياطي + صور إضافية)
+    if (scenes.length < 2) {
+      try {
+        final query = '''
+          query (\$search: String) {
+            Media(search: \$search, type: ANIME) {
+              bannerImage
+              coverImage { extraLarge large }
+            }
+          }
+        ''';
+        final resp = await http.post(
+          Uri.parse('https://graphql.anilist.co'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'query': query, 'variables': {'search': title}}),
+        ).timeout(const Duration(seconds: 12));
+        if (resp.statusCode == 200) {
+          final media = jsonDecode(resp.body)['data']?['Media'];
+          if (media != null) {
+            await tryAddImage(media['bannerImage'] as String?);
+            final cover = media['coverImage'];
+            if (cover != null) {
+              final coverUrl = cover['extraLarge'] ?? cover['large'];
+              await tryAddImage(coverUrl as String?);
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (scenes.isEmpty) {
+      result['error'] = 'تعذر جلب الصور. تحقق من الاتصال وحاول مجدداً.';
+    } else {
+      result['scenes'] = scenes;
+    }
+    return result;
   }
 
   Future<String?> _downloadSceneImage(String url) async {
@@ -355,8 +328,7 @@ class AnimeApiService {
       final fileName =
           'scene_${DateTime.now().microsecondsSinceEpoch}_${Random().nextInt(9999)}.jpg';
       final file = File('${folder.path}/$fileName');
-      final resp =
-          await http.get(Uri.parse(url)).timeout(const Duration(seconds: 20));
+      final resp = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 20));
       if (resp.statusCode != 200) return null;
       if (resp.bodyBytes.length < 500) return null;
       await file.writeAsBytes(resp.bodyBytes);
@@ -378,9 +350,7 @@ class AnimeApiService {
         if (data is List && data.isNotEmpty && data[0] is List) {
           String translatedText = '';
           for (var sentence in data[0]) {
-            if (sentence is List && sentence.isNotEmpty) {
-              translatedText += sentence[0];
-            }
+            if (sentence is List && sentence.isNotEmpty) translatedText += sentence[0];
           }
           return translatedText.trim();
         }
@@ -389,9 +359,7 @@ class AnimeApiService {
     return text;
   }
 
-  Future<Map<String, int>> autoUpdateLibraryData() async {
-    return {'updated': 0, 'failed': 0};
-  }
+  Future<Map<String, int>> autoUpdateLibraryData() async => {'updated': 0, 'failed': 0};
 
   Future<int> clearAllGenres() async {
     final animes = await _storage.loadAnimes();
