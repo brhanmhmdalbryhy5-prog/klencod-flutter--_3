@@ -14,6 +14,15 @@ import '../models/anime.dart';
 import 'storage_service.dart';
 
 // ══════════════════════════════════════════════════════════════
+// استثناء الإلغاء
+// ══════════════════════════════════════════════════════════════
+class _BackupCancelledException implements Exception {
+  const _BackupCancelledException();
+  @override
+  String toString() => 'تم إلغاء العملية.';
+}
+
+// ══════════════════════════════════════════════════════════════
 // فئة التقدم
 // ══════════════════════════════════════════════════════════════
 class BackupProgress {
@@ -104,6 +113,29 @@ class BackupService {
   String _stage = '';
   bool _isRestore = false;
 
+  // 🆕 آلية الإلغاء
+  bool _cancelRequested = false;
+
+  /// طلب إلغاء العملية الحالية (تُستدعى من شاشة التقدم).
+  void cancel() {
+    if (_cancelRequested) return;
+    _cancelRequested = true;
+    final current = progress.value;
+    if (current != null && !current.isDone) {
+      progress.value = current.copyWith(stage: 'جارٍ الإلغاء...');
+    }
+  }
+
+  void _resetCancel() {
+    _cancelRequested = false;
+  }
+
+  void _checkCancelled() {
+    if (_cancelRequested) {
+      throw const _BackupCancelledException();
+    }
+  }
+
   // ══════════════════════════════════════════════════════════════
   // 1️⃣ الإنشاء الكامل (مع اختيار مكان الحفظ)
   // ══════════════════════════════════════════════════════════════
@@ -113,6 +145,7 @@ class BackupService {
     final tempZipPath = '${tempDir.path}/backup_$ts.zip';
 
     try {
+      _resetCancel();
       _startTime = DateTime.now();
       _isRestore = false;
       _bytesProcessed = 0;
@@ -142,6 +175,7 @@ class BackupService {
       _totalFiles = 0;
 
       for (final anime in animes) {
+        _checkCancelled();
         if (anime.imagePath != null &&
             File(anime.imagePath!).existsSync()) {
           _totalBytes += await File(anime.imagePath!).length();
@@ -195,6 +229,8 @@ class BackupService {
       // + ملفان إضافيان (metadata.json + animes.json)
       _totalFiles += 2;
 
+      _checkCancelled();
+
       _stage = 'تجهيز ZIP...';
       progress.value = progress.value!.copyWith(
         stage: _stage,
@@ -212,6 +248,7 @@ class BackupService {
       final addedNames = <String>{};
 
       Future<void> addFile(File f, String archiveName, String label) async {
+        _checkCancelled();
         if (addedNames.contains(archiveName)) return;
         addedNames.add(archiveName);
         await encoder.addFile(f, archiveName);
@@ -227,6 +264,7 @@ class BackupService {
       final animeJson = <Map<String, dynamic>>[];
 
       for (var i = 0; i < animes.length; i++) {
+        _checkCancelled();
         final anime = animes[i];
         final item = anime.toJson();
 
@@ -361,6 +399,8 @@ class BackupService {
       try { await metaFile.delete(); } catch (_) {}
       try { await animeFile.delete(); } catch (_) {}
 
+      _checkCancelled();
+
       _stage = 'اختيار مكان الحفظ...';
       progress.value = progress.value!.copyWith(stage: _stage);
 
@@ -412,7 +452,9 @@ class BackupService {
       return '✅ تم حفظ النسخة (${_formatBytes(finalSize)})\n\n📍 المسار:\n$saveResult';
     } catch (e) {
       try { await File(tempZipPath).delete(); } catch (_) {}
-      final msg = 'فشل الإنشاء: $e';
+      final msg = e is _BackupCancelledException
+          ? 'تم إلغاء العملية.'
+          : 'فشل الإنشاء: $e';
       progress.value = progress.value?.copyWith(isDone: true, error: msg);
       return msg;
     }
@@ -427,6 +469,7 @@ class BackupService {
     final tempZipPath = '${tempDir.path}/lite_backup_$ts.zip';
 
     try {
+      _resetCancel();
       _startTime = DateTime.now();
       _isRestore = false;
       _bytesProcessed = 0;
@@ -453,6 +496,7 @@ class BackupService {
       _totalFiles = 0;
 
       for (final anime in animes) {
+        _checkCancelled();
         if (anime.imagePath != null &&
             File(anime.imagePath!).existsSync()) {
           _totalBytes += await File(anime.imagePath!).length();
@@ -475,6 +519,8 @@ class BackupService {
       // + ملفان إضافيان (metadata.json + animes.json)
       _totalFiles += 2;
 
+      _checkCancelled();
+
       progress.value = progress.value!.copyWith(
         totalBytes: _totalBytes,
         totalFiles: _totalFiles,
@@ -488,6 +534,7 @@ class BackupService {
       final addedNames = <String>{};
 
       Future<void> addFile(File f, String archiveName, String label) async {
+        _checkCancelled();
         if (addedNames.contains(archiveName)) return;
         addedNames.add(archiveName);
         await encoder.addFile(f, archiveName);
@@ -503,6 +550,7 @@ class BackupService {
       final animeJson = <Map<String, dynamic>>[];
 
       for (var i = 0; i < animes.length; i++) {
+        _checkCancelled();
         final anime = animes[i];
         final item = anime.toJson();
 
@@ -583,6 +631,8 @@ class BackupService {
       try { await metaFile.delete(); } catch (_) {}
       try { await animeFile.delete(); } catch (_) {}
 
+      _checkCancelled();
+
       _stage = 'اختيار مكان الحفظ...';
       progress.value = progress.value!.copyWith(stage: _stage);
 
@@ -620,7 +670,9 @@ class BackupService {
       return '✅ تم حفظ النسخة الخفيفة (${_formatBytes(finalSize)})\n\n📍 المسار:\n$saveResult';
     } catch (e) {
       try { await File(tempZipPath).delete(); } catch (_) {}
-      final msg = 'فشل الإنشاء: $e';
+      final msg = e is _BackupCancelledException
+          ? 'تم إلغاء العملية.'
+          : 'فشل الإنشاء: $e';
       progress.value = progress.value?.copyWith(isDone: true, error: msg);
       return msg;
     }
@@ -647,6 +699,7 @@ class BackupService {
       if (sourcePath == null) return 'تعذر الوصول للملف.';
       if (!await File(sourcePath).exists()) return 'الملف غير موجود.';
 
+      _resetCancel();
       _startTime = DateTime.now();
       _isRestore = true;
       _bytesProcessed = 0;
@@ -694,6 +747,7 @@ class BackupService {
       final ts = DateTime.now().millisecondsSinceEpoch;
 
       for (final file in archive) {
+        _checkCancelled();
         if (!file.isFile) continue;
         final name = file.name.replaceAll('\\', '/');
 
@@ -855,7 +909,9 @@ class BackupService {
       return '✅ تمت استعادة ${animes.length} أنمي بنجاح.';
     } catch (e) {
       await _cleanup(createdFiles);
-      final msg = 'فشلت الاستعادة: $e';
+      final msg = e is _BackupCancelledException
+          ? 'تم إلغاء العملية.'
+          : 'فشلت الاستعادة: $e';
       progress.value = progress.value?.copyWith(isDone: true, error: msg);
       return msg;
     }
@@ -882,6 +938,7 @@ class BackupService {
       if (sourcePath == null) return 'تعذر الوصول للملف.';
       if (!await File(sourcePath).exists()) return 'الملف غير موجود.';
 
+      _resetCancel();
       _startTime = DateTime.now();
       _isRestore = true;
       _bytesProcessed = 0;
@@ -921,6 +978,7 @@ class BackupService {
       final ts = DateTime.now().millisecondsSinceEpoch;
 
       for (final file in archive) {
+        _checkCancelled();
         if (!file.isFile) continue;
         final name = file.name.replaceAll('\\', '/');
 
@@ -1032,7 +1090,9 @@ class BackupService {
       return '✅ تمت استعادة النسخة الخفيفة بنجاح.';
     } catch (e) {
       await _cleanup(createdFiles);
-      final msg = 'فشلت الاستعادة: $e';
+      final msg = e is _BackupCancelledException
+          ? 'تم إلغاء العملية.'
+          : 'فشلت الاستعادة: $e';
       progress.value = progress.value?.copyWith(isDone: true, error: msg);
       return msg;
     }
@@ -1069,14 +1129,12 @@ class BackupService {
       // إذا فشل (مثلاً Google Drive) → انتقل للمشاركة
     }
 
-    // 2. احتياطي: نافذة المشاركة
+    // 2. احتياطي: نافذة المشاركة (API متوافق مع share_plus 7-9)
     try {
-      final result = await SharePlus.instance.share(
-        ShareParams(
-          files: [XFile(tempPath, name: fileName)],
-          subject: 'نسخة ذاكرة الأوتاكو الاحتياطية',
-          text: 'احفظ هذه النسخة في التنزيلات أو Google Drive',
-        ),
+      final result = await Share.shareXFiles(
+        [XFile(tempPath)],
+        subject: 'نسخة ذاكرة الأوتاكو الاحتياطية',
+        text: 'احفظ هذه النسخة في التنزيلات أو Google Drive',
       );
 
       if (result.status == ShareResultStatus.dismissed) {
