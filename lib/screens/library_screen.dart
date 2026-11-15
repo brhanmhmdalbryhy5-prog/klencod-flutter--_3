@@ -51,7 +51,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
   int viewMode = 0;
   bool loading = true;
 
-  // 🆕 متغيرات البحث المتقدم
+  // متغيرات البحث المتقدم
   int? _advFromYear;
   int? _advToYear;
   List<String> _advGenres = [];
@@ -174,7 +174,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         matchesRating = anime.rating == selectedRatingFilter;
       }
 
-      // 🆕 تطبيق البحث المتقدم
+      // تطبيق البحث المتقدم
       bool matchesAdvanced = true;
       if (_advFromYear != null && (anime.releaseYear ?? 0) < _advFromYear!) {
         matchesAdvanced = false;
@@ -243,7 +243,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
-  // 🆕 فتح نافذة البحث المتقدم
   Future<void> _showAdvancedSearch() async {
     final fromYearController =
         TextEditingController(text: _advFromYear?.toString() ?? '');
@@ -429,7 +428,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
-  // 🆕 يستخدم الرسوم المتحركة
   Future<void> openAnimeDetails(Anime anime) async {
     HapticFeedback.lightImpact();
     await Navigator.push(
@@ -494,6 +492,34 @@ class _LibraryScreenState extends State<LibraryScreen> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(
               anime.favorite ? 'أضيف إلى المفضلة' : 'أزيل من المفضلة')));
+    }
+  }
+
+  // 🆕 تبديل يدوي بين فيلم/مسلسل
+  Future<void> toggleMovieFormat(Anime anime) async {
+    HapticFeedback.selectionClick();
+    final allAnimes = await storage.loadAnimes();
+    final idx = allAnimes.indexWhere((a) => a.id == anime.id);
+    if (idx == -1) return;
+
+    final wasMovie = allAnimes[idx].format == 'MOVIE';
+    allAnimes[idx].format = wasMovie ? 'TV' : 'MOVIE';
+    final saved = await storage.saveAnimes(allAnimes);
+
+    if (!mounted) return;
+    if (saved) {
+      await loadAnimes();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(wasMovie
+            ? '📺 تم نقل "${anime.title}" إلى تبويب المسلسلات'
+            : '🎬 تم نقل "${anime.title}" إلى تبويب الأفلام'),
+        backgroundColor: wasMovie ? Colors.blue : Colors.orange,
+        duration: const Duration(seconds: 2),
+      ));
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تعذر حفظ التغيير')));
     }
   }
 
@@ -1438,7 +1464,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
+  // 🆕 قائمة الخيارات مع زر التبديل بين فيلم/مسلسل
   Widget _animeMenu(Anime anime, {bool light = false}) {
+    final isMovie = anime.format == 'MOVIE';
     return PopupMenuButton<String>(
       tooltip: 'خيارات الأنمي',
       padding: EdgeInsets.zero,
@@ -1459,6 +1487,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
           case 'fetch_data':
             await _fetchDataManually(anime);
             break;
+          case 'toggle_movie':
+            await toggleMovieFormat(anime);
+            break;
         }
       },
       itemBuilder: (context) => [
@@ -1475,6 +1506,17 @@ class _LibraryScreenState extends State<LibraryScreen> {
               Icon(Icons.cloud_download_outlined, color: Colors.cyan),
               SizedBox(width: 10),
               Text('جلب البيانات والصور')
+            ])),
+        // 🆕 زر تبديل فيلم/مسلسل
+        PopupMenuItem(
+            value: 'toggle_movie',
+            child: Row(children: [
+              Icon(isMovie ? Icons.tv : Icons.movie,
+                  color: Colors.orangeAccent),
+              const SizedBox(width: 10),
+              Text(isMovie
+                  ? 'نقل إلى المسلسلات'
+                  : 'إضافة إلى قائمة الأفلام'),
             ])),
         PopupMenuItem(
             value: 'favorite',
@@ -1729,7 +1771,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
               Text('كل أعمالك في مكان واحد • ${animes.length} أنمي',
                   style: const TextStyle(color: Colors.white60)),
               const SizedBox(height: 22),
-              // 🆕 البحث + زر الفلتر المتقدم
+              // البحث + زر الفلتر المتقدم
               Row(
                 children: [
                   Expanded(
