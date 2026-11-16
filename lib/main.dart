@@ -6,22 +6,19 @@ import 'screens/library_screen.dart';
 import 'screens/memories_screen.dart';
 import 'screens/settings_screen.dart';
 import 'services/notification_service.dart';
-import 'widgets/manga_character.dart'; // 🆕 استدعاء الشخصية
-import 'widgets/manga_character_settings.dart'; // 🆕 استدعاء إعدادات الشخصية
+import 'widgets/manga_character.dart';
+import 'widgets/manga_character_settings.dart';
 
 final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.dark);
 final ValueNotifier<Color> primaryColorNotifier = ValueNotifier(const Color(0xFF741C2B));
 final ValueNotifier<String> fontNotifier = ValueNotifier('Cairo');
 final ValueNotifier<Color> titleColorNotifier = ValueNotifier(const Color(0xFFFFD700));
 
-// 🆕 متغير للتحكم في الوضع التلقائي
 bool isAutoDarkModeEnabled = false;
 
-// 🆕 دالة التحقق من الوقت
 void checkAutoTheme() {
   if (!isAutoDarkModeEnabled) return;
   final hour = DateTime.now().hour;
-  // من 6 مساءً (18) إلى 6 صباحاً (6) = ليلي
   final shouldBeDark = hour >= 18 || hour < 6;
   themeNotifier.value = shouldBeDark ? ThemeMode.dark : ThemeMode.light;
 }
@@ -39,7 +36,6 @@ void main() async {
 
   if (isAutoDarkModeEnabled) {
     checkAutoTheme();
-    // فحص الوقت كل 30 دقيقة
     Timer.periodic(const Duration(minutes: 30), (_) => checkAutoTheme());
   } else {
     final isDark = prefs.getBool('isDarkMode') ?? true;
@@ -53,7 +49,6 @@ void main() async {
   final titleColorValue = prefs.getInt('title_color') ?? 0xFFFFD700;
   titleColorNotifier.value = Color(titleColorValue);
 
-  // 🆕 تحميل إعدادات الشخصية العائمة
   await MangaConfigService.load();
 
   runApp(const AnimeMemoryApp());
@@ -115,7 +110,6 @@ class AnimeMemoryApp extends StatelessWidget {
                         NavigationDestinationLabelBehavior.alwaysShow,
                     height: 72),
               ),
-              // 🆕 بناء الشخصية العائمة فوق كل الشاشات
               builder: (context, child) {
                 return Stack(
                   children: [
@@ -138,7 +132,6 @@ class AnimeMemoryApp extends StatelessWidget {
                                 left: 16,
                                 right: 16,
                               ),
-                              // 🆕 الألوان والأشكال المخصصة
                               hairColor: config.hairColor,
                               eyeColor: config.eyeColor,
                               skinTone: config.skinTone,
