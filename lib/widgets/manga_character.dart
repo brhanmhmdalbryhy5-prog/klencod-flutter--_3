@@ -380,8 +380,11 @@ class MangaCharacterState extends State<MangaCharacter>
   @override
   Widget build(BuildContext context) {
     if (!widget.autoMove) {
-      return _buildCharacterAndBubble(
-          blinkValue: 0, tilt: 0, perspective: 1.0);
+      return Align(
+        alignment: Alignment.bottomLeft,
+        child: _buildCharacterAndBubble(
+            blinkValue: 0, tilt: 0, perspective: 1.0),
+      );
     }
 
     return LayoutBuilder(
@@ -390,8 +393,11 @@ class MangaCharacterState extends State<MangaCharacter>
             !constraints.maxHeight.isFinite ||
             constraints.maxWidth < widget.size + 60 ||
             constraints.maxHeight < widget.size + 60) {
-          return _buildCharacterAndBubble(
-              blinkValue: 0, tilt: 0, perspective: 1.0);
+          return Align(
+            alignment: Alignment.bottomLeft,
+            child: _buildCharacterAndBubble(
+                blinkValue: 0, tilt: 0, perspective: 1.0),
+          );
         }
 
         return AnimatedBuilder(
@@ -547,7 +553,7 @@ class MangaCharacterState extends State<MangaCharacter>
 }
 
 // ══════════════════════════════════════════════════════════════
-// 🆕 Preview للشخصية (للاستخدام في الإعدادات)
+// Preview للشخصية (للاستخدام في الإعدادات)
 // ══════════════════════════════════════════════════════════════
 class MangaCharacterPreview extends StatelessWidget {
   final double size;
@@ -590,7 +596,7 @@ class MangaCharacterPreview extends StatelessWidget {
 }
 
 // ══════════════════════════════════════════════════════════════
-// الرسم (مع تأثير 3D + رمش + ألوان مخصصة)
+// الرسم (تأثير 2.5D + ألوان مخصصة)
 // ══════════════════════════════════════════════════════════════
 class _MangaFacePainter extends CustomPainter {
   final MangaExpression expression;
@@ -614,15 +620,14 @@ class _MangaFacePainter extends CustomPainter {
   bool get _isBlinking => blinkValue > 0.5;
 
   static const Set<MangaExpression> _blinkable = {
-    MangaExpression.neutral,
-    MangaExpression.angry,
-    MangaExpression.surprised,
-    MangaExpression.thinking,
-    MangaExpression.confused,
-    MangaExpression.excited,
-    MangaExpression.determined,
-    MangaExpression.shy,
+    MangaExpression.neutral, MangaExpression.angry,
+    MangaExpression.surprised, MangaExpression.thinking,
+    MangaExpression.confused, MangaExpression.excited,
+    MangaExpression.determined, MangaExpression.shy,
   };
+
+  Color _light(Color c, [double t = 0.3]) => Color.lerp(c, Colors.white, t)!;
+  Color _dark(Color c, [double t = 0.3]) => Color.lerp(c, Colors.black, t)!;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -630,43 +635,16 @@ class _MangaFacePainter extends CustomPainter {
     final cy = size.height / 2;
     final r = size.width * 0.42;
 
+    final facePath = _getFacePath(cx, cy, r);
     final faceRect = _getFaceRect(cx, cy, r);
 
-    canvas.drawOval(
-      faceRect.translate(2, 4),
-      Paint()
-        ..color = Colors.black.withOpacity(0.18)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
-    );
-
-    final facePaint = Paint()
-      ..shader = RadialGradient(
-        center: const Alignment(-0.35, -0.35),
-        radius: 1.3,
-        colors: [
-          Color.lerp(skinTone, Colors.white, 0.3)!,
-          skinTone,
-          Color.lerp(skinTone, Colors.black, 0.15)!,
-        ],
-        stops: const [0.0, 0.55, 1.0],
-      ).createShader(faceRect);
-
-    final outlinePaint = Paint()
-      ..color = Colors.black87
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
-
-    if (faceShape == FaceShape.square) {
-      final rrect =
-          RRect.fromRectAndRadius(faceRect, Radius.circular(faceRect.width * 0.3));
-      canvas.drawRRect(rrect, facePaint);
-      canvas.drawRRect(rrect, outlinePaint);
-    } else {
-      canvas.drawOval(faceRect, facePaint);
-      canvas.drawOval(faceRect, outlinePaint);
-    }
-
-    _drawHair(canvas, cx, cy, r, faceRect);
+    _drawDropShadow(canvas, cx, cy, r);
+    _drawBackHair(canvas, cx, cy, r);
+    _drawFaceBase(canvas, facePath, faceRect);
+    _drawFaceShading(canvas, facePath, faceRect, cx, cy, r);
+    _drawEyebrows(canvas, cx, cy, r);
+    _drawEyes(canvas, cx, cy, r);
+    _drawNose(canvas, cx, cy, r);
 
     if (expression == MangaExpression.love ||
         expression == MangaExpression.shy ||
@@ -675,167 +653,348 @@ class _MangaFacePainter extends CustomPainter {
       _drawBlush(canvas, cx, cy, r);
     }
 
-    _drawEyes(canvas, cx, cy, r);
     _drawMouth(canvas, cx, cy, r);
+    _drawFrontHair(canvas, cx, cy, r);
+    _drawHairShadowOnFace(canvas, cx, cy, r);
     _drawAccessories(canvas, cx, cy, r);
   }
 
-  Rect _getFaceRect(double cx, double cy, double r) {
+  Path _getFacePath(double cx, double cy, double r) {
     switch (faceShape) {
       case FaceShape.round:
-        return Rect.fromCircle(center: Offset(cx, cy), radius: r);
+        return Path()
+          ..moveTo(cx, cy - r)
+          ..cubicTo(cx + r * 1.0, cy - r, cx + r * 1.08, cy + r * 0.15,
+              cx + r * 0.7, cy + r * 0.78)
+          ..cubicTo(cx + r * 0.4, cy + r * 1.05, cx - r * 0.4, cy + r * 1.05,
+              cx - r * 0.7, cy + r * 0.78)
+          ..cubicTo(cx - r * 1.08, cy + r * 0.15, cx - r * 1.0, cy - r,
+              cx, cy - r)
+          ..close();
       case FaceShape.oval:
-        return Rect.fromCenter(
-            center: Offset(cx, cy), width: r * 1.8, height: r * 2.25);
+        return Path()
+          ..moveTo(cx, cy - r * 1.1)
+          ..cubicTo(cx + r * 0.9, cy - r * 1.1, cx + r * 1.02, cy + r * 0.2,
+              cx + r * 0.62, cy + r * 0.95)
+          ..cubicTo(cx + r * 0.32, cy + r * 1.2, cx - r * 0.32, cy + r * 1.2,
+              cx - r * 0.62, cy + r * 0.95)
+          ..cubicTo(cx - r * 1.02, cy + r * 0.2, cx - r * 0.9, cy - r * 1.1,
+              cx, cy - r * 1.1)
+          ..close();
       case FaceShape.square:
-        return Rect.fromCenter(
-            center: Offset(cx, cy), width: r * 1.85, height: r * 1.9);
+        return Path()
+          ..moveTo(cx - r * 0.82, cy - r * 0.9)
+          ..quadraticBezierTo(cx, cy - r * 1.1, cx + r * 0.82, cy - r * 0.9)
+          ..lineTo(cx + r * 0.92, cy + r * 0.5)
+          ..quadraticBezierTo(cx + r * 0.92, cy + r * 0.98, cx + r * 0.5,
+              cy + r * 0.98)
+          ..lineTo(cx - r * 0.5, cy + r * 0.98)
+          ..quadraticBezierTo(cx - r * 0.92, cy + r * 0.98, cx - r * 0.92,
+              cy + r * 0.5)
+          ..close();
     }
   }
 
-  void _drawHair(Canvas canvas, double cx, double cy, double r, Rect faceRect) {
-    final hairRect = Rect.fromCircle(
-        center: Offset(cx, cy - r * 0.5), radius: r * 1.2);
-    final hairPaint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          Color.lerp(hairColor, Colors.white, 0.15)!,
-          hairColor,
-          Color.lerp(hairColor, Colors.black, 0.2)!,
-        ],
-        stops: const [0.0, 0.5, 1.0],
-      ).createShader(hairRect);
+  Rect _getFaceRect(double cx, double cy, double r) {
+    return Rect.fromCenter(
+      center: Offset(cx, cy),
+      width: r * 2.2,
+      height: r * 2.2,
+    );
+  }
 
-    switch (hairStyle) {
-      case HairStyle.spiky:
-        final path = Path()
-          ..moveTo(cx - r, cy - r * 0.3)
-          ..quadraticBezierTo(cx - r * 0.9, cy - r * 1.15, cx, cy - r)
-          ..quadraticBezierTo(cx + r * 0.9, cy - r * 1.15, cx + r, cy - r * 0.3)
-          ..quadraticBezierTo(
-              cx + r * 0.8, cy - r * 0.7, cx + r * 0.3, cy - r * 0.75)
-          ..quadraticBezierTo(cx, cy - r * 0.95, cx - r * 0.3, cy - r * 0.75)
-          ..quadraticBezierTo(
-              cx - r * 0.8, cy - r * 0.7, cx - r, cy - r * 0.3)
-          ..close();
-        canvas.drawPath(path, hairPaint);
-        break;
+  void _drawDropShadow(Canvas canvas, double cx, double cy, double r) {
+    final rect = Rect.fromCenter(
+      center: Offset(cx, cy + r * 0.95),
+      width: r * 1.6,
+      height: r * 0.25,
+    );
+    canvas.drawOval(
+      rect,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [
+            Colors.black.withOpacity(0.35),
+            Colors.black.withOpacity(0.0),
+          ],
+        ).createShader(rect),
+    );
+  }
 
-      case HairStyle.short:
-        final path = Path()
-          ..moveTo(cx - r * 0.95, cy - r * 0.5)
-          ..quadraticBezierTo(
-              cx - r * 0.85, cy - r * 1.05, cx, cy - r * 0.98)
-          ..quadraticBezierTo(
-              cx + r * 0.85, cy - r * 1.05, cx + r * 0.95, cy - r * 0.5)
-          ..quadraticBezierTo(
-              cx + r * 0.5, cy - r * 0.6, cx, cy - r * 0.55)
-          ..quadraticBezierTo(
-              cx - r * 0.5, cy - r * 0.6, cx - r * 0.95, cy - r * 0.5)
-          ..close();
-        canvas.drawPath(path, hairPaint);
-        break;
+  void _drawBackHair(Canvas canvas, double cx, double cy, double r) {
+    final backPath = Path()
+      ..moveTo(cx - r * 1.18, cy - r * 0.25)
+      ..cubicTo(cx - r * 1.22, cy - r * 1.35, cx + r * 1.22, cy - r * 1.35,
+          cx + r * 1.18, cy - r * 0.25)
+      ..lineTo(cx + r * 1.12, cy + r * 0.55)
+      ..lineTo(cx - r * 1.12, cy + r * 0.55)
+      ..close();
 
-      case HairStyle.long:
-        final path = Path()
-          ..moveTo(cx - r * 1.05, cy + r * 0.5)
-          ..lineTo(cx - r * 1.05, cy - r * 0.3)
-          ..quadraticBezierTo(cx - r * 0.9, cy - r * 1.15, cx, cy - r)
-          ..quadraticBezierTo(cx + r * 0.9, cy - r * 1.15, cx + r * 1.05, cy - r * 0.3)
-          ..lineTo(cx + r * 1.05, cy + r * 0.5)
-          ..quadraticBezierTo(cx + r * 0.7, cy + r * 0.3, cx + r * 0.7, cy - r * 0.2)
-          ..quadraticBezierTo(cx, cy - r * 0.5, cx - r * 0.7, cy - r * 0.2)
-          ..quadraticBezierTo(cx - r * 0.7, cy + r * 0.3, cx - r * 1.05, cy + r * 0.5)
-          ..close();
-        canvas.drawPath(path, hairPaint);
-        break;
-
-      case HairStyle.ponytail:
-        final path = Path()
-          ..moveTo(cx - r, cy - r * 0.3)
-          ..quadraticBezierTo(cx - r * 0.9, cy - r * 1.15, cx, cy - r)
-          ..quadraticBezierTo(cx + r * 0.9, cy - r * 1.15, cx + r, cy - r * 0.3)
-          ..quadraticBezierTo(
-              cx + r * 0.8, cy - r * 0.7, cx + r * 0.3, cy - r * 0.75)
-          ..quadraticBezierTo(cx, cy - r * 0.95, cx - r * 0.3, cy - r * 0.75)
-          ..quadraticBezierTo(
-              cx - r * 0.8, cy - r * 0.7, cx - r, cy - r * 0.3)
-          ..close();
-        canvas.drawPath(path, hairPaint);
-
-        final tailPath = Path()
-          ..moveTo(cx + r * 0.9, cy - r * 0.4)
-          ..quadraticBezierTo(
-              cx + r * 1.35, cy - r * 0.2, cx + r * 1.25, cy + r * 0.4)
-          ..quadraticBezierTo(
-              cx + r * 1.0, cy + r * 0.5, cx + r * 0.85, cy + r * 0.1)
-          ..close();
-        canvas.drawPath(tailPath, hairPaint);
-        break;
-    }
+    final hairRect =
+        Rect.fromCircle(center: Offset(cx, cy - r * 0.5), radius: r * 1.3);
 
     canvas.drawPath(
-      hairStyle == HairStyle.ponytail
-          ? (Path()
-            ..moveTo(cx - r, cy - r * 0.3)
-            ..quadraticBezierTo(cx - r * 0.9, cy - r * 1.15, cx, cy - r)
-            ..quadraticBezierTo(
-                cx + r * 0.9, cy - r * 1.15, cx + r, cy - r * 0.3)
-            ..close())
-          : Path()
-        ..addOval(hairRect),
+      backPath,
       Paint()
-        ..shader = RadialGradient(
-          center: const Alignment(-0.5, -0.7),
-          radius: 0.6,
+        ..color = Colors.black.withOpacity(0.2)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+    );
+
+    canvas.drawPath(
+      backPath,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
           colors: [
-            Colors.white.withOpacity(0.3),
-            Colors.transparent,
+            _dark(hairColor, 0.5),
+            hairColor,
+            _dark(hairColor, 0.3),
           ],
-        ).createShader(hairRect)
-        ..blendMode = BlendMode.overlay,
+          stops: const [0.0, 0.45, 1.0],
+        ).createShader(hairRect),
     );
   }
 
-  void _drawBlush(Canvas canvas, double cx, double cy, double r) {
-    final blushRect = Rect.fromCenter(
-        center: Offset(cx - r * 0.55, cy + r * 0.2),
-        width: r * 0.4,
-        height: r * 0.24);
-    canvas.drawOval(
-      blushRect,
+  void _drawFaceBase(Canvas canvas, Path facePath, Rect faceRect) {
+    canvas.save();
+    canvas.translate(2.5, 5);
+    canvas.drawPath(
+      facePath,
       Paint()
-        ..shader = RadialGradient(
-          colors: [
-            const Color(0xFFFF9E9E).withOpacity(0.9),
-            const Color(0xFFFF9E9E).withOpacity(0.0),
-          ],
-        ).createShader(blushRect),
+        ..color = Colors.black.withOpacity(0.18)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
     );
-    final blushRect2 = Rect.fromCenter(
-        center: Offset(cx + r * 0.55, cy + r * 0.2),
-        width: r * 0.4,
-        height: r * 0.24);
-    canvas.drawOval(
-      blushRect2,
+    canvas.restore();
+
+    canvas.drawPath(
+      facePath,
+      Paint()
+        ..shader = RadialGradient(
+          center: const Alignment(-0.4, -0.5),
+          radius: 1.4,
+          colors: [
+            _light(skinTone, 0.35),
+            skinTone,
+            _dark(skinTone, 0.12),
+            _dark(skinTone, 0.25),
+          ],
+          stops: const [0.0, 0.5, 0.85, 1.0],
+        ).createShader(faceRect),
+    );
+
+    canvas.drawPath(
+      facePath,
+      Paint()
+        ..color = _dark(skinTone, 0.55)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5,
+    );
+  }
+
+  void _drawFaceShading(
+      Canvas canvas, Path facePath, Rect faceRect, double cx, double cy, double r) {
+    canvas.save();
+    canvas.clipPath(facePath);
+
+    final shadowRect = Rect.fromCircle(
+      center: Offset(cx + r * 0.5, cy + r * 0.5),
+      radius: r * 1.1,
+    );
+    canvas.drawCircle(
+      Offset(cx + r * 0.55, cy + r * 0.55),
+      r * 1.0,
       Paint()
         ..shader = RadialGradient(
           colors: [
-            const Color(0xFFFF9E9E).withOpacity(0.9),
-            const Color(0xFFFF9E9E).withOpacity(0.0),
+            Colors.transparent,
+            _dark(skinTone, 0.2).withOpacity(0.45),
           ],
-        ).createShader(blushRect2),
+          stops: const [0.5, 1.0],
+        ).createShader(shadowRect),
+    );
+
+    final chinRect = Rect.fromCenter(
+      center: Offset(cx, cy + r * 0.88),
+      width: r * 1.3,
+      height: r * 0.5,
+    );
+    canvas.drawOval(
+      chinRect,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [
+            Colors.transparent,
+            _dark(skinTone, 0.35).withOpacity(0.5),
+          ],
+          stops: const [0.3, 1.0],
+        ).createShader(chinRect),
+    );
+
+    canvas.restore();
+  }
+
+  void _drawEyebrows(Canvas canvas, double cx, double cy, double r) {
+    final eyebrowY = cy - r * 0.35;
+    final leftX = cx - r * 0.35;
+    final rightX = cx + r * 0.35;
+
+    final paint = Paint()
+      ..color = _dark(hairColor, 0.15)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = r * 0.055
+      ..strokeCap = StrokeCap.round;
+
+    switch (expression) {
+      case MangaExpression.angry:
+        canvas.drawLine(Offset(leftX - r * 0.15, eyebrowY - r * 0.04),
+            Offset(leftX + r * 0.15, eyebrowY + r * 0.06), paint);
+        canvas.drawLine(Offset(rightX + r * 0.15, eyebrowY - r * 0.04),
+            Offset(rightX - r * 0.15, eyebrowY + r * 0.06), paint);
+        break;
+      case MangaExpression.sad:
+        canvas.drawLine(Offset(leftX - r * 0.15, eyebrowY + r * 0.06),
+            Offset(leftX + r * 0.15, eyebrowY - r * 0.04), paint);
+        canvas.drawLine(Offset(rightX + r * 0.15, eyebrowY + r * 0.06),
+            Offset(rightX - r * 0.15, eyebrowY - r * 0.04), paint);
+        break;
+      case MangaExpression.surprised:
+        canvas.drawArc(
+            Rect.fromCenter(
+                center: Offset(leftX, eyebrowY - r * 0.02),
+                width: r * 0.4,
+                height: r * 0.18),
+            pi, pi, false, paint);
+        canvas.drawArc(
+            Rect.fromCenter(
+                center: Offset(rightX, eyebrowY - r * 0.02),
+                width: r * 0.4,
+                height: r * 0.18),
+            pi, pi, false, paint);
+        break;
+      case MangaExpression.happy:
+      case MangaExpression.veryHappy:
+      case MangaExpression.laugh:
+        canvas.drawArc(
+            Rect.fromCenter(
+                center: Offset(leftX, eyebrowY + r * 0.04),
+                width: r * 0.36,
+                height: r * 0.1),
+            pi * 1.1, pi * 0.8, false, paint);
+        canvas.drawArc(
+            Rect.fromCenter(
+                center: Offset(rightX, eyebrowY + r * 0.04),
+                width: r * 0.36,
+                height: r * 0.1),
+            pi * 1.1, pi * 0.8, false, paint);
+        break;
+      case MangaExpression.cool:
+        canvas.drawLine(Offset(leftX - r * 0.18, eyebrowY),
+            Offset(leftX + r * 0.18, eyebrowY + r * 0.03), paint);
+        canvas.drawLine(Offset(rightX + r * 0.18, eyebrowY),
+            Offset(rightX - r * 0.18, eyebrowY + r * 0.03), paint);
+        break;
+      case MangaExpression.determined:
+        canvas.drawLine(Offset(leftX - r * 0.15, eyebrowY - r * 0.08),
+            Offset(leftX + r * 0.15, eyebrowY), paint);
+        canvas.drawLine(Offset(rightX + r * 0.15, eyebrowY - r * 0.08),
+            Offset(rightX - r * 0.15, eyebrowY), paint);
+        break;
+      case MangaExpression.sleepy:
+      case MangaExpression.sleepyHappy:
+        canvas.drawLine(Offset(leftX - r * 0.15, eyebrowY + r * 0.02),
+            Offset(leftX + r * 0.15, eyebrowY + r * 0.02), paint);
+        canvas.drawLine(Offset(rightX - r * 0.15, eyebrowY + r * 0.02),
+            Offset(rightX + r * 0.15, eyebrowY + r * 0.02), paint);
+        break;
+      default:
+        canvas.drawArc(
+            Rect.fromCenter(
+                center: Offset(leftX, eyebrowY + r * 0.03),
+                width: r * 0.36,
+                height: r * 0.12),
+            pi * 1.15, pi * 0.7, false, paint);
+        canvas.drawArc(
+            Rect.fromCenter(
+                center: Offset(rightX, eyebrowY + r * 0.03),
+                width: r * 0.36,
+                height: r * 0.12),
+            pi * 1.15, pi * 0.7, false, paint);
+    }
+  }
+
+  void _drawDetailedEye(Canvas canvas, Offset center, double size) {
+    final rect = Rect.fromCircle(center: center, radius: size);
+
+    canvas.drawCircle(
+      center,
+      size * 1.15,
+      Paint()
+        ..color = _dark(skinTone, 0.25).withOpacity(0.5)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+    );
+
+    canvas.drawCircle(center, size, Paint()..color = Colors.white);
+
+    final irisRect = Rect.fromCircle(center: center, radius: size * 0.72);
+    canvas.drawCircle(
+      center,
+      size * 0.72,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            _dark(eyeColor, 0.45),
+            eyeColor,
+            _light(eyeColor, 0.35),
+          ],
+          stops: const [0.0, 0.55, 1.0],
+        ).createShader(irisRect),
+    );
+
+    canvas.drawCircle(
+      center,
+      size * 0.38,
+      Paint()..color = _dark(eyeColor, 0.8),
+    );
+
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(center.dx - size * 0.28, center.dy - size * 0.35),
+        width: size * 0.42,
+        height: size * 0.35,
+      ),
+      Paint()..color = Colors.white,
+    );
+
+    canvas.drawCircle(
+      Offset(center.dx + size * 0.28, center.dy + size * 0.32),
+      size * 0.13,
+      Paint()..color = Colors.white.withOpacity(0.85),
+    );
+
+    final lidPaint = Paint()
+      ..color = Colors.black87
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = size * 0.16
+      ..strokeCap = StrokeCap.round;
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: size * 0.95),
+      pi * 1.1,
+      pi * 0.8,
+      false,
+      lidPaint,
     );
   }
 
   void _drawEyes(Canvas canvas, double cx, double cy, double r) {
+    final eyeY = cy - r * 0.05;
+    final leftEyeX = cx - r * 0.35;
+    final rightEyeX = cx + r * 0.35;
+    final eyeSize = r * 0.18;
+
     if (_isBlinking && _blinkable.contains(expression)) {
-      final eyeY = cy - r * 0.05;
-      final leftEyeX = cx - r * 0.35;
-      final rightEyeX = cx + r * 0.35;
-      final eyeSize = r * 0.18;
       final paint = Paint()
         ..color = Colors.black
         ..style = PaintingStyle.stroke
@@ -856,72 +1015,45 @@ class _MangaFacePainter extends CustomPainter {
       return;
     }
 
-    final eyeY = cy - r * 0.05;
-    final leftEyeX = cx - r * 0.35;
-    final rightEyeX = cx + r * 0.35;
-    final eyeSize = r * 0.18;
-
-    final blackPaint = Paint()..color = Colors.black;
-    final whitePaint = Paint()..color = Colors.white;
-
-    void drawNormalEye(double x) {
-      final irisRect =
-          Rect.fromCircle(center: Offset(x, eyeY), radius: eyeSize * 0.65);
-      canvas.drawCircle(Offset(x, eyeY), eyeSize, whitePaint);
-      canvas.drawCircle(
-        Offset(x, eyeY),
-        eyeSize * 0.65,
-        Paint()
-          ..shader = LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color.lerp(eyeColor, Colors.white, 0.25)!,
-              eyeColor,
-            ],
-          ).createShader(irisRect),
-      );
-      canvas.drawCircle(
-        Offset(x - eyeSize * 0.22, eyeY - eyeSize * 0.28),
-        eyeSize * 0.28,
-        whitePaint,
-      );
-    }
-
     switch (expression) {
+      case MangaExpression.neutral:
+      case MangaExpression.shy:
+        _drawDetailedEye(canvas, Offset(leftEyeX, eyeY), eyeSize);
+        _drawDetailedEye(canvas, Offset(rightEyeX, eyeY), eyeSize);
+        break;
       case MangaExpression.happy:
       case MangaExpression.veryHappy:
       case MangaExpression.laugh:
         final paint = Paint()
           ..color = Colors.black
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.8
+          ..strokeWidth = 3.2
           ..strokeCap = StrokeCap.round;
         canvas.drawArc(
             Rect.fromCenter(
                 center: Offset(leftEyeX, eyeY),
-                width: eyeSize * 1.5,
-                height: eyeSize),
+                width: eyeSize * 1.6,
+                height: eyeSize * 1.1),
             pi, pi, false, paint);
         canvas.drawArc(
             Rect.fromCenter(
                 center: Offset(rightEyeX, eyeY),
-                width: eyeSize * 1.5,
-                height: eyeSize),
+                width: eyeSize * 1.6,
+                height: eyeSize * 1.1),
             pi, pi, false, paint);
         break;
       case MangaExpression.wink:
-        drawNormalEye(leftEyeX);
+        _drawDetailedEye(canvas, Offset(leftEyeX, eyeY), eyeSize);
         final paint = Paint()
           ..color = Colors.black
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.8
+          ..strokeWidth = 3.2
           ..strokeCap = StrokeCap.round;
         canvas.drawArc(
             Rect.fromCenter(
                 center: Offset(rightEyeX, eyeY),
-                width: eyeSize * 1.5,
-                height: eyeSize),
+                width: eyeSize * 1.6,
+                height: eyeSize * 1.1),
             pi, pi, false, paint);
         break;
       case MangaExpression.sleepy:
@@ -929,72 +1061,60 @@ class _MangaFacePainter extends CustomPainter {
         final paint = Paint()
           ..color = Colors.black
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.8
+          ..strokeWidth = 3.2
           ..strokeCap = StrokeCap.round;
         canvas.drawLine(
-            Offset(leftEyeX - eyeSize * 0.7, eyeY),
-            Offset(leftEyeX + eyeSize * 0.7, eyeY), paint);
+            Offset(leftEyeX - eyeSize * 0.8, eyeY),
+            Offset(leftEyeX + eyeSize * 0.8, eyeY), paint);
         canvas.drawLine(
-            Offset(rightEyeX - eyeSize * 0.7, eyeY),
-            Offset(rightEyeX + eyeSize * 0.7, eyeY), paint);
+            Offset(rightEyeX - eyeSize * 0.8, eyeY),
+            Offset(rightEyeX + eyeSize * 0.8, eyeY), paint);
         break;
       case MangaExpression.sad:
         final paint = Paint()
           ..color = Colors.black
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.8
+          ..strokeWidth = 3.2
           ..strokeCap = StrokeCap.round;
         canvas.drawArc(
             Rect.fromCenter(
                 center: Offset(leftEyeX, eyeY + eyeSize * 0.3),
-                width: eyeSize * 1.5,
-                height: eyeSize),
+                width: eyeSize * 1.6,
+                height: eyeSize * 1.1),
             0, pi, false, paint);
         canvas.drawArc(
             Rect.fromCenter(
                 center: Offset(rightEyeX, eyeY + eyeSize * 0.3),
-                width: eyeSize * 1.5,
-                height: eyeSize),
+                width: eyeSize * 1.6,
+                height: eyeSize * 1.1),
             0, pi, false, paint);
-        final tearRect = Rect.fromCircle(
-            center: Offset(rightEyeX + eyeSize * 0.6, eyeY + eyeSize * 1.2),
-            radius: eyeSize * 0.35);
-        canvas.drawCircle(
-          Offset(rightEyeX + eyeSize * 0.6, eyeY + eyeSize * 1.2),
-          eyeSize * 0.3,
+        final tearRect = Rect.fromCenter(
+            center: Offset(rightEyeX + eyeSize * 0.7, eyeY + eyeSize * 1.3),
+            width: eyeSize * 0.7,
+            height: eyeSize * 1.0);
+        canvas.drawOval(
+          tearRect,
           Paint()
             ..shader = const RadialGradient(
-              center: Alignment(-0.4, -0.4),
-              colors: [Color(0xFFB3E5FC), Color(0xFF4FC3F7)],
+              center: Alignment(-0.3, -0.3),
+              colors: [Color(0xFFE1F5FE), Color(0xFF4FC3F7)],
             ).createShader(tearRect),
         );
         break;
       case MangaExpression.angry:
-        drawNormalEye(leftEyeX);
-        drawNormalEye(rightEyeX);
-        final browPaint = Paint()
-          ..color = Colors.black
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.8
-          ..strokeCap = StrokeCap.round;
-        canvas.drawLine(
-            Offset(leftEyeX - eyeSize, eyeY - eyeSize * 1.5),
-            Offset(leftEyeX + eyeSize, eyeY - eyeSize * 0.8), browPaint);
-        canvas.drawLine(
-            Offset(rightEyeX + eyeSize, eyeY - eyeSize * 1.5),
-            Offset(rightEyeX - eyeSize, eyeY - eyeSize * 0.8), browPaint);
+        _drawDetailedEye(canvas, Offset(leftEyeX, eyeY), eyeSize);
+        _drawDetailedEye(canvas, Offset(rightEyeX, eyeY), eyeSize);
         break;
       case MangaExpression.surprised:
-        canvas.drawCircle(Offset(leftEyeX, eyeY), eyeSize * 1.3, whitePaint);
-        canvas.drawCircle(Offset(leftEyeX, eyeY), eyeSize * 0.5, blackPaint);
-        canvas.drawCircle(Offset(rightEyeX, eyeY), eyeSize * 1.3, whitePaint);
-        canvas.drawCircle(Offset(rightEyeX, eyeY), eyeSize * 0.5, blackPaint);
+        final bigEyeSize = eyeSize * 1.3;
+        _drawDetailedEye(canvas, Offset(leftEyeX, eyeY), bigEyeSize);
+        _drawDetailedEye(canvas, Offset(rightEyeX, eyeY), bigEyeSize);
         final linesPaint = Paint()
-          ..color = Colors.black
-          ..strokeWidth = 1.5
+          ..color = Colors.black87
+          ..strokeWidth = 1.8
           ..strokeCap = StrokeCap.round;
         for (int i = 0; i < 4; i++) {
-          final a = i * pi / 2;
+          final a = i * pi / 2 + pi / 4;
           canvas.drawLine(
               Offset(cx + cos(a) * (r * 0.55), eyeY + sin(a) * (r * 0.55)),
               Offset(cx + cos(a) * (r * 0.75), eyeY + sin(a) * (r * 0.75)),
@@ -1003,118 +1123,142 @@ class _MangaFacePainter extends CustomPainter {
         break;
       case MangaExpression.love:
         _drawHeart(canvas, Offset(leftEyeX, eyeY), eyeSize * 1.5, Colors.pink);
-        _drawHeart(canvas, Offset(rightEyeX, eyeY), eyeSize * 1.5, Colors.pink);
+        _drawHeart(
+            canvas, Offset(rightEyeX, eyeY), eyeSize * 1.5, Colors.pink);
         break;
       case MangaExpression.starstruck:
-        _drawStar(canvas, Offset(leftEyeX, eyeY), eyeSize * 1.5, Colors.amber);
-        _drawStar(canvas, Offset(rightEyeX, eyeY), eyeSize * 1.5, Colors.amber);
+        _drawStar(
+            canvas, Offset(leftEyeX, eyeY), eyeSize * 1.5, Colors.amber);
+        _drawStar(
+            canvas, Offset(rightEyeX, eyeY), eyeSize * 1.5, Colors.amber);
         break;
       case MangaExpression.cool:
+        final glassesRect = Rect.fromCenter(
+            center: Offset(cx, eyeY), width: r * 1.5, height: r * 0.42);
         canvas.drawRRect(
-          RRect.fromRectAndRadius(
-            Rect.fromCenter(
-                center: Offset(cx, eyeY), width: r * 1.4, height: r * 0.4),
-            const Radius.circular(4),
-          ),
+          RRect.fromRectAndRadius(glassesRect, Radius.circular(r * 0.1)),
           Paint()
             ..shader = const LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [Color(0xFF1A1A1A), Color(0xFF3A3A3A)],
-            ).createShader(Rect.fromCenter(
-                center: Offset(cx, eyeY), width: r * 1.4, height: r * 0.4)),
+              colors: [Color(0xFF0A0A0A), Color(0xFF3A3A3A)],
+            ).createShader(glassesRect),
         );
         canvas.drawLine(
-            Offset(cx - r * 0.5, eyeY - r * 0.1),
+            Offset(cx - r * 0.55, eyeY - r * 0.1),
             Offset(cx - r * 0.2, eyeY - r * 0.1),
             Paint()
-              ..color = Colors.white.withOpacity(0.5)
-              ..strokeWidth = 2);
+              ..color = Colors.white.withOpacity(0.6)
+              ..strokeWidth = 2
+              ..strokeCap = StrokeCap.round);
         break;
       case MangaExpression.thinking:
-        drawNormalEye(leftEyeX);
-        canvas.drawCircle(Offset(rightEyeX, eyeY), eyeSize, whitePaint);
-        canvas.drawCircle(Offset(rightEyeX, eyeY), eyeSize * 0.4, blackPaint);
+        _drawDetailedEye(canvas, Offset(leftEyeX, eyeY), eyeSize);
+        canvas.drawCircle(
+            Offset(rightEyeX, eyeY), eyeSize, Paint()..color = Colors.white);
+        canvas.drawCircle(Offset(rightEyeX, eyeY), eyeSize * 0.45,
+            Paint()..color = eyeColor);
         break;
       case MangaExpression.confused:
-        canvas.drawCircle(Offset(leftEyeX, eyeY), eyeSize * 1.2, whitePaint);
-        canvas.drawCircle(Offset(leftEyeX, eyeY), eyeSize * 0.6, blackPaint);
-        canvas.drawCircle(Offset(rightEyeX, eyeY), eyeSize * 0.8, whitePaint);
-        canvas.drawCircle(Offset(rightEyeX, eyeY), eyeSize * 0.5, blackPaint);
+        _drawDetailedEye(canvas, Offset(leftEyeX, eyeY), eyeSize * 1.15);
+        _drawDetailedEye(canvas, Offset(rightEyeX, eyeY), eyeSize * 0.8);
         break;
       case MangaExpression.excited:
-        canvas.drawCircle(Offset(leftEyeX, eyeY), eyeSize * 1.2, whitePaint);
-        canvas.drawCircle(Offset(leftEyeX, eyeY), eyeSize * 0.8, blackPaint);
-        canvas.drawCircle(
-            Offset(leftEyeX - eyeSize * 0.2, eyeY - eyeSize * 0.2),
-            eyeSize * 0.3, whitePaint);
-        canvas.drawCircle(Offset(rightEyeX, eyeY), eyeSize * 1.2, whitePaint);
-        canvas.drawCircle(Offset(rightEyeX, eyeY), eyeSize * 0.8, blackPaint);
-        canvas.drawCircle(
-            Offset(rightEyeX - eyeSize * 0.2, eyeY - eyeSize * 0.2),
-            eyeSize * 0.3, whitePaint);
+        _drawDetailedEye(canvas, Offset(leftEyeX, eyeY), eyeSize * 1.2);
+        _drawDetailedEye(canvas, Offset(rightEyeX, eyeY), eyeSize * 1.2);
         break;
       case MangaExpression.determined:
-        drawNormalEye(leftEyeX);
-        drawNormalEye(rightEyeX);
-        final browPaint = Paint()
-          ..color = Colors.black
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.8
-          ..strokeCap = StrokeCap.round;
-        canvas.drawLine(
-            Offset(leftEyeX - eyeSize, eyeY - eyeSize * 1.3),
-            Offset(leftEyeX + eyeSize, eyeY - eyeSize * 1.5), browPaint);
-        canvas.drawLine(
-            Offset(rightEyeX + eyeSize, eyeY - eyeSize * 1.3),
-            Offset(rightEyeX - eyeSize, eyeY - eyeSize * 1.5), browPaint);
+        _drawDetailedEye(canvas, Offset(leftEyeX, eyeY), eyeSize);
+        _drawDetailedEye(canvas, Offset(rightEyeX, eyeY), eyeSize);
         break;
       case MangaExpression.proud:
-        drawNormalEye(leftEyeX);
-        drawNormalEye(rightEyeX);
+        _drawDetailedEye(canvas, Offset(leftEyeX, eyeY), eyeSize);
+        _drawDetailedEye(canvas, Offset(rightEyeX, eyeY), eyeSize);
         final lidPaint = Paint()..color = skinTone;
         canvas.drawRect(
             Rect.fromCenter(
                 center: Offset(leftEyeX, eyeY - eyeSize * 0.6),
-                width: eyeSize * 2,
-                height: eyeSize * 0.9),
+                width: eyeSize * 2.2,
+                height: eyeSize * 0.95),
             lidPaint);
         canvas.drawRect(
             Rect.fromCenter(
                 center: Offset(rightEyeX, eyeY - eyeSize * 0.6),
-                width: eyeSize * 2,
-                height: eyeSize * 0.9),
+                width: eyeSize * 2.2,
+                height: eyeSize * 0.95),
             lidPaint);
         break;
       case MangaExpression.silly:
         final paint = Paint()
           ..color = Colors.black
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.8
+          ..strokeWidth = 3.2
           ..strokeCap = StrokeCap.round;
         canvas.drawArc(
             Rect.fromCenter(
                 center: Offset(leftEyeX, eyeY),
-                width: eyeSize * 1.5,
-                height: eyeSize),
+                width: eyeSize * 1.6,
+                height: eyeSize * 1.1),
             pi, pi, false, paint);
         canvas.drawArc(
             Rect.fromCenter(
                 center: Offset(rightEyeX, eyeY),
-                width: eyeSize * 1.5,
-                height: eyeSize),
+                width: eyeSize * 1.6,
+                height: eyeSize * 1.1),
             pi, pi, false, paint);
         break;
-      case MangaExpression.neutral:
-      case MangaExpression.shy:
-      default:
-        drawNormalEye(leftEyeX);
-        drawNormalEye(rightEyeX);
     }
   }
 
+  void _drawNose(Canvas canvas, double cx, double cy, double r) {
+    final noseY = cy + r * 0.12;
+    final rect = Rect.fromCenter(
+      center: Offset(cx + 2, noseY),
+      width: r * 0.15,
+      height: r * 0.12,
+    );
+    canvas.drawOval(
+      rect,
+      Paint()
+        ..color = _dark(skinTone, 0.3).withOpacity(0.5)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5),
+    );
+  }
+
+  void _drawBlush(Canvas canvas, double cx, double cy, double r) {
+    final blushRect1 = Rect.fromCenter(
+        center: Offset(cx - r * 0.58, cy + r * 0.22),
+        width: r * 0.45,
+        height: r * 0.28);
+    canvas.drawOval(
+      blushRect1,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [
+            const Color(0xFFFF9E9E).withOpacity(0.85),
+            const Color(0xFFFF9E9E).withOpacity(0.0),
+          ],
+        ).createShader(blushRect1),
+    );
+
+    final blushRect2 = Rect.fromCenter(
+        center: Offset(cx + r * 0.58, cy + r * 0.22),
+        width: r * 0.45,
+        height: r * 0.28);
+    canvas.drawOval(
+      blushRect2,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [
+            const Color(0xFFFF9E9E).withOpacity(0.85),
+            const Color(0xFFFF9E9E).withOpacity(0.0),
+          ],
+        ).createShader(blushRect2),
+    );
+  }
+
   void _drawMouth(Canvas canvas, double cx, double cy, double r) {
-    final mouthY = cy + r * 0.35;
+    final mouthY = cy + r * 0.42;
     final blackPaint = Paint()..color = Colors.black;
     final strokePaint = Paint()
       ..color = Colors.black
@@ -1127,31 +1271,36 @@ class _MangaFacePainter extends CustomPainter {
         canvas.drawArc(
             Rect.fromCenter(
                 center: Offset(cx, mouthY),
-                width: r * 0.5,
-                height: r * 0.3),
+                width: r * 0.55,
+                height: r * 0.32),
             0, pi, false, strokePaint);
         break;
       case MangaExpression.veryHappy:
       case MangaExpression.laugh:
-        final path = Path()
-          ..moveTo(cx - r * 0.35, mouthY)
-          ..quadraticBezierTo(cx, mouthY + r * 0.5, cx + r * 0.35, mouthY)
-          ..close();
-        canvas.drawPath(path, blackPaint);
+        final mouthRect = Rect.fromCenter(
+            center: Offset(cx, mouthY), width: r * 0.7, height: r * 0.5);
+        canvas.drawOval(mouthRect, Paint()..color = const Color(0xFF3D1414));
+        canvas.drawOval(
+          Rect.fromCenter(
+              center: Offset(cx, mouthY + r * 0.1),
+              width: r * 0.4,
+              height: r * 0.25),
+          Paint()..color = const Color(0xFFFF7E7E),
+        );
         break;
       case MangaExpression.sad:
         canvas.drawArc(
             Rect.fromCenter(
                 center: Offset(cx, mouthY + r * 0.1),
                 width: r * 0.4,
-                height: r * 0.2),
+                height: r * 0.22),
             pi, pi, false, strokePaint);
         break;
       case MangaExpression.angry:
         final path = Path()
           ..moveTo(cx - r * 0.3, mouthY)
           ..lineTo(cx + r * 0.3, mouthY)
-          ..lineTo(cx, mouthY + r * 0.2)
+          ..lineTo(cx, mouthY + r * 0.22)
           ..close();
         canvas.drawPath(path, blackPaint);
         break;
@@ -1160,58 +1309,70 @@ class _MangaFacePainter extends CustomPainter {
             Rect.fromCenter(
                 center: Offset(cx, mouthY),
                 width: r * 0.25,
-                height: r * 0.35),
+                height: r * 0.4),
             blackPaint);
         break;
       case MangaExpression.sleepy:
       case MangaExpression.sleepyHappy:
       case MangaExpression.shy:
-        canvas.drawLine(Offset(cx - r * 0.15, mouthY),
-            Offset(cx + r * 0.15, mouthY), strokePaint);
+        canvas.drawLine(Offset(cx - r * 0.18, mouthY),
+            Offset(cx + r * 0.18, mouthY), strokePaint);
         break;
       case MangaExpression.love:
-        canvas.drawCircle(Offset(cx, mouthY), r * 0.12, blackPaint);
+        canvas.drawCircle(Offset(cx, mouthY), r * 0.14,
+            Paint()..color = const Color(0xFF3D1414));
         break;
       case MangaExpression.starstruck:
         canvas.drawArc(
             Rect.fromCenter(
                 center: Offset(cx, mouthY),
                 width: r * 0.6,
-                height: r * 0.4),
+                height: r * 0.35),
             0, pi, false, strokePaint);
         break;
       case MangaExpression.cool:
+        final path = Path()
+          ..moveTo(cx - r * 0.25, mouthY)
+          ..quadraticBezierTo(
+              cx, mouthY + r * 0.1, cx + r * 0.25, mouthY - r * 0.02);
+        canvas.drawPath(path, strokePaint);
+        break;
       case MangaExpression.wink:
         canvas.drawArc(
             Rect.fromCenter(
                 center: Offset(cx, mouthY),
-                width: r * 0.4,
-                height: r * 0.2),
+                width: r * 0.45,
+                height: r * 0.22),
             0, pi, false, strokePaint);
         break;
       case MangaExpression.thinking:
-        canvas.drawCircle(Offset(cx + r * 0.1, mouthY), r * 0.08, blackPaint);
+        canvas.drawCircle(
+            Offset(cx + r * 0.1, mouthY), r * 0.1, blackPaint);
         break;
       case MangaExpression.confused:
-        canvas.drawArc(
-            Rect.fromCenter(
-                center: Offset(cx, mouthY),
-                width: r * 0.4,
-                height: r * 0.2),
-            0, pi, false, strokePaint);
+        final path = Path()..moveTo(cx - r * 0.25, mouthY);
+        for (int i = 1; i <= 3; i++) {
+          path.quadraticBezierTo(
+            cx - r * 0.25 + (i * r * 0.5 / 3) + r * 0.08,
+            mouthY + (i.isEven ? -r * 0.06 : r * 0.06),
+            cx - r * 0.25 + (i * r * 0.5 / 3),
+            mouthY,
+          );
+        }
+        canvas.drawPath(path, strokePaint);
         break;
       case MangaExpression.excited:
         final path = Path()
-          ..moveTo(cx - r * 0.3, mouthY)
-          ..quadraticBezierTo(cx, mouthY + r * 0.35, cx + r * 0.3, mouthY)
+          ..moveTo(cx - r * 0.32, mouthY)
+          ..quadraticBezierTo(cx, mouthY + r * 0.4, cx + r * 0.32, mouthY)
           ..close();
-        canvas.drawPath(path, blackPaint);
+        canvas.drawPath(path, Paint()..color = const Color(0xFF3D1414));
         break;
       case MangaExpression.determined:
         final path = Path()
           ..moveTo(cx - r * 0.3, mouthY)
           ..lineTo(cx + r * 0.3, mouthY)
-          ..lineTo(cx, mouthY + r * 0.15)
+          ..lineTo(cx, mouthY + r * 0.16)
           ..close();
         canvas.drawPath(path, blackPaint);
         break;
@@ -1219,57 +1380,222 @@ class _MangaFacePainter extends CustomPainter {
         canvas.drawArc(
             Rect.fromCenter(
                 center: Offset(cx, mouthY),
-                width: r * 0.5,
-                height: r * 0.25),
+                width: r * 0.55,
+                height: r * 0.28),
             0, pi, false, strokePaint);
         break;
       case MangaExpression.silly:
         canvas.drawOval(
             Rect.fromCenter(
                 center: Offset(cx, mouthY),
-                width: r * 0.4,
-                height: r * 0.3),
-            blackPaint);
+                width: r * 0.45,
+                height: r * 0.35),
+            Paint()..color = const Color(0xFF3D1414));
         canvas.drawOval(
             Rect.fromCenter(
-                center: Offset(cx, mouthY + r * 0.1),
-                width: r * 0.25,
-                height: r * 0.18),
-            Paint()..color = Colors.pink);
+                center: Offset(cx, mouthY + r * 0.12),
+                width: r * 0.3,
+                height: r * 0.22),
+            Paint()..color = const Color(0xFFFF7E7E));
         break;
-      case MangaExpression.neutral:
       default:
         canvas.drawArc(
             Rect.fromCenter(
                 center: Offset(cx, mouthY),
-                width: r * 0.3,
-                height: r * 0.15),
+                width: r * 0.32,
+                height: r * 0.18),
             0, pi, false, strokePaint);
     }
+  }
+
+  void _drawFrontHair(Canvas canvas, double cx, double cy, double r) {
+    final hairRect =
+        Rect.fromCircle(center: Offset(cx, cy - r * 0.5), radius: r * 1.3);
+
+    final hairGradient = LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [
+        _light(hairColor, 0.35),
+        hairColor,
+        _dark(hairColor, 0.35),
+      ],
+      stops: const [0.0, 0.5, 1.0],
+    ).createShader(hairRect);
+
+    Path path;
+    switch (hairStyle) {
+      case HairStyle.spiky:
+        path = Path()
+          ..moveTo(cx - r * 1.05, cy - r * 0.35)
+          ..lineTo(cx - r * 0.88, cy - r * 1.02)
+          ..lineTo(cx - r * 0.55, cy - r * 0.6)
+          ..lineTo(cx - r * 0.2, cy - r * 1.12)
+          ..lineTo(cx + r * 0.15, cy - r * 0.55)
+          ..lineTo(cx + r * 0.5, cy - r * 1.08)
+          ..lineTo(cx + r * 0.82, cy - r * 0.5)
+          ..lineTo(cx + r * 1.05, cy - r * 0.35)
+          ..quadraticBezierTo(
+              cx + r * 0.95, cy - r * 0.75, cx + r * 0.5, cy - r * 0.78)
+          ..quadraticBezierTo(
+              cx, cy - r * 0.9, cx - r * 0.5, cy - r * 0.78)
+          ..quadraticBezierTo(
+              cx - r * 0.95, cy - r * 0.75, cx - r * 1.05, cy - r * 0.35)
+          ..close();
+        break;
+      case HairStyle.short:
+        path = Path()
+          ..moveTo(cx - r * 1.0, cy - r * 0.4)
+          ..quadraticBezierTo(
+              cx - r * 0.9, cy - r * 1.1, cx, cy - r * 1.05)
+          ..quadraticBezierTo(
+              cx + r * 0.9, cy - r * 1.1, cx + r * 1.0, cy - r * 0.4)
+          ..quadraticBezierTo(
+              cx + r * 0.7, cy - r * 0.65, cx + r * 0.3, cy - r * 0.62)
+          ..quadraticBezierTo(
+              cx, cy - r * 0.72, cx - r * 0.3, cy - r * 0.62)
+          ..quadraticBezierTo(
+              cx - r * 0.7, cy - r * 0.65, cx - r * 1.0, cy - r * 0.4)
+          ..close();
+        break;
+      case HairStyle.long:
+        path = Path()
+          ..moveTo(cx - r * 1.1, cy + r * 0.6)
+          ..lineTo(cx - r * 1.08, cy - r * 0.35)
+          ..quadraticBezierTo(
+              cx - r * 0.9, cy - r * 1.15, cx, cy - r * 1.02)
+          ..quadraticBezierTo(
+              cx + r * 0.9, cy - r * 1.15, cx + r * 1.08, cy - r * 0.35)
+          ..lineTo(cx + r * 1.1, cy + r * 0.6)
+          ..quadraticBezierTo(
+              cx + r * 0.85, cy + r * 0.35, cx + r * 0.72, cy - r * 0.25)
+          ..quadraticBezierTo(
+              cx, cy - r * 0.55, cx - r * 0.72, cy - r * 0.25)
+          ..quadraticBezierTo(
+              cx - r * 0.85, cy + r * 0.35, cx - r * 1.1, cy + r * 0.6)
+          ..close();
+        break;
+      case HairStyle.ponytail:
+        path = Path()
+          ..moveTo(cx - r * 1.05, cy - r * 0.35)
+          ..lineTo(cx - r * 0.88, cy - r * 1.02)
+          ..lineTo(cx - r * 0.55, cy - r * 0.6)
+          ..lineTo(cx - r * 0.2, cy - r * 1.12)
+          ..lineTo(cx + r * 0.15, cy - r * 0.55)
+          ..lineTo(cx + r * 0.5, cy - r * 1.08)
+          ..lineTo(cx + r * 0.82, cy - r * 0.5)
+          ..lineTo(cx + r * 1.05, cy - r * 0.35)
+          ..quadraticBezierTo(
+              cx + r * 0.95, cy - r * 0.75, cx + r * 0.5, cy - r * 0.78)
+          ..quadraticBezierTo(
+              cx, cy - r * 0.9, cx - r * 0.5, cy - r * 0.78)
+          ..quadraticBezierTo(
+              cx - r * 0.95, cy - r * 0.75, cx - r * 1.05, cy - r * 0.35)
+          ..close();
+        break;
+    }
+
+    canvas.save();
+    canvas.translate(1.5, 3);
+    canvas.drawPath(
+        path,
+        Paint()
+          ..color = Colors.black.withOpacity(0.2)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3));
+    canvas.restore();
+
+    canvas.drawPath(path, Paint()..shader = hairGradient);
+
+    canvas.drawPath(
+      path,
+      Paint()
+        ..shader = RadialGradient(
+          center: const Alignment(-0.5, -0.8),
+          radius: 0.7,
+          colors: [
+            Colors.white.withOpacity(0.45),
+            Colors.transparent,
+          ],
+        ).createShader(hairRect)
+        ..blendMode = BlendMode.overlay,
+    );
+
+    final highlightPaint = Paint()
+      ..color = _light(hairColor, 0.55).withOpacity(0.6)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round;
+    canvas.drawArc(
+        Rect.fromCenter(
+            center: Offset(cx - r * 0.4, cy - r * 0.75),
+            width: r * 0.5,
+            height: r * 0.15),
+        pi * 1.1, pi * 0.5, false, highlightPaint);
+
+    if (hairStyle == HairStyle.ponytail) {
+      final tailPath = Path()
+        ..moveTo(cx + r * 0.9, cy - r * 0.45)
+        ..cubicTo(cx + r * 1.4, cy - r * 0.25, cx + r * 1.35, cy + r * 0.5,
+            cx + r * 1.15, cy + r * 0.55)
+        ..cubicTo(cx + r * 1.0, cy + r * 0.5, cx + r * 0.9, cy + r * 0.2,
+            cx + r * 0.88, cy + r * 0.05)
+        ..close();
+      canvas.drawPath(tailPath, Paint()..shader = hairGradient);
+    }
+  }
+
+  void _drawHairShadowOnFace(Canvas canvas, double cx, double cy, double r) {
+    final foreheadRect = Rect.fromCenter(
+      center: Offset(cx, cy - r * 0.55),
+      width: r * 1.6,
+      height: r * 0.55,
+    );
+    canvas.drawOval(
+      foreheadRect,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [
+            _dark(skinTone, 0.3).withOpacity(0.4),
+            Colors.transparent,
+          ],
+          stops: const [0.0, 1.0],
+        ).createShader(foreheadRect),
+    );
   }
 
   void _drawAccessories(Canvas canvas, double cx, double cy, double r) {
     switch (expression) {
       case MangaExpression.surprised:
         final path = Path()
-          ..moveTo(cx + r * 0.8, cy - r * 0.3)
+          ..moveTo(cx + r * 0.82, cy - r * 0.3)
           ..quadraticBezierTo(
-              cx + r * 0.9, cy - r * 0.1, cx + r * 0.8, cy)
+              cx + r * 0.92, cy - r * 0.1, cx + r * 0.82, cy)
           ..quadraticBezierTo(
-              cx + r * 0.7, cy - r * 0.1, cx + r * 0.8, cy - r * 0.3);
-        canvas.drawPath(path, Paint()..color = Colors.lightBlue);
+              cx + r * 0.72, cy - r * 0.1, cx + r * 0.82, cy - r * 0.3);
+        canvas.drawPath(
+          path,
+          Paint()
+            ..shader = const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFFE1F5FE), Color(0xFF4FC3F7)],
+            ).createShader(Rect.fromCircle(
+                center: Offset(cx + r * 0.8, cy - r * 0.15),
+                radius: r * 0.2)),
+        );
         break;
       case MangaExpression.angry:
         final angerPaint = Paint()
           ..color = Colors.red
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 2;
-        final ax = cx + r * 0.7;
-        final ay = cy - r * 0.7;
+          ..strokeWidth = 2.5
+          ..strokeCap = StrokeCap.round;
+        final ax = cx + r * 0.75;
+        final ay = cy - r * 0.75;
         canvas.drawLine(
-            Offset(ax - 6, ay - 6), Offset(ax + 6, ay + 6), angerPaint);
+            Offset(ax - 7, ay - 7), Offset(ax + 7, ay + 7), angerPaint);
         canvas.drawLine(
-            Offset(ax + 6, ay - 6), Offset(ax - 6, ay + 6), angerPaint);
+            Offset(ax + 7, ay - 7), Offset(ax - 7, ay + 7), angerPaint);
         break;
       case MangaExpression.thinking:
         canvas.drawCircle(Offset(cx + r * 0.9, cy - r * 0.7), r * 0.12,
@@ -1284,8 +1610,10 @@ class _MangaFacePainter extends CustomPainter {
         break;
       case MangaExpression.starstruck:
       case MangaExpression.excited:
-        _drawStar(canvas, Offset(cx + r * 0.7, cy - r * 0.7), r * 0.2, Colors.amber);
-        _drawStar(canvas, Offset(cx - r * 0.7, cy - r * 0.5), r * 0.15, Colors.amber);
+        _drawStar(canvas, Offset(cx + r * 0.7, cy - r * 0.7), r * 0.2,
+            Colors.amber);
+        _drawStar(
+            canvas, Offset(cx - r * 0.7, cy - r * 0.5), r * 0.15, Colors.amber);
         break;
       default:
         break;
@@ -1365,9 +1693,12 @@ class FloatingMangaCharacter {
     _entry = null;
   }
 
-  static void say(String messageKey) => key.currentState?.showMessage(messageKey);
+  static void say(String messageKey) =>
+      key.currentState?.showMessage(messageKey);
+
   static void sayCustom(String text, MangaExpression expression) =>
       key.currentState?.showCustomMessage(text, expression);
+
   static void setExpression(MangaExpression expression) =>
       key.currentState?.setExpression(expression);
 }
