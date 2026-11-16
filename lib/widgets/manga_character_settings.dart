@@ -3,9 +3,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../main.dart';
 import 'manga_character.dart';
 
-// ══════════════════════════════════════════════════════════════
-// ألوان جاهزة
-// ══════════════════════════════════════════════════════════════
 class MangaPalettes {
   static const List<Color> hairColors = [
     Color(0xFF2C1810), Color(0xFF4A2C1A), Color(0xFF8B4513),
@@ -27,9 +24,6 @@ class MangaPalettes {
   ];
 }
 
-// ══════════════════════════════════════════════════════════════
-// نموذج إعدادات الشخصية
-// ══════════════════════════════════════════════════════════════
 class MangaCharacterConfig {
   final bool isVisible;
   final bool autoMove;
@@ -81,9 +75,6 @@ class MangaCharacterConfig {
 final ValueNotifier<MangaCharacterConfig> mangaConfigNotifier =
     ValueNotifier(const MangaCharacterConfig());
 
-// ══════════════════════════════════════════════════════════════
-// خدمة الحفظ والاسترجاع
-// ══════════════════════════════════════════════════════════════
 class MangaConfigService {
   static const _kVisible = 'manga_visible';
   static const _kAutoMove = 'manga_auto_move';
@@ -125,9 +116,6 @@ class MangaConfigService {
   }
 }
 
-// ══════════════════════════════════════════════════════════════
-// نافذة الإعدادات
-// ══════════════════════════════════════════════════════════════
 Future<void> showMangaSettingsDialog(BuildContext context) async {
   await showDialog(
     context: context,
@@ -170,7 +158,6 @@ class _MangaSettingsDialogState extends State<_MangaSettingsDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // ─── الرأس ─────────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
               child: Row(
@@ -189,8 +176,6 @@ class _MangaSettingsDialogState extends State<_MangaSettingsDialog> {
                 ],
               ),
             ),
-
-            // ─── المعاينة الحية ────────────────────────
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 16),
               padding: const EdgeInsets.all(12),
@@ -264,17 +249,13 @@ class _MangaSettingsDialogState extends State<_MangaSettingsDialog> {
                 ],
               ),
             ),
-
             const SizedBox(height: 12),
-
-            // ─── المحتوى القابل للتمرير ────────────────
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // ═══ التحكم العام ═══
                     _sectionTitle('التحكم العام', Icons.tune),
                     SwitchListTile(
                       title: const Text('إظهار الشخصية'),
@@ -316,22 +297,13 @@ class _MangaSettingsDialogState extends State<_MangaSettingsDialog> {
                       ),
                       trailing: Text('${_config.size.round()}'),
                     ),
-
                     const SizedBox(height: 8),
-
-                    // ═══ شكل الوجه ═══
                     _sectionTitle('شكل الوجه', Icons.face),
                     _buildShapeSelector(),
-
                     const SizedBox(height: 12),
-
-                    // ═══ تصفيفة الشعر ═══
                     _sectionTitle('تصفيفة الشعر', Icons.content_cut),
                     _buildHairStyleSelector(),
-
                     const SizedBox(height: 12),
-
-                    // ═══ لون الشعر ═══
                     _sectionTitle('لون الشعر', Icons.palette),
                     _buildColorGrid(
                       colors: MangaPalettes.hairColors,
@@ -339,10 +311,7 @@ class _MangaSettingsDialogState extends State<_MangaSettingsDialog> {
                       onSelected: (c) =>
                           _update(_config.copyWith(hairColor: c)),
                     ),
-
                     const SizedBox(height: 12),
-
-                    // ═══ لون العيون ═══
                     _sectionTitle('لون العيون', Icons.remove_red_eye),
                     _buildColorGrid(
                       colors: MangaPalettes.eyeColors,
@@ -350,10 +319,7 @@ class _MangaSettingsDialogState extends State<_MangaSettingsDialog> {
                       onSelected: (c) =>
                           _update(_config.copyWith(eyeColor: c)),
                     ),
-
                     const SizedBox(height: 12),
-
-                    // ═══ لون البشرة ═══
                     _sectionTitle('لون البشرة', Icons.face_retouching_natural),
                     _buildColorGrid(
                       colors: MangaPalettes.skinTones,
@@ -361,10 +327,7 @@ class _MangaSettingsDialogState extends State<_MangaSettingsDialog> {
                       onSelected: (c) =>
                           _update(_config.copyWith(skinTone: c)),
                     ),
-
                     const SizedBox(height: 16),
-
-                    // ═══ زر التجربة ═══
                     SizedBox(
                       width: double.infinity,
                       child: OutlinedButton.icon(
@@ -388,8 +351,6 @@ class _MangaSettingsDialogState extends State<_MangaSettingsDialog> {
                 ),
               ),
             ),
-
-            // ─── الأزرار السفلية ───────────────────────
             Container(
               padding: const EdgeInsets.all(12),
               decoration: const BoxDecoration(
