@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
+import '../core/app_events.dart';
 import '../main.dart';
 import '../services/backup_service.dart';
 
@@ -26,17 +27,38 @@ class _BackupProgressScreenState extends State<BackupProgressScreen> {
   Future<void> _start() async {
     if (_started) return;
     _started = true;
+
     if (widget.isRestore) {
       await _service.restoreBackup();
     } else {
       await _service.createBackup();
+    }
+
+    // 🆕 إخبار الشخصية بالنتيجة
+    final progress = _service.progress.value;
+    if (progress != null) {
+      final errorMsg = progress.error;
+      final wasCancelled = errorMsg != null &&
+          (errorMsg.contains('إلغاء') || errorMsg.contains('تم إلغاء'));
+
+      // لا نرسل حدثاً إذا كان المستخدم هو من ألغى العملية (ليس فشلاً حقيقياً)
+      if (!wasCancelled) {
+        final hasError = errorMsg != null;
+        if (widget.isRestore) {
+          AppEvents.fire(hasError ? 'restore_failed' : 'restore_success');
+        } else {
+          AppEvents.fire(hasError ? 'backup_failed' : 'backup_success');
+        }
+      }
     }
   }
 
   String _formatBytes(int bytes) {
     if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    if (bytes < 1024 * 1024 * 1024) return '${(bytes / 1024 / 1024).toStringAsFixed(1)} MB';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / 1024 / 1024).toStringAsFixed(1)} MB';
+    }
     return '${(bytes / 1024 / 1024 / 1024).toStringAsFixed(2)} GB';
   }
 
@@ -102,7 +124,6 @@ class _BackupProgressScreenState extends State<BackupProgressScreen> {
     return Column(
       children: [
         const Spacer(),
-        // دائرة التقدم
         Stack(
           alignment: Alignment.center,
           children: [
@@ -138,7 +159,6 @@ class _BackupProgressScreenState extends State<BackupProgressScreen> {
         ),
         const SizedBox(height: 30),
 
-        // الحالة
         Text(
           progress.stage,
           style: const TextStyle(
@@ -167,7 +187,6 @@ class _BackupProgressScreenState extends State<BackupProgressScreen> {
         const SizedBox(height: 30),
         const Spacer(),
 
-        // الإحصائيات
         GridView.count(
           crossAxisCount: 2,
           shrinkWrap: true,
@@ -192,7 +211,6 @@ class _BackupProgressScreenState extends State<BackupProgressScreen> {
 
         const SizedBox(height: 20),
 
-        // زر الإلغاء
         SizedBox(
           width: double.infinity,
           child: OutlinedButton.icon(
@@ -265,7 +283,9 @@ class _BackupProgressScreenState extends State<BackupProgressScreen> {
         ),
         const SizedBox(height: 20),
         Text(
-          hasError ? 'حدث خطأ' : (widget.isRestore ? 'تمت الاستعادة' : 'تم الإنشاء'),
+          hasError
+              ? 'حدث خطأ'
+              : (widget.isRestore ? 'تمت الاستعادة' : 'تم الإنشاء'),
           style: TextStyle(
               fontSize: 26, fontWeight: FontWeight.w900, color: color),
         ),
