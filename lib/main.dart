@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'core/app_events.dart';
 import 'screens/home_screen.dart';
 import 'screens/library_screen.dart';
 import 'screens/memories_screen.dart';
@@ -10,9 +11,11 @@ import 'widgets/manga_character.dart';
 import 'widgets/manga_character_settings.dart';
 
 final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.dark);
-final ValueNotifier<Color> primaryColorNotifier = ValueNotifier(const Color(0xFF741C2B));
+final ValueNotifier<Color> primaryColorNotifier =
+    ValueNotifier(const Color(0xFF741C2B));
 final ValueNotifier<String> fontNotifier = ValueNotifier('Cairo');
-final ValueNotifier<Color> titleColorNotifier = ValueNotifier(const Color(0xFFFFD700));
+final ValueNotifier<Color> titleColorNotifier =
+    ValueNotifier(const Color(0xFFFFD700));
 
 bool isAutoDarkModeEnabled = false;
 
@@ -44,7 +47,6 @@ void main() async {
 
   final savedColorValue = prefs.getInt('primaryColorValue') ?? 0xFF741C2B;
   primaryColorNotifier.value = Color(savedColorValue);
-
   fontNotifier.value = prefs.getString('app_font') ?? 'Cairo';
   final titleColorValue = prefs.getInt('title_color') ?? 0xFFFFD700;
   titleColorNotifier.value = Color(titleColorValue);
@@ -54,10 +56,92 @@ void main() async {
   runApp(const AnimeMemoryApp());
 }
 
-class AnimeMemoryApp extends StatelessWidget {
+class AnimeMemoryApp extends StatefulWidget {
   const AnimeMemoryApp({super.key});
+
+  @override
+  State<AnimeMemoryApp> createState() => _AnimeMemoryAppState();
+}
+
+class _AnimeMemoryAppState extends State<AnimeMemoryApp>
+    with WidgetsBindingObserver {
+  StreamSubscription? _eventSub;
+
   static const Color background = Color(0xFF111318);
   static const Color panel = Color(0xFF1B1F28);
+
+  // 🔗 هنا يتم ربط كل حدث في التطبيق بالرد المناسب للشخصية
+  // لتغيير أي رد: عدّل الكلمة على اليسار (الحدث) أو اليمين (مفتاح الرسالة)
+  static const Map<String, String> _eventToMessage = {
+    // أحداث الأنمي
+    'anime_added': 'add_anime',
+    'anime_deleted': 'delete_anime',
+    'anime_edited': 'edit_anime',
+    'anime_completed': 'complete',
+    'one_episode_left': 'one_episode_left',
+    'episode_done': 'progress_congrats',
+    'added_to_plan': 'added_to_plan',
+    'added_to_watching': 'add_anime',
+
+    // المفضلة والتقييم
+    'favorite_added': 'favorite_added',
+    'favorite_removed': 'remove_from_favorites',
+    'high_rate': 'high_rate',
+    'low_rate': 'low_rate',
+    'rated': 'rated_anime',
+
+    // النسخ الاحتياطي
+    'backup_success': 'backup_success',
+    'backup_failed': 'backup_fail',
+    'restore_success': 'restore_success',
+    'restore_failed': 'restore_fail',
+    'export_success': 'backup_success',
+    'import_success': 'restore_success',
+
+    // التنقل
+    'entered_home': 'idle',
+    'entered_library': 'search_mode',
+    'entered_memories': 'idle',
+    'entered_settings': 'thinking',
+
+    // الإعدادات
+    'settings_changed': 'new_day',
+
+    // أخرى
+    'no_internet': 'no_internet',
+    'empty_library': 'empty_library',
+    'random_pick': 'random_pick',
+    'thinking': 'thinking',
+    'excited': 'excited',
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _eventSub = AppEvents.stream.listen(_handleEvent);
+  }
+
+  void _handleEvent(String event) {
+    final msgKey = _eventToMessage[event];
+    if (msgKey != null && MangaMessages.all.containsKey(msgKey)) {
+      FloatingMangaCharacter.say(msgKey);
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      FloatingMangaCharacter.say('welcome_back');
+    }
+  }
+
+  @override
+  void dispose() {
+    _eventSub?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -156,17 +240,27 @@ class AnimeMemoryApp extends StatelessWidget {
 
 class MainNavigation extends StatefulWidget {
   const MainNavigation({super.key});
+
   @override
   State<MainNavigation> createState() => _MainNavigationState();
 }
 
 class _MainNavigationState extends State<MainNavigation> {
   int selectedIndex = 0;
+
   final List<Widget> screens = const [
     HomeScreen(),
     LibraryScreen(),
     MemoriesScreen(),
     SettingsScreen()
+  ];
+
+  // 🆕 حدث التنقل لكل تبويب
+  static const List<String> _tabEvents = [
+    'entered_home',
+    'entered_library',
+    'entered_memories',
+    'entered_settings',
   ];
 
   @override
@@ -178,8 +272,10 @@ class _MainNavigationState extends State<MainNavigation> {
             child: IndexedStack(index: selectedIndex, children: screens)),
         bottomNavigationBar: NavigationBar(
           selectedIndex: selectedIndex,
-          onDestinationSelected: (index) =>
-              setState(() => selectedIndex = index),
+          onDestinationSelected: (index) {
+            setState(() => selectedIndex = index);
+            AppEvents.fire(_tabEvents[index]); // 🆕 الشخصية تتفاعل مع التنقل
+          },
           destinations: const [
             NavigationDestination(
                 icon: Icon(Icons.dashboard_outlined),
