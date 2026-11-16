@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../core/app_events.dart';
 import '../main.dart';
 import '../services/backup_service.dart';
 import '../services/theme_service.dart';
@@ -11,7 +12,7 @@ import '../services/export_service.dart';
 import 'trash_screen.dart';
 import 'data_health_screen.dart';
 import 'backup_progress_screen.dart';
-import '../widgets/manga_character_settings.dart'; // 🆕 استدعاء إعدادات الشخصية
+import '../widgets/manga_character_settings.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -27,7 +28,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool isCompressing = false;
   bool isClassifying = false;
 
-  // 🆕 حالة الأقسام القابلة للطي (التخصيص مفتوح افتراضياً)
   final Set<String> _expandedSections = {'customization'};
 
   final AnimeApiService apiService = AnimeApiService();
@@ -57,12 +57,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     isAutoDarkModeEnabled = value;
     checkAutoTheme();
     if (!value) await _toggleTheme(darkMode);
+    AppEvents.fire('settings_changed');
   }
 
   Future<void> _toggleAutoFetch(bool value) async {
     setState(() => autoFetchEnabled = value);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('auto_fetch_enabled', value);
+    AppEvents.fire('settings_changed');
   }
 
   Future<void> _toggleTheme(bool value) async {
@@ -70,11 +72,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('isDarkMode', value);
     themeNotifier.value = value ? ThemeMode.dark : ThemeMode.light;
+    AppEvents.fire('settings_changed');
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // 🆕 Widget لقسم قابل للطي
-  // ══════════════════════════════════════════════════════════════
   Widget _buildSection({
     required String id,
     required String title,
@@ -148,9 +148,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // التنقل للنسخ الاحتياطي
-  // ══════════════════════════════════════════════════════════════
   Future<void> runBackupAction({required bool restore}) async {
     if (restore) {
       final confirmed = await showDialog<bool>(
@@ -217,9 +214,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // فرز الأفلام
-  // ══════════════════════════════════════════════════════════════
   Future<void> _autoClassifyMovies() async {
     if (isClassifying) return;
 
@@ -381,9 +375,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // ضغط الفيديوهات
-  // ══════════════════════════════════════════════════════════════
   Future<void> _compressAllVideos() async {
     if (isCompressing) return;
 
@@ -518,9 +509,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // التصدير
-  // ══════════════════════════════════════════════════════════════
   Future<void> _showExportDialog() async {
     final choice = await showDialog<String>(
       context: context,
@@ -565,6 +553,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     final exportService = ExportService();
     String result;
+    bool success = false;
     try {
       if (choice == 'pdf') {
         result = await exportService.exportAsPdf();
@@ -573,12 +562,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
       } else {
         result = await exportService.exportAsMarkdown();
       }
+      success = true;
     } catch (e) {
       result = 'حدث خطأ: $e';
     }
 
     if (!mounted) return;
     Navigator.pop(context);
+
+    if (success) {
+      AppEvents.fire('export_success');
+    }
 
     await showDialog<void>(
       context: context,
@@ -617,9 +611,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // منتقي الألوان والخطوط
-  // ══════════════════════════════════════════════════════════════
   Future<void> _showColorPicker() async {
     final selectedColor = await showDialog<Color>(
       context: context,
@@ -680,6 +671,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt('primaryColorValue', selectedColor.value);
       primaryColorNotifier.value = selectedColor;
+      AppEvents.fire('settings_changed');
     }
   }
 
@@ -713,6 +705,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('app_font', selectedFont);
       fontNotifier.value = selectedFont;
+      AppEvents.fire('settings_changed');
     }
   }
 
@@ -756,12 +749,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt('title_color', selectedColor.value);
       titleColorNotifier.value = selectedColor;
+      AppEvents.fire('settings_changed');
     }
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // نتائج التحميل
-  // ══════════════════════════════════════════════════════════════
   Future<void> _showDownloadResult(Map<String, dynamic> result) async {
     final updated = result['updated'] ?? 0;
     final failed = result['failed'] ?? 0;
@@ -770,6 +761,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final error = result['error'];
 
     if (error == 'no_internet') {
+      AppEvents.fire('no_internet');
       await showDialog(
         context: context,
         builder: (_) => AlertDialog(
@@ -889,9 +881,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // أزرار التحميل
-  // ══════════════════════════════════════════════════════════════
   Future<void> _startBulkDownload() async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -1105,9 +1094,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // الواجهة الرئيسية
-  // ══════════════════════════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
     final primaryColor = primaryColorNotifier.value;
@@ -1122,7 +1108,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return ListView(
           padding: const EdgeInsets.all(18),
           children: [
-            // ─── الرأس ───────────────────────────────────
             const Text('الإعدادات',
                 style:
                     TextStyle(fontSize: 28, fontWeight: FontWeight.w900)),
@@ -1131,7 +1116,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 style: TextStyle(color: Colors.white60)),
             const SizedBox(height: 20),
 
-            // ─── بطاقة التطبيق ───────────────────────────
             Container(
               padding: const EdgeInsets.all(19),
               decoration: BoxDecoration(
@@ -1173,7 +1157,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
             const SizedBox(height: 16),
 
-            // ─── شريط التحميل النشط (يظهر فقط أثناء التحميل) ────
             if (isDownloading) ...[
               Container(
                 padding: const EdgeInsets.all(15),
@@ -1229,9 +1212,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 16),
             ],
 
-            // ═══════════════════════════════════════════════
-            // 1️⃣ قسم التخصيص
-            // ═══════════════════════════════════════════════
             _buildSection(
               id: 'customization',
               title: 'التخصيص',
@@ -1289,8 +1269,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     trailing: const Icon(Icons.chevron_left,
                         color: Colors.white38),
                     onTap: _showTitleColorPicker),
-                
-                // 🆕 إضافة إعدادات الشخصية العائمة
                 const SizedBox(height: 10),
                 _settingsTile(
                     icon: Icons.smart_toy,
@@ -1303,9 +1281,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
 
-            // ═══════════════════════════════════════════════
-            // 2️⃣ قسم التحميل والتحديث
-            // ═══════════════════════════════════════════════
             _buildSection(
               id: 'downloads',
               title: 'التحميل والتحديث',
@@ -1401,9 +1376,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
 
-            // ═══════════════════════════════════════════════
-            // 3️⃣ قسم أدوات الصيانة والفرز
-            // ═══════════════════════════════════════════════
             _buildSection(
               id: 'maintenance',
               title: 'أدوات الصيانة والفرز',
@@ -1486,9 +1458,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
 
-            // ═══════════════════════════════════════════════
-            // 4️⃣ قسم النسخ الاحتياطي والتصدير
-            // ═══════════════════════════════════════════════
             _buildSection(
               id: 'backup',
               title: 'النسخ الاحتياطي والتصدير',
@@ -1544,9 +1513,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
 
-            // ═══════════════════════════════════════════════
-            // 5️⃣ قسم حول التطبيق
-            // ═══════════════════════════════════════════════
             _buildSection(
               id: 'about',
               title: 'حول التطبيق',
@@ -1578,9 +1544,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // Tiles (كما هي - لم تتغير)
-  // ══════════════════════════════════════════════════════════════
   Widget _settingsTile(
       {required IconData icon,
       required Color color,
