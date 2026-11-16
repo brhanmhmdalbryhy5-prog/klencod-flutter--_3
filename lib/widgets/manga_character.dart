@@ -38,7 +38,7 @@ extension HairStyleLabel on HairStyle {
 }
 
 // ══════════════════════════════════════════════════════════════
-// 20 تعبير
+// التعبيرات
 // ══════════════════════════════════════════════════════════════
 enum MangaExpression {
   neutral, happy, veryHappy, sad, angry, surprised, sleepy,
@@ -53,7 +53,7 @@ class MangaMessage {
 }
 
 // ══════════════════════════════════════════════════════════════
-// 100 رسالة مصنفة
+// الرسائل (تمت إضافة رسائل للأحداث الجديدة)
 // ══════════════════════════════════════════════════════════════
 class MangaMessages {
   static const Map<String, MangaMessage> all = {
@@ -73,6 +73,8 @@ class MangaMessages {
     'midnight': MangaMessage('منتصف الليل! 🕛\nهل ما زلت مستيقظاً؟', MangaExpression.sleepy),
     'before_dawn': MangaMessage('قبل الفجر؟! 🌌\nأسطورة حقيقية!', MangaExpression.starstruck),
     'lunchtime': MangaMessage('وقت الغداء! 🍜\nأنمي + أكل = سعادة!', MangaExpression.happy),
+    
+    // أحداث إضافة وتعديل
     'add_anime': MangaMessage('أنمي جديد! رائع! 🎬\nأضفه للمكتبة!', MangaExpression.excited),
     'add_season': MangaMessage('موسم جديد! 📺\nمتابعة مستمرة!', MangaExpression.happy),
     'add_movie': MangaMessage('فيلم أنمي! 🎥\nاستمتع بالسينما!', MangaExpression.starstruck),
@@ -80,83 +82,26 @@ class MangaMessages {
     'delete_anime': MangaMessage('حذفت أنمي؟ 😢\nستفتقده!', MangaExpression.sad),
     'favorite_added': MangaMessage('المفضلة! ❤️\nذوق رفيع!', MangaExpression.love),
     'remove_from_favorites': MangaMessage('أزلته من المفضلة؟ 💔\nتأكد من قرارك!', MangaExpression.shy),
-    'import_backup': MangaMessage('نسخة مستوردة! 📥\nعاد كل شيء!', MangaExpression.veryHappy),
-    'export_backup': MangaMessage('نسخة مصدّرة! 📤\nبياناتك آمنة!', MangaExpression.happy),
-    'bulk_add': MangaMessage('إضافة جماعية؟! 🔥\nيا محترف!', MangaExpression.proud),
-    'bulk_delete': MangaMessage('حذف جماعي؟! 😱\nكن حذراً!', MangaExpression.surprised),
-    'update_cover': MangaMessage('غلاف جديد! 🖼️\nجميل جداً!', MangaExpression.happy),
-    'update_rating': MangaMessage('تقييم جديد! ⭐\nدقة ملحوظة!', MangaExpression.determined),
-    'mark_completed': MangaMessage('أكملته! ✅\nإنجاز رائع!', MangaExpression.veryHappy),
-    'add_to_watching': MangaMessage('بدأت المتابعة! ▶️\nرحلة جديدة!', MangaExpression.excited),
+    
+    // أحداث المشاهدة والتقييم
     'progress_congrats': MangaMessage('أكمل الحلقة! 🎯\nأنت تستطيع!', MangaExpression.determined),
     'episode_done': MangaMessage('حلقة إضافية! 📺\nمستمر بقوة!', MangaExpression.happy),
-    'season_done': MangaMessage('أنهيت الموسم! 🎉\nأسطورة!', MangaExpression.veryHappy),
-    'complete': MangaMessage('مبروك! أكملت أنمي! 🎉\nأنت أسطورة!', MangaExpression.veryHappy),
-    'all_caught_up': MangaMessage('لحقت كل شيء! 🏃\nفي انتظار الجديد!', MangaExpression.proud),
-    'watching_list': MangaMessage('لديك أنميات قيد المشاهدة!\nأكملها! 💪', MangaExpression.determined),
-    'paused_watch': MangaMessage('توقفت مؤقتاً؟ ⏸️\nلا بأس، ارجع!', MangaExpression.shy),
-    'dropped_anime': MangaMessage('أسقطته؟ 🗑️\nكان طويلاً؟', MangaExpression.thinking),
-    'rewatch': MangaMessage('إعادة مشاهدة؟ 🔁\nأنمي يستحق!', MangaExpression.starstruck),
-    'on_hold': MangaMessage('معلّق مؤقتاً! 📌\nلا تنساه!', MangaExpression.thinking),
-    'one_more_episode': MangaMessage('حلقة أخرى فقط! 🌟\nهذه المرة الأخيرة!', MangaExpression.wink),
-    'marathon_mode': MangaMessage('وضع الماراثون! 🏃‍♂️💨\nيلا نبدأ!', MangaExpression.excited),
-    'halfway_there': MangaMessage('منتصف الطريق! 🌗\nاستمر!', MangaExpression.determined),
-    'almost_done': MangaMessage('قريب جداً! 🌟\nالحلقة الأخيرة!', MangaExpression.excited),
-    'started_new': MangaMessage('بداية جديدة! 🌱\nماذا سيحدث؟', MangaExpression.thinking),
+    'one_episode_left': MangaMessage('متبقي حلقة واحدة فقط! 🔥\nلا تتوقف الآن!', MangaExpression.excited),
+    'complete': MangaMessage('مبروك! أكملت الأنمي! 🎉\nأنت أسطورة!', MangaExpression.veryHappy),
+    'added_to_plan': MangaMessage('أضفته للمخطط؟ 📌\nلا تنساه!', MangaExpression.determined),
+    'rated_anime': MangaMessage('تقييم جديد! ⭐\nرأيك يهمنا!', MangaExpression.thinking),
     'high_rate': MangaMessage('تقييم عالٍ! أعجبك حقاً! ⭐\nذوق رفيع!', MangaExpression.starstruck),
     'low_rate': MangaMessage('لم يعجبك؟ لا بأس،\nلكل ذوقه! 😅', MangaExpression.shy),
-    'perfect_rate': MangaMessage('10/10؟! 👑\nيا لها من تحفة!', MangaExpression.starstruck),
-    'mixed_feelings': MangaMessage('متردد؟ 🤔\nمتوسط التقييم؟', MangaExpression.thinking),
-    'will_rewatch': MangaMessage('ستعيد مشاهدته؟ 🔁\nأنمي خالد!', MangaExpression.proud),
-    'never_again': MangaMessage('لن تراه مجدداً! 🙅\nتعلمت الدرس!', MangaExpression.angry),
-    'fair_rating': MangaMessage('تقييم عادل! ⚖️\nحكيم!', MangaExpression.proud),
-    'emotionally_damaged': MangaMessage('أثر فيك؟ 😭\nأنمي يبقى بالقلب!', MangaExpression.sad),
-    'masterpiece': MangaMessage('تحفة فنية! 🏆\nيستحق التاج!', MangaExpression.veryHappy),
-    'overrated': MangaMessage('مبالغ فيه؟ 🤨\nرأيك يحترم!', MangaExpression.cool),
-    'many_animes': MangaMessage('مكتبتك تكبر! 📚\nيا لها من مجموعة!', MangaExpression.proud),
-    'empty_library': MangaMessage('مكتبتك فارغة! 🌟\nأضف أول أنمي!', MangaExpression.sad),
-    'library_growing': MangaMessage('المكتبة تنمو! 🌱\nاستمر هكذا!', MangaExpression.happy),
-    'milestone_50': MangaMessage('50 أنمي؟! 🎊\nيا محترف!', MangaExpression.veryHappy),
-    'milestone_100': MangaMessage('100 أنمي! 💯\nأسطورة حقيقية!', MangaExpression.starstruck),
-    'milestone_500': MangaMessage('500 أنمي! 🏆\nيا إلهي!', MangaExpression.surprised),
-    'milestone_1000': MangaMessage('1000 أنمي! 👑\nإمبراطور الأوتاكو!', MangaExpression.proud),
-    'favorite_genre': MangaMessage('نوعك المفضل واضح! 🎯\nذوق مميز!', MangaExpression.cool),
-    'genre_explorer': MangaMessage('تستكشف أنواعاً؟ 🧭\nمغامر!', MangaExpression.excited),
-    'most_watched_genre': MangaMessage('هذا نوعك الأكثر! 📊\nتحليل دقيق!', MangaExpression.thinking),
-    'backup_success': MangaMessage('بياناتك آمنة! 💾\nعظيم جداً!', MangaExpression.happy),
-    'backup_fail': MangaMessage('فشل النسخ! 😱\nلا تقلق، حاول مجدداً.', MangaExpression.surprised),
-    'backup_in_progress': MangaMessage('جاري النسخ... ⏳\nانتظر قليلاً!', MangaExpression.thinking),
-    'restore_success': MangaMessage('الاستعادة نجحت! 🎉\nكل شيء عاد!', MangaExpression.veryHappy),
-    'restore_fail': MangaMessage('فشلت الاستعادة! 😢\nحاول مرة أخرى!', MangaExpression.sad),
-    'backup_reminder': MangaMessage('تذكير: اعمل نسخة! 💾\nلا تفقد بياناتك!', MangaExpression.determined),
-    'backup_taken': MangaMessage('نسخة أخيرة! 📸\nيوم محفوظ!', MangaExpression.proud),
-    'backup_storage_full': MangaMessage('التخزين ممتلئ! 💽\nمساحة مطلوبة!', MangaExpression.surprised),
-    'no_internet': MangaMessage('لا إنترنت! 📖\nاقرأ مانغا بدلاً من ذلك!', MangaExpression.sad),
-    'server_error': MangaMessage('خطأ في السيرفر! 🔧\nحاول لاحقاً!', MangaExpression.angry),
-    'download_failed': MangaMessage('فشل التحميل! ⬇️\nأعد المحاولة!', MangaExpression.surprised),
-    'upload_failed': MangaMessage('فشل الرفع! ⬆️\nلا تقلق!', MangaExpression.shy),
-    'image_missing': MangaMessage('صورة مفقودة! 🖼️\nأضف واحدة!', MangaExpression.confused),
-    'file_corrupted': MangaMessage('ملف تالف! 📁\nمشكلة خطيرة!', MangaExpression.angry),
-    'permission_denied': MangaMessage('إذن مرفوض! 🔒\nافتح الإعدادات!', MangaExpression.determined),
-    'api_limit': MangaMessage('تجاوزت الحد! 📊\nانتظر قليلاً!', MangaExpression.thinking),
+    
+    // رسائل أخرى
     'idle': MangaMessage('هل شاهدت شيئاً جديداً اليوم؟', MangaExpression.thinking),
     'random_pick': MangaMessage('اختيار عشوائي؟\nأنا أحب المفاجآت! 🎲', MangaExpression.wink),
-    'filter_active': MangaMessage('تبحث عن شيء محدد؟ 👀\nدعني أساعدك!', MangaExpression.thinking),
-    'search_mode': MangaMessage('ماذا تبحث عنه؟ 🔍\nأنا هنا!', MangaExpression.excited),
-    'sort_change': MangaMessage('غيرت الترتيب! 🔄\nحسناً!', MangaExpression.happy),
-    'view_change': MangaMessage('عرض جديد! 👁️\nأعجبك؟', MangaExpression.cool),
-    'tickle_me': MangaMessage('هههه! دغدغتني! 😂\nتوقف!', MangaExpression.laugh),
-    'peek_a_boo': MangaMessage('اختبأت! 🙈\nوجدتني؟', MangaExpression.silly),
-    'keep_watching': MangaMessage('استمر بالمشاهدة! 📺\nأنت رائع!', MangaExpression.determined),
-    'you_can_do_it': MangaMessage('أنت تستطيع! 💪\nثق بنفسك!', MangaExpression.veryHappy),
-    'take_a_break': MangaMessage('خذ استراحة! ☕\nصحتك أولاً!', MangaExpression.sleepyHappy),
-    'drink_water': MangaMessage('اشرب ماء! 💧\nالعينان تحتاجان!', MangaExpression.happy),
-    'be_proud': MangaMessage('كن فخوراً بنفسك! 🌟\nإنجازاتك رائعة!', MangaExpression.proud),
-    'plot_twist': MangaMessage('تويست في الأفق! 🌀\nشعرت بذلك!', MangaExpression.surprised),
-    'spoiler_alert': MangaMessage('ممنوع الحرق! 🤐\nاحترم الآخرين!', MangaExpression.angry),
-    'otaku_pride': MangaMessage('فخور بأوتاكويتك! 🎌\nلا تخفِها!', MangaExpression.proud),
-    'anime_addict': MangaMessage('مدمن أنمي؟ 😅\nنحن كلنا!', MangaExpression.laugh),
-    'waifu_husbando': MangaMessage('شخصيتك المفضلة؟ 💖\nقل لي!', MangaExpression.love),
+    'empty_library': MangaMessage('مكتبتك فارغة! 🌟\nأضف أول أنمي!', MangaExpression.sad),
+    'backup_success': MangaMessage('بياناتك آمنة! 💾\nعظيم جداً!', MangaExpression.happy),
+    'backup_fail': MangaMessage('فشل النسخ! 😱\nلا تقلق، حاول مجدداً.', MangaExpression.surprised),
+    'no_internet': MangaMessage('لا إنترنت! 📖\nاقرأ مانغا بدلاً من ذلك!', MangaExpression.sad),
+    'thinking': MangaMessage('دعني أفكر معك... 🤔', MangaExpression.thinking),
+    'excited': MangaMessage('ياي! هذا رائع! 🎉', MangaExpression.veryHappy),
   };
 
   static String randomKey({Set<String> exclude = const {}}) {
@@ -212,6 +157,10 @@ class MangaCharacterState extends State<MangaCharacter>
   late AnimationController _moveYController;
   late AnimationController _blinkController;
 
+  // 🆕 متغيرات السحب اليدوي
+  Offset _manualOffset = Offset.zero;
+  bool _isDragging = false;
+
   @override
   void initState() {
     super.initState();
@@ -251,8 +200,6 @@ class MangaCharacterState extends State<MangaCharacter>
       } else {
         _moveXController.stop();
         _moveYController.stop();
-        _moveXController.value = 0.5;
-        _moveYController.value = 0.5;
       }
     }
 
@@ -377,9 +324,32 @@ class MangaCharacterState extends State<MangaCharacter>
     }
   }
 
+  // 🆕 معالجة السحب
+  void _onPanStart(DragStartDetails details) {
+    if (widget.autoMove) {
+      _moveXController.stop();
+      _moveYController.stop();
+    }
+    setState(() => _isDragging = true);
+  }
+
+  void _onPanUpdate(DragUpdateDetails details) {
+    setState(() {
+      _manualOffset += details.delta;
+    });
+  }
+
+  void _onPanEnd(DragEndDetails details) {
+    setState(() => _isDragging = false);
+    if (widget.autoMove) {
+      _moveXController.repeat(reverse: true);
+      _moveYController.repeat(reverse: true);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (!widget.autoMove) {
+    if (!widget.autoMove && _manualOffset == Offset.zero) {
       return Align(
         alignment: Alignment.bottomLeft,
         child: _buildCharacterAndBubble(
@@ -390,9 +360,7 @@ class MangaCharacterState extends State<MangaCharacter>
     return LayoutBuilder(
       builder: (context, constraints) {
         if (!constraints.maxWidth.isFinite ||
-            !constraints.maxHeight.isFinite ||
-            constraints.maxWidth < widget.size + 60 ||
-            constraints.maxHeight < widget.size + 60) {
+            !constraints.maxHeight.isFinite) {
           return Align(
             alignment: Alignment.bottomLeft,
             child: _buildCharacterAndBubble(
@@ -404,16 +372,23 @@ class MangaCharacterState extends State<MangaCharacter>
           animation: Listenable.merge(
               [_moveXController, _moveYController, _blinkController]),
           builder: (context, _) {
-            final tX = Curves.easeInOut.transform(_moveXController.value);
-            final tY = Curves.easeInOut.transform(_moveYController.value);
+            final tX = widget.autoMove && !_isDragging
+                ? Curves.easeInOut.transform(_moveXController.value)
+                : _moveXController.value;
+            final tY = widget.autoMove && !_isDragging
+                ? Curves.easeInOut.transform(_moveYController.value)
+                : _moveYController.value;
 
             final maxX = max(0.0,
                 constraints.maxWidth - widget.size - widget.margin.horizontal);
             final maxY = max(0.0,
                 constraints.maxHeight - widget.size - widget.margin.vertical);
 
-            final dx = widget.margin.left + maxX * tX;
-            final dy = widget.margin.top + maxY * tY;
+            // 🆕 دمج الحركة التلقائية مع السحب اليدوي مع منع الخروج عن الشاشة
+            double dx = (widget.margin.left + maxX * tX + _manualOffset.dx)
+                .clamp(widget.margin.left, widget.margin.left + maxX);
+            double dy = (widget.margin.top + maxY * tY + _manualOffset.dy)
+                .clamp(widget.margin.top, widget.margin.top + maxY);
 
             final perspective = 0.88 + tY * 0.24;
             final velocityX = _moveXController.value - tX;
@@ -427,30 +402,37 @@ class MangaCharacterState extends State<MangaCharacter>
                 Positioned(
                   left: dx + widget.size * 0.2 * perspective,
                   top: dy + widget.size * 0.95 * perspective,
-                  child: Container(
-                    width: widget.size * 0.6 * perspective,
-                    height: 8 * perspective,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.black.withOpacity(0.25),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.15),
-                          blurRadius: 8,
-                          spreadRadius: 2,
-                        ),
-                      ],
+                  child: IgnorePointer(
+                    child: Container(
+                      width: widget.size * 0.6 * perspective,
+                      height: 8 * perspective,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.black.withOpacity(0.25),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.15),
+                            blurRadius: 8,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
                 Positioned(
                   left: dx,
                   top: dy,
-                  child: _buildCharacterAndBubble(
-                    blinkValue: _blinkController.value,
-                    tilt: tilt,
-                    perspective: perspective,
-                    bubbleOnLeft: _bubbleOnLeft ?? false,
+                  child: GestureDetector(
+                    onPanStart: _onPanStart,
+                    onPanUpdate: _onPanUpdate,
+                    onPanEnd: _onPanEnd,
+                    child: _buildCharacterAndBubble(
+                      blinkValue: _blinkController.value,
+                      tilt: _isDragging ? 0 : tilt,
+                      perspective: perspective,
+                      bubbleOnLeft: _bubbleOnLeft ?? false,
+                    ),
                   ),
                 ),
               ],
@@ -524,27 +506,29 @@ class MangaCharacterState extends State<MangaCharacter>
           child: child,
         );
       },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFF202431), width: 2),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.3),
-              blurRadius: 10,
-              spreadRadius: 1,
+      child: IgnorePointer(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFF202431), width: 2),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.3),
+                blurRadius: 10,
+                spreadRadius: 1,
+              ),
+            ],
+          ),
+          child: Text(
+            message,
+            style: const TextStyle(
+              color: Colors.black87,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              height: 1.4,
             ),
-          ],
-        ),
-        child: Text(
-          message,
-          style: const TextStyle(
-            color: Colors.black87,
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            height: 1.4,
           ),
         ),
       ),
@@ -553,7 +537,7 @@ class MangaCharacterState extends State<MangaCharacter>
 }
 
 // ══════════════════════════════════════════════════════════════
-// Preview للشخصية (للاستخدام في الإعدادات)
+// Preview للشخصية
 // ══════════════════════════════════════════════════════════════
 class MangaCharacterPreview extends StatelessWidget {
   final double size;
@@ -596,7 +580,7 @@ class MangaCharacterPreview extends StatelessWidget {
 }
 
 // ══════════════════════════════════════════════════════════════
-// الرسم (تأثير 2.5D + ألوان مخصصة)
+// رسم الوجه (يحتوي على كل التعبيرات كما هي في الكود السابق)
 // ══════════════════════════════════════════════════════════════
 class _MangaFacePainter extends CustomPainter {
   final MangaExpression expression;
