@@ -8,11 +8,11 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../core/app_events.dart';
 import '../main.dart';
 import '../models/anime.dart';
 import '../services/storage_service.dart';
 import '../services/anime_api_service.dart';
-import '../widgets/manga_character.dart';
 import 'anime_details_screen.dart';
 import 'otaku_oracle_screen.dart';
 import 'random_picker_screen.dart';
@@ -70,9 +70,8 @@ class _HomeScreenState extends State<HomeScreen> {
       animes = result.where((a) => a.parentId == null).toList();
       loading = false;
     });
-    // إخبار الشخصية العائمة إذا كانت المكتبة فارغة
     if (result.isEmpty) {
-      FloatingMangaCharacter.say('empty_library');
+      AppEvents.fire('empty_library');
     }
   }
 
@@ -168,18 +167,17 @@ class _HomeScreenState extends State<HomeScreen> {
         all[idx].watchedEpisodes >= all[idx].episodes;
     final isOneLeft = all[idx].episodes > 0 &&
         all[idx].watchedEpisodes == all[idx].episodes - 1;
-        
+
     if (isNowComplete) all[idx].status = 'مكتمل';
     await storage.saveAnimes(all);
     await loadData();
 
-    // 🆕 إخبار الشخصية بالحدث المناسب
     if (isNowComplete) {
-      FloatingMangaCharacter.say('complete');
+      AppEvents.fire('anime_completed');
     } else if (isOneLeft) {
-      FloatingMangaCharacter.say('one_episode_left');
+      AppEvents.fire('one_episode_left');
     } else {
-      FloatingMangaCharacter.say('progress_congrats');
+      AppEvents.fire('episode_done');
     }
 
     if (mounted) {
@@ -671,18 +669,17 @@ class _HomeScreenState extends State<HomeScreen> {
       final saved = await storage.saveAnimes(_allAnimes);
       if (!mounted) return;
 
-      // 🆕 إخبار الشخصية العائمة بالحدث
       if (saved) {
         if (result.status == 'مكتمل') {
-          FloatingMangaCharacter.say('complete');
+          AppEvents.fire('anime_completed');
         } else if (result.status == 'مخطط له') {
-          FloatingMangaCharacter.say('added_to_plan');
+          AppEvents.fire('added_to_plan');
         } else if (result.rating >= 8) {
-          FloatingMangaCharacter.say('high_rate');
+          AppEvents.fire('high_rate');
         } else if (result.rating > 0 && result.rating < 5) {
-          FloatingMangaCharacter.say('low_rate');
+          AppEvents.fire('low_rate');
         } else {
-          FloatingMangaCharacter.say('add_anime');
+          AppEvents.fire('anime_added');
         }
       }
 
@@ -760,7 +757,7 @@ class _HomeScreenState extends State<HomeScreen> {
           borderRadius: BorderRadius.circular(20),
           onTap: () {
             HapticFeedback.lightImpact();
-            FloatingMangaCharacter.say('thinking');
+            AppEvents.fire('thinking');
             Navigator.push(context,
                 MaterialPageRoute(builder: (_) => const OtakuOracleScreen()));
           },
@@ -823,7 +820,7 @@ class _HomeScreenState extends State<HomeScreen> {
           borderRadius: BorderRadius.circular(20),
           onTap: () {
             HapticFeedback.lightImpact();
-            FloatingMangaCharacter.say('random_pick');
+            AppEvents.fire('random_pick');
             Navigator.push(context,
                 MaterialPageRoute(builder: (_) => const RandomPickerScreen()));
           },
@@ -1008,7 +1005,6 @@ class _HomeScreenState extends State<HomeScreen> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(18, 16, 18, 28),
         children: [
-          // ════ الرأس ════
           Row(
             children: [
               Container(
@@ -1049,10 +1045,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   icon: const Icon(Icons.add)),
             ],
           ),
-
           const SizedBox(height: 16),
-
-          // ════ الأزرار العلوية ════
           Row(
             children: [
               Expanded(child: _oracleButton()),
@@ -1060,8 +1053,6 @@ class _HomeScreenState extends State<HomeScreen> {
               Expanded(child: _randomPickerButton()),
             ],
           ),
-
-          // ════ بطاقة "سجلّك الخاص" ════
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -1116,14 +1107,8 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ),
-
-          // ════ الإنجاز ════
           _buildLatestAchievementCard(),
-
-          // ════ استمر في المشاهدة ════
           _buildContinueWatching(primaryColor),
-
-          // ════ الإحصائيات السريعة ════
           const SizedBox(height: 25),
           const Text('إحصائياتك',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
@@ -1175,8 +1160,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       fontWeight: FontWeight.w900))
             ]),
           ),
-
-          // ════ الأحدث ════
           const SizedBox(height: 27),
           Row(children: [
             const Expanded(
