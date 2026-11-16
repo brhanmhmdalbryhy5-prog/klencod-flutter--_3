@@ -4,6 +4,40 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 // ══════════════════════════════════════════════════════════════
+// أنماط الوجه والشعر
+// ══════════════════════════════════════════════════════════════
+enum FaceShape { round, oval, square }
+enum HairStyle { spiky, short, long, ponytail }
+
+extension FaceShapeLabel on FaceShape {
+  String get label => switch (this) {
+        FaceShape.round => 'دائري',
+        FaceShape.oval => 'بيضاوي',
+        FaceShape.square => 'مربع',
+      };
+  IconData get icon => switch (this) {
+        FaceShape.round => Icons.circle_outlined,
+        FaceShape.oval => Icons.crop_portrait,
+        FaceShape.square => Icons.crop_square,
+      };
+}
+
+extension HairStyleLabel on HairStyle {
+  String get label => switch (this) {
+        HairStyle.spiky => 'شائك',
+        HairStyle.short => 'قصير',
+        HairStyle.long => 'طويل',
+        HairStyle.ponytail => 'ذيل فرس',
+      };
+  IconData get icon => switch (this) {
+        HairStyle.spiky => Icons.flare,
+        HairStyle.short => Icons.short_text,
+        HairStyle.long => Icons.gradient,
+        HairStyle.ponytail => Icons.alt_route,
+      };
+}
+
+// ══════════════════════════════════════════════════════════════
 // 20 تعبير
 // ══════════════════════════════════════════════════════════════
 enum MangaExpression {
@@ -23,7 +57,6 @@ class MangaMessage {
 // ══════════════════════════════════════════════════════════════
 class MangaMessages {
   static const Map<String, MangaMessage> all = {
-    // ═══ 1. تحيات وترحيب (8) ═══
     'welcome_back': MangaMessage('مرحباً بعودتك! 👋\nاشتقت إليك!', MangaExpression.veryHappy),
     'morning_greeting': MangaMessage('صباح الخير يا أوتاكو! ☀️\nهل شاهدت شيئاً جديداً؟', MangaExpression.happy),
     'evening_greeting': MangaMessage('مساء الأنمي الجميل! 🌙\nوقت المشاهدة!', MangaExpression.sleepyHappy),
@@ -32,8 +65,6 @@ class MangaMessages {
     'weekend_vibes': MangaMessage('نهاية الأسبوع! 🎉\nوقت الماراثون!', MangaExpression.excited),
     'friday_blessing': MangaMessage('جمعة مباركة! 🤲\nأنمي بعد الصلاة؟', MangaExpression.happy),
     'monday_blues': MangaMessage('اثنين... ثقيل! 😩\nخففه بأنمي!', MangaExpression.sad),
-
-    // ═══ 2. حسب الوقت (8) ═══
     'late_night': MangaMessage('متأخر جداً! 🌃\nاذهب للنوم!', MangaExpression.sleepy),
     'early_morning': MangaMessage('فجراً؟! 😳\nأنت مجنون بالأنمي!', MangaExpression.surprised),
     'noon_break': MangaMessage('استراحة غداء؟ 🍱\nحلقة سريعة!', MangaExpression.happy),
@@ -42,8 +73,6 @@ class MangaMessages {
     'midnight': MangaMessage('منتصف الليل! 🕛\nهل ما زلت مستيقظاً؟', MangaExpression.sleepy),
     'before_dawn': MangaMessage('قبل الفجر؟! 🌌\nأسطورة حقيقية!', MangaExpression.starstruck),
     'lunchtime': MangaMessage('وقت الغداء! 🍜\nأنمي + أكل = سعادة!', MangaExpression.happy),
-
-    // ═══ 3. إضافة/تعديل محتوى (15) ═══
     'add_anime': MangaMessage('أنمي جديد! رائع! 🎬\nأضفه للمكتبة!', MangaExpression.excited),
     'add_season': MangaMessage('موسم جديد! 📺\nمتابعة مستمرة!', MangaExpression.happy),
     'add_movie': MangaMessage('فيلم أنمي! 🎥\nاستمتع بالسينما!', MangaExpression.starstruck),
@@ -59,8 +88,6 @@ class MangaMessages {
     'update_rating': MangaMessage('تقييم جديد! ⭐\nدقة ملحوظة!', MangaExpression.determined),
     'mark_completed': MangaMessage('أكملته! ✅\nإنجاز رائع!', MangaExpression.veryHappy),
     'add_to_watching': MangaMessage('بدأت المتابعة! ▶️\nرحلة جديدة!', MangaExpression.excited),
-
-    // ═══ 4. مشاهدة وتقدم (15) ═══
     'progress_congrats': MangaMessage('أكمل الحلقة! 🎯\nأنت تستطيع!', MangaExpression.determined),
     'episode_done': MangaMessage('حلقة إضافية! 📺\nمستمر بقوة!', MangaExpression.happy),
     'season_done': MangaMessage('أنهيت الموسم! 🎉\nأسطورة!', MangaExpression.veryHappy),
@@ -76,8 +103,6 @@ class MangaMessages {
     'halfway_there': MangaMessage('منتصف الطريق! 🌗\nاستمر!', MangaExpression.determined),
     'almost_done': MangaMessage('قريب جداً! 🌟\nالحلقة الأخيرة!', MangaExpression.excited),
     'started_new': MangaMessage('بداية جديدة! 🌱\nماذا سيحدث؟', MangaExpression.thinking),
-
-    // ═══ 5. تقييمات (10) ═══
     'high_rate': MangaMessage('تقييم عالٍ! أعجبك حقاً! ⭐\nذوق رفيع!', MangaExpression.starstruck),
     'low_rate': MangaMessage('لم يعجبك؟ لا بأس،\nلكل ذوقه! 😅', MangaExpression.shy),
     'perfect_rate': MangaMessage('10/10؟! 👑\nيا لها من تحفة!', MangaExpression.starstruck),
@@ -88,8 +113,6 @@ class MangaMessages {
     'emotionally_damaged': MangaMessage('أثر فيك؟ 😭\nأنمي يبقى بالقلب!', MangaExpression.sad),
     'masterpiece': MangaMessage('تحفة فنية! 🏆\nيستحق التاج!', MangaExpression.veryHappy),
     'overrated': MangaMessage('مبالغ فيه؟ 🤨\nرأيك يحترم!', MangaExpression.cool),
-
-    // ═══ 6. إحصائيات المكتبة (10) ═══
     'many_animes': MangaMessage('مكتبتك تكبر! 📚\nيا لها من مجموعة!', MangaExpression.proud),
     'empty_library': MangaMessage('مكتبتك فارغة! 🌟\nأضف أول أنمي!', MangaExpression.sad),
     'library_growing': MangaMessage('المكتبة تنمو! 🌱\nاستمر هكذا!', MangaExpression.happy),
@@ -100,8 +123,6 @@ class MangaMessages {
     'favorite_genre': MangaMessage('نوعك المفضل واضح! 🎯\nذوق مميز!', MangaExpression.cool),
     'genre_explorer': MangaMessage('تستكشف أنواعاً؟ 🧭\nمغامر!', MangaExpression.excited),
     'most_watched_genre': MangaMessage('هذا نوعك الأكثر! 📊\nتحليل دقيق!', MangaExpression.thinking),
-
-    // ═══ 7. نسخ احتياطي (8) ═══
     'backup_success': MangaMessage('بياناتك آمنة! 💾\nعظيم جداً!', MangaExpression.happy),
     'backup_fail': MangaMessage('فشل النسخ! 😱\nلا تقلق، حاول مجدداً.', MangaExpression.surprised),
     'backup_in_progress': MangaMessage('جاري النسخ... ⏳\nانتظر قليلاً!', MangaExpression.thinking),
@@ -110,8 +131,6 @@ class MangaMessages {
     'backup_reminder': MangaMessage('تذكير: اعمل نسخة! 💾\nلا تفقد بياناتك!', MangaExpression.determined),
     'backup_taken': MangaMessage('نسخة أخيرة! 📸\nيوم محفوظ!', MangaExpression.proud),
     'backup_storage_full': MangaMessage('التخزين ممتلئ! 💽\nمساحة مطلوبة!', MangaExpression.surprised),
-
-    // ═══ 8. أخطاء (8) ═══
     'no_internet': MangaMessage('لا إنترنت! 📖\nاقرأ مانغا بدلاً من ذلك!', MangaExpression.sad),
     'server_error': MangaMessage('خطأ في السيرفر! 🔧\nحاول لاحقاً!', MangaExpression.angry),
     'download_failed': MangaMessage('فشل التحميل! ⬇️\nأعد المحاولة!', MangaExpression.surprised),
@@ -120,8 +139,6 @@ class MangaMessages {
     'file_corrupted': MangaMessage('ملف تالف! 📁\nمشكلة خطيرة!', MangaExpression.angry),
     'permission_denied': MangaMessage('إذن مرفوض! 🔒\nافتح الإعدادات!', MangaExpression.determined),
     'api_limit': MangaMessage('تجاوزت الحد! 📊\nانتظر قليلاً!', MangaExpression.thinking),
-
-    // ═══ 9. تفاعلات مباشرة (8) ═══
     'idle': MangaMessage('هل شاهدت شيئاً جديداً اليوم؟', MangaExpression.thinking),
     'random_pick': MangaMessage('اختيار عشوائي؟\nأنا أحب المفاجآت! 🎲', MangaExpression.wink),
     'filter_active': MangaMessage('تبحث عن شيء محدد؟ 👀\nدعني أساعدك!', MangaExpression.thinking),
@@ -130,15 +147,11 @@ class MangaMessages {
     'view_change': MangaMessage('عرض جديد! 👁️\nأعجبك؟', MangaExpression.cool),
     'tickle_me': MangaMessage('هههه! دغدغتني! 😂\nتوقف!', MangaExpression.laugh),
     'peek_a_boo': MangaMessage('اختبأت! 🙈\nوجدتني؟', MangaExpression.silly),
-
-    // ═══ 10. تحفيز (5) ═══
     'keep_watching': MangaMessage('استمر بالمشاهدة! 📺\nأنت رائع!', MangaExpression.determined),
     'you_can_do_it': MangaMessage('أنت تستطيع! 💪\nثق بنفسك!', MangaExpression.veryHappy),
     'take_a_break': MangaMessage('خذ استراحة! ☕\nصحتك أولاً!', MangaExpression.sleepyHappy),
     'drink_water': MangaMessage('اشرب ماء! 💧\nالعينان تحتاجان!', MangaExpression.happy),
     'be_proud': MangaMessage('كن فخوراً بنفسك! 🌟\nإنجازاتك رائعة!', MangaExpression.proud),
-
-    // ═══ 11. مرح/فكاهي (5) ═══
     'plot_twist': MangaMessage('تويست في الأفق! 🌀\nشعرت بذلك!', MangaExpression.surprised),
     'spoiler_alert': MangaMessage('ممنوع الحرق! 🤐\nاحترم الآخرين!', MangaExpression.angry),
     'otaku_pride': MangaMessage('فخور بأوتاكويتك! 🎌\nلا تخفِها!', MangaExpression.proud),
@@ -161,6 +174,11 @@ class MangaCharacter extends StatefulWidget {
   final bool autoMove;
   final bool enableBlink;
   final EdgeInsets margin;
+  final Color hairColor;
+  final Color eyeColor;
+  final Color skinTone;
+  final FaceShape faceShape;
+  final HairStyle hairStyle;
 
   const MangaCharacter({
     super.key,
@@ -169,6 +187,11 @@ class MangaCharacter extends StatefulWidget {
     this.autoMove = true,
     this.enableBlink = true,
     this.margin = const EdgeInsets.all(16),
+    this.hairColor = const Color(0xFF2C1810),
+    this.eyeColor = const Color(0xFF1A0F06),
+    this.skinTone = const Color(0xFFFFE0BD),
+    this.faceShape = FaceShape.round,
+    this.hairStyle = HairStyle.spiky,
   });
 
   @override
@@ -217,7 +240,6 @@ class MangaCharacterState extends State<MangaCharacter>
     _startIdleTimer();
   }
 
-  // 🆕 الاستجابة لتغيير الإعدادات فوراً
   @override
   void didUpdateWidget(covariant MangaCharacter oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -263,16 +285,13 @@ class MangaCharacterState extends State<MangaCharacter>
   void _startIdleTimer() {
     _idleTimer?.cancel();
     _idleTimer = Timer.periodic(const Duration(seconds: 40), (timer) {
-      if (_currentMessage == null && mounted) {
-        _showRandomIdleMessage();
-      }
+      if (_currentMessage == null && mounted) _showRandomIdleMessage();
     });
   }
 
   void _showRandomIdleMessage() {
     final now = DateTime.now();
     String msgKey;
-
     if (now.hour >= 22 || now.hour < 6) {
       msgKey = 'late_night';
     } else if (now.hour < 12) {
@@ -284,7 +303,6 @@ class MangaCharacterState extends State<MangaCharacter>
         'welcome_back', 'good_night', 'late_night',
       });
     }
-
     showMessage(msgKey);
   }
 
@@ -392,7 +410,6 @@ class MangaCharacterState extends State<MangaCharacter>
             final dy = widget.margin.top + maxY * tY;
 
             final perspective = 0.88 + tY * 0.24;
-
             final velocityX = _moveXController.value - tX;
             final tilt = (velocityX * 0.3).clamp(-0.12, 0.12);
 
@@ -455,6 +472,11 @@ class MangaCharacterState extends State<MangaCharacter>
             painter: _MangaFacePainter(
               expression: _expression,
               blinkValue: blinkValue,
+              hairColor: widget.hairColor,
+              eyeColor: widget.eyeColor,
+              skinTone: widget.skinTone,
+              faceShape: widget.faceShape,
+              hairStyle: widget.hairStyle,
             ),
           ),
         ),
@@ -525,13 +547,69 @@ class MangaCharacterState extends State<MangaCharacter>
 }
 
 // ══════════════════════════════════════════════════════════════
-// الرسم (مع تأثير 3D + رمش)
+// 🆕 Preview للشخصية (للاستخدام في الإعدادات)
+// ══════════════════════════════════════════════════════════════
+class MangaCharacterPreview extends StatelessWidget {
+  final double size;
+  final Color hairColor;
+  final Color eyeColor;
+  final Color skinTone;
+  final FaceShape faceShape;
+  final HairStyle hairStyle;
+  final MangaExpression expression;
+
+  const MangaCharacterPreview({
+    super.key,
+    this.size = 120,
+    this.hairColor = const Color(0xFF2C1810),
+    this.eyeColor = const Color(0xFF1A0F06),
+    this.skinTone = const Color(0xFFFFE0BD),
+    this.faceShape = FaceShape.round,
+    this.hairStyle = HairStyle.spiky,
+    this.expression = MangaExpression.happy,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(
+        painter: _MangaFacePainter(
+          expression: expression,
+          blinkValue: 0,
+          hairColor: hairColor,
+          eyeColor: eyeColor,
+          skinTone: skinTone,
+          faceShape: faceShape,
+          hairStyle: hairStyle,
+        ),
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// الرسم (مع تأثير 3D + رمش + ألوان مخصصة)
 // ══════════════════════════════════════════════════════════════
 class _MangaFacePainter extends CustomPainter {
   final MangaExpression expression;
   final double blinkValue;
+  final Color hairColor;
+  final Color eyeColor;
+  final Color skinTone;
+  final FaceShape faceShape;
+  final HairStyle hairStyle;
 
-  _MangaFacePainter({required this.expression, this.blinkValue = 0});
+  _MangaFacePainter({
+    required this.expression,
+    this.blinkValue = 0,
+    this.hairColor = const Color(0xFF2C1810),
+    this.eyeColor = const Color(0xFF1A0F06),
+    this.skinTone = const Color(0xFFFFE0BD),
+    this.faceShape = FaceShape.round,
+    this.hairStyle = HairStyle.spiky,
+  });
 
   bool get _isBlinking => blinkValue > 0.5;
 
@@ -552,114 +630,204 @@ class _MangaFacePainter extends CustomPainter {
     final cy = size.height / 2;
     final r = size.width * 0.42;
 
-    canvas.drawCircle(
-      Offset(cx + 2, cy + 4),
-      r * 1.02,
+    final faceRect = _getFaceRect(cx, cy, r);
+
+    canvas.drawOval(
+      faceRect.translate(2, 4),
       Paint()
         ..color = Colors.black.withOpacity(0.18)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
     );
 
-    final faceRect = Rect.fromCircle(center: Offset(cx, cy), radius: r);
     final facePaint = Paint()
       ..shader = RadialGradient(
         center: const Alignment(-0.35, -0.35),
         radius: 1.3,
-        colors: const [
-          Color(0xFFFFF2D6),
-          Color(0xFFFFE0BD),
-          Color(0xFFF0C096),
+        colors: [
+          Color.lerp(skinTone, Colors.white, 0.3)!,
+          skinTone,
+          Color.lerp(skinTone, Colors.black, 0.15)!,
         ],
         stops: const [0.0, 0.55, 1.0],
       ).createShader(faceRect);
-    canvas.drawCircle(Offset(cx, cy), r, facePaint);
 
-    canvas.drawCircle(
-      Offset(cx, cy),
-      r,
-      Paint()
-        ..color = Colors.black87
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2,
-    );
+    final outlinePaint = Paint()
+      ..color = Colors.black87
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
 
-    final hairRect = Rect.fromCircle(
-        center: Offset(cx, cy - r * 0.5), radius: r * 1.1);
-    final hairPaint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: const [
-          Color(0xFF3A1F12),
-          Color(0xFF5A3222),
-          Color(0xFF2C1810),
-        ],
-        stops: const [0.0, 0.5, 1.0],
-      ).createShader(hairRect);
+    if (faceShape == FaceShape.square) {
+      final rrect =
+          RRect.fromRectAndRadius(faceRect, Radius.circular(faceRect.width * 0.3));
+      canvas.drawRRect(rrect, facePaint);
+      canvas.drawRRect(rrect, outlinePaint);
+    } else {
+      canvas.drawOval(faceRect, facePaint);
+      canvas.drawOval(faceRect, outlinePaint);
+    }
 
-    final hairPath = Path()
-      ..moveTo(cx - r, cy - r * 0.3)
-      ..quadraticBezierTo(cx - r * 0.9, cy - r * 1.15, cx, cy - r)
-      ..quadraticBezierTo(cx + r * 0.9, cy - r * 1.15, cx + r, cy - r * 0.3)
-      ..quadraticBezierTo(
-          cx + r * 0.8, cy - r * 0.7, cx + r * 0.3, cy - r * 0.75)
-      ..quadraticBezierTo(cx, cy - r * 0.95, cx - r * 0.3, cy - r * 0.75)
-      ..quadraticBezierTo(
-          cx - r * 0.8, cy - r * 0.7, cx - r, cy - r * 0.3)
-      ..close();
-    canvas.drawPath(hairPath, hairPaint);
-
-    canvas.drawPath(
-      hairPath,
-      Paint()
-        ..shader = RadialGradient(
-          center: const Alignment(-0.5, -0.7),
-          radius: 0.6,
-          colors: [
-            Colors.white.withOpacity(0.35),
-            Colors.transparent,
-          ],
-        ).createShader(hairRect)
-        ..blendMode = BlendMode.overlay,
-    );
+    _drawHair(canvas, cx, cy, r, faceRect);
 
     if (expression == MangaExpression.love ||
         expression == MangaExpression.shy ||
         expression == MangaExpression.veryHappy ||
         expression == MangaExpression.laugh) {
-      final blushRect = Rect.fromCenter(
-          center: Offset(cx - r * 0.55, cy + r * 0.2),
-          width: r * 0.4,
-          height: r * 0.24);
-      canvas.drawOval(
-        blushRect,
-        Paint()
-          ..shader = RadialGradient(
-            colors: [
-              const Color(0xFFFF9E9E).withOpacity(0.9),
-              const Color(0xFFFF9E9E).withOpacity(0.0),
-            ],
-          ).createShader(blushRect),
-      );
-      final blushRect2 = Rect.fromCenter(
-          center: Offset(cx + r * 0.55, cy + r * 0.2),
-          width: r * 0.4,
-          height: r * 0.24);
-      canvas.drawOval(
-        blushRect2,
-        Paint()
-          ..shader = RadialGradient(
-            colors: [
-              const Color(0xFFFF9E9E).withOpacity(0.9),
-              const Color(0xFFFF9E9E).withOpacity(0.0),
-            ],
-          ).createShader(blushRect2),
-      );
+      _drawBlush(canvas, cx, cy, r);
     }
 
     _drawEyes(canvas, cx, cy, r);
     _drawMouth(canvas, cx, cy, r);
     _drawAccessories(canvas, cx, cy, r);
+  }
+
+  Rect _getFaceRect(double cx, double cy, double r) {
+    switch (faceShape) {
+      case FaceShape.round:
+        return Rect.fromCircle(center: Offset(cx, cy), radius: r);
+      case FaceShape.oval:
+        return Rect.fromCenter(
+            center: Offset(cx, cy), width: r * 1.8, height: r * 2.25);
+      case FaceShape.square:
+        return Rect.fromCenter(
+            center: Offset(cx, cy), width: r * 1.85, height: r * 1.9);
+    }
+  }
+
+  void _drawHair(Canvas canvas, double cx, double cy, double r, Rect faceRect) {
+    final hairRect = Rect.fromCircle(
+        center: Offset(cx, cy - r * 0.5), radius: r * 1.2);
+    final hairPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Color.lerp(hairColor, Colors.white, 0.15)!,
+          hairColor,
+          Color.lerp(hairColor, Colors.black, 0.2)!,
+        ],
+        stops: const [0.0, 0.5, 1.0],
+      ).createShader(hairRect);
+
+    switch (hairStyle) {
+      case HairStyle.spiky:
+        final path = Path()
+          ..moveTo(cx - r, cy - r * 0.3)
+          ..quadraticBezierTo(cx - r * 0.9, cy - r * 1.15, cx, cy - r)
+          ..quadraticBezierTo(cx + r * 0.9, cy - r * 1.15, cx + r, cy - r * 0.3)
+          ..quadraticBezierTo(
+              cx + r * 0.8, cy - r * 0.7, cx + r * 0.3, cy - r * 0.75)
+          ..quadraticBezierTo(cx, cy - r * 0.95, cx - r * 0.3, cy - r * 0.75)
+          ..quadraticBezierTo(
+              cx - r * 0.8, cy - r * 0.7, cx - r, cy - r * 0.3)
+          ..close();
+        canvas.drawPath(path, hairPaint);
+        break;
+
+      case HairStyle.short:
+        final path = Path()
+          ..moveTo(cx - r * 0.95, cy - r * 0.5)
+          ..quadraticBezierTo(
+              cx - r * 0.85, cy - r * 1.05, cx, cy - r * 0.98)
+          ..quadraticBezierTo(
+              cx + r * 0.85, cy - r * 1.05, cx + r * 0.95, cy - r * 0.5)
+          ..quadraticBezierTo(
+              cx + r * 0.5, cy - r * 0.6, cx, cy - r * 0.55)
+          ..quadraticBezierTo(
+              cx - r * 0.5, cy - r * 0.6, cx - r * 0.95, cy - r * 0.5)
+          ..close();
+        canvas.drawPath(path, hairPaint);
+        break;
+
+      case HairStyle.long:
+        final path = Path()
+          ..moveTo(cx - r * 1.05, cy + r * 0.5)
+          ..lineTo(cx - r * 1.05, cy - r * 0.3)
+          ..quadraticBezierTo(cx - r * 0.9, cy - r * 1.15, cx, cy - r)
+          ..quadraticBezierTo(cx + r * 0.9, cy - r * 1.15, cx + r * 1.05, cy - r * 0.3)
+          ..lineTo(cx + r * 1.05, cy + r * 0.5)
+          ..quadraticBezierTo(cx + r * 0.7, cy + r * 0.3, cx + r * 0.7, cy - r * 0.2)
+          ..quadraticBezierTo(cx, cy - r * 0.5, cx - r * 0.7, cy - r * 0.2)
+          ..quadraticBezierTo(cx - r * 0.7, cy + r * 0.3, cx - r * 1.05, cy + r * 0.5)
+          ..close();
+        canvas.drawPath(path, hairPaint);
+        break;
+
+      case HairStyle.ponytail:
+        final path = Path()
+          ..moveTo(cx - r, cy - r * 0.3)
+          ..quadraticBezierTo(cx - r * 0.9, cy - r * 1.15, cx, cy - r)
+          ..quadraticBezierTo(cx + r * 0.9, cy - r * 1.15, cx + r, cy - r * 0.3)
+          ..quadraticBezierTo(
+              cx + r * 0.8, cy - r * 0.7, cx + r * 0.3, cy - r * 0.75)
+          ..quadraticBezierTo(cx, cy - r * 0.95, cx - r * 0.3, cy - r * 0.75)
+          ..quadraticBezierTo(
+              cx - r * 0.8, cy - r * 0.7, cx - r, cy - r * 0.3)
+          ..close();
+        canvas.drawPath(path, hairPaint);
+
+        final tailPath = Path()
+          ..moveTo(cx + r * 0.9, cy - r * 0.4)
+          ..quadraticBezierTo(
+              cx + r * 1.35, cy - r * 0.2, cx + r * 1.25, cy + r * 0.4)
+          ..quadraticBezierTo(
+              cx + r * 1.0, cy + r * 0.5, cx + r * 0.85, cy + r * 0.1)
+          ..close();
+        canvas.drawPath(tailPath, hairPaint);
+        break;
+    }
+
+    canvas.drawPath(
+      hairStyle == HairStyle.ponytail
+          ? (Path()
+            ..moveTo(cx - r, cy - r * 0.3)
+            ..quadraticBezierTo(cx - r * 0.9, cy - r * 1.15, cx, cy - r)
+            ..quadraticBezierTo(
+                cx + r * 0.9, cy - r * 1.15, cx + r, cy - r * 0.3)
+            ..close())
+          : Path()
+        ..addOval(hairRect),
+      Paint()
+        ..shader = RadialGradient(
+          center: const Alignment(-0.5, -0.7),
+          radius: 0.6,
+          colors: [
+            Colors.white.withOpacity(0.3),
+            Colors.transparent,
+          ],
+        ).createShader(hairRect)
+        ..blendMode = BlendMode.overlay,
+    );
+  }
+
+  void _drawBlush(Canvas canvas, double cx, double cy, double r) {
+    final blushRect = Rect.fromCenter(
+        center: Offset(cx - r * 0.55, cy + r * 0.2),
+        width: r * 0.4,
+        height: r * 0.24);
+    canvas.drawOval(
+      blushRect,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [
+            const Color(0xFFFF9E9E).withOpacity(0.9),
+            const Color(0xFFFF9E9E).withOpacity(0.0),
+          ],
+        ).createShader(blushRect),
+    );
+    final blushRect2 = Rect.fromCenter(
+        center: Offset(cx + r * 0.55, cy + r * 0.2),
+        width: r * 0.4,
+        height: r * 0.24);
+    canvas.drawOval(
+      blushRect2,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [
+            const Color(0xFFFF9E9E).withOpacity(0.9),
+            const Color(0xFFFF9E9E).withOpacity(0.0),
+          ],
+        ).createShader(blushRect2),
+    );
   }
 
   void _drawEyes(Canvas canvas, double cx, double cy, double r) {
@@ -674,25 +842,17 @@ class _MangaFacePainter extends CustomPainter {
         ..strokeWidth = 2.8
         ..strokeCap = StrokeCap.round;
       canvas.drawArc(
-        Rect.fromCenter(
-            center: Offset(leftEyeX, eyeY),
-            width: eyeSize * 2,
-            height: eyeSize * 0.8),
-        0,
-        pi,
-        false,
-        paint,
-      );
+          Rect.fromCenter(
+              center: Offset(leftEyeX, eyeY),
+              width: eyeSize * 2,
+              height: eyeSize * 0.8),
+          0, pi, false, paint);
       canvas.drawArc(
-        Rect.fromCenter(
-            center: Offset(rightEyeX, eyeY),
-            width: eyeSize * 2,
-            height: eyeSize * 0.8),
-        0,
-        pi,
-        false,
-        paint,
-      );
+          Rect.fromCenter(
+              center: Offset(rightEyeX, eyeY),
+              width: eyeSize * 2,
+              height: eyeSize * 0.8),
+          0, pi, false, paint);
       return;
     }
 
@@ -705,19 +865,19 @@ class _MangaFacePainter extends CustomPainter {
     final whitePaint = Paint()..color = Colors.white;
 
     void drawNormalEye(double x) {
-      final irisRect = Rect.fromCircle(
-          center: Offset(x, eyeY), radius: eyeSize * 0.65);
+      final irisRect =
+          Rect.fromCircle(center: Offset(x, eyeY), radius: eyeSize * 0.65);
       canvas.drawCircle(Offset(x, eyeY), eyeSize, whitePaint);
       canvas.drawCircle(
         Offset(x, eyeY),
         eyeSize * 0.65,
         Paint()
-          ..shader = const LinearGradient(
+          ..shader = LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFF6B4423),
-              Color(0xFF1A0F06),
+              Color.lerp(eyeColor, Colors.white, 0.25)!,
+              eyeColor,
             ],
           ).createShader(irisRect),
       );
@@ -750,7 +910,6 @@ class _MangaFacePainter extends CustomPainter {
                 height: eyeSize),
             pi, pi, false, paint);
         break;
-
       case MangaExpression.wink:
         drawNormalEye(leftEyeX);
         final paint = Paint()
@@ -765,7 +924,6 @@ class _MangaFacePainter extends CustomPainter {
                 height: eyeSize),
             pi, pi, false, paint);
         break;
-
       case MangaExpression.sleepy:
       case MangaExpression.sleepyHappy:
         final paint = Paint()
@@ -780,7 +938,6 @@ class _MangaFacePainter extends CustomPainter {
             Offset(rightEyeX - eyeSize * 0.7, eyeY),
             Offset(rightEyeX + eyeSize * 0.7, eyeY), paint);
         break;
-
       case MangaExpression.sad:
         final paint = Paint()
           ..color = Colors.black
@@ -812,7 +969,6 @@ class _MangaFacePainter extends CustomPainter {
             ).createShader(tearRect),
         );
         break;
-
       case MangaExpression.angry:
         drawNormalEye(leftEyeX);
         drawNormalEye(rightEyeX);
@@ -828,15 +984,11 @@ class _MangaFacePainter extends CustomPainter {
             Offset(rightEyeX + eyeSize, eyeY - eyeSize * 1.5),
             Offset(rightEyeX - eyeSize, eyeY - eyeSize * 0.8), browPaint);
         break;
-
       case MangaExpression.surprised:
         canvas.drawCircle(Offset(leftEyeX, eyeY), eyeSize * 1.3, whitePaint);
-        canvas.drawCircle(
-            Offset(leftEyeX, eyeY), eyeSize * 0.5, blackPaint);
-        canvas.drawCircle(
-            Offset(rightEyeX, eyeY), eyeSize * 1.3, whitePaint);
-        canvas.drawCircle(
-            Offset(rightEyeX, eyeY), eyeSize * 0.5, blackPaint);
+        canvas.drawCircle(Offset(leftEyeX, eyeY), eyeSize * 0.5, blackPaint);
+        canvas.drawCircle(Offset(rightEyeX, eyeY), eyeSize * 1.3, whitePaint);
+        canvas.drawCircle(Offset(rightEyeX, eyeY), eyeSize * 0.5, blackPaint);
         final linesPaint = Paint()
           ..color = Colors.black
           ..strokeWidth = 1.5
@@ -849,26 +1001,19 @@ class _MangaFacePainter extends CustomPainter {
               linesPaint);
         }
         break;
-
       case MangaExpression.love:
         _drawHeart(canvas, Offset(leftEyeX, eyeY), eyeSize * 1.5, Colors.pink);
-        _drawHeart(
-            canvas, Offset(rightEyeX, eyeY), eyeSize * 1.5, Colors.pink);
+        _drawHeart(canvas, Offset(rightEyeX, eyeY), eyeSize * 1.5, Colors.pink);
         break;
-
       case MangaExpression.starstruck:
         _drawStar(canvas, Offset(leftEyeX, eyeY), eyeSize * 1.5, Colors.amber);
-        _drawStar(
-            canvas, Offset(rightEyeX, eyeY), eyeSize * 1.5, Colors.amber);
+        _drawStar(canvas, Offset(rightEyeX, eyeY), eyeSize * 1.5, Colors.amber);
         break;
-
       case MangaExpression.cool:
         canvas.drawRRect(
           RRect.fromRectAndRadius(
             Rect.fromCenter(
-                center: Offset(cx, eyeY),
-                width: r * 1.4,
-                height: r * 0.4),
+                center: Offset(cx, eyeY), width: r * 1.4, height: r * 0.4),
             const Radius.circular(4),
           ),
           Paint()
@@ -877,9 +1022,7 @@ class _MangaFacePainter extends CustomPainter {
               end: Alignment.bottomRight,
               colors: [Color(0xFF1A1A1A), Color(0xFF3A3A3A)],
             ).createShader(Rect.fromCenter(
-                center: Offset(cx, eyeY),
-                width: r * 1.4,
-                height: r * 0.4)),
+                center: Offset(cx, eyeY), width: r * 1.4, height: r * 0.4)),
         );
         canvas.drawLine(
             Offset(cx - r * 0.5, eyeY - r * 0.1),
@@ -888,38 +1031,29 @@ class _MangaFacePainter extends CustomPainter {
               ..color = Colors.white.withOpacity(0.5)
               ..strokeWidth = 2);
         break;
-
       case MangaExpression.thinking:
         drawNormalEye(leftEyeX);
         canvas.drawCircle(Offset(rightEyeX, eyeY), eyeSize, whitePaint);
-        canvas.drawCircle(
-            Offset(rightEyeX, eyeY), eyeSize * 0.4, blackPaint);
+        canvas.drawCircle(Offset(rightEyeX, eyeY), eyeSize * 0.4, blackPaint);
         break;
-
       case MangaExpression.confused:
         canvas.drawCircle(Offset(leftEyeX, eyeY), eyeSize * 1.2, whitePaint);
-        canvas.drawCircle(
-            Offset(leftEyeX, eyeY), eyeSize * 0.6, blackPaint);
+        canvas.drawCircle(Offset(leftEyeX, eyeY), eyeSize * 0.6, blackPaint);
         canvas.drawCircle(Offset(rightEyeX, eyeY), eyeSize * 0.8, whitePaint);
-        canvas.drawCircle(
-            Offset(rightEyeX, eyeY), eyeSize * 0.5, blackPaint);
+        canvas.drawCircle(Offset(rightEyeX, eyeY), eyeSize * 0.5, blackPaint);
         break;
-
       case MangaExpression.excited:
         canvas.drawCircle(Offset(leftEyeX, eyeY), eyeSize * 1.2, whitePaint);
-        canvas.drawCircle(
-            Offset(leftEyeX, eyeY), eyeSize * 0.8, blackPaint);
+        canvas.drawCircle(Offset(leftEyeX, eyeY), eyeSize * 0.8, blackPaint);
         canvas.drawCircle(
             Offset(leftEyeX - eyeSize * 0.2, eyeY - eyeSize * 0.2),
             eyeSize * 0.3, whitePaint);
         canvas.drawCircle(Offset(rightEyeX, eyeY), eyeSize * 1.2, whitePaint);
-        canvas.drawCircle(
-            Offset(rightEyeX, eyeY), eyeSize * 0.8, blackPaint);
+        canvas.drawCircle(Offset(rightEyeX, eyeY), eyeSize * 0.8, blackPaint);
         canvas.drawCircle(
             Offset(rightEyeX - eyeSize * 0.2, eyeY - eyeSize * 0.2),
             eyeSize * 0.3, whitePaint);
         break;
-
       case MangaExpression.determined:
         drawNormalEye(leftEyeX);
         drawNormalEye(rightEyeX);
@@ -935,11 +1069,10 @@ class _MangaFacePainter extends CustomPainter {
             Offset(rightEyeX + eyeSize, eyeY - eyeSize * 1.3),
             Offset(rightEyeX - eyeSize, eyeY - eyeSize * 1.5), browPaint);
         break;
-
       case MangaExpression.proud:
         drawNormalEye(leftEyeX);
         drawNormalEye(rightEyeX);
-        final lidPaint = Paint()..color = const Color(0xFFFFE0BD);
+        final lidPaint = Paint()..color = skinTone;
         canvas.drawRect(
             Rect.fromCenter(
                 center: Offset(leftEyeX, eyeY - eyeSize * 0.6),
@@ -953,7 +1086,6 @@ class _MangaFacePainter extends CustomPainter {
                 height: eyeSize * 0.9),
             lidPaint);
         break;
-
       case MangaExpression.silly:
         final paint = Paint()
           ..color = Colors.black
@@ -973,7 +1105,6 @@ class _MangaFacePainter extends CustomPainter {
                 height: eyeSize),
             pi, pi, false, paint);
         break;
-
       case MangaExpression.neutral:
       case MangaExpression.shy:
       default:
@@ -1035,8 +1166,7 @@ class _MangaFacePainter extends CustomPainter {
       case MangaExpression.sleepy:
       case MangaExpression.sleepyHappy:
       case MangaExpression.shy:
-        canvas.drawLine(
-            Offset(cx - r * 0.15, mouthY),
+        canvas.drawLine(Offset(cx - r * 0.15, mouthY),
             Offset(cx + r * 0.15, mouthY), strokePaint);
         break;
       case MangaExpression.love:
@@ -1060,8 +1190,7 @@ class _MangaFacePainter extends CustomPainter {
             0, pi, false, strokePaint);
         break;
       case MangaExpression.thinking:
-        canvas.drawCircle(
-            Offset(cx + r * 0.1, mouthY), r * 0.08, blackPaint);
+        canvas.drawCircle(Offset(cx + r * 0.1, mouthY), r * 0.08, blackPaint);
         break;
       case MangaExpression.confused:
         canvas.drawArc(
@@ -1155,10 +1284,8 @@ class _MangaFacePainter extends CustomPainter {
         break;
       case MangaExpression.starstruck:
       case MangaExpression.excited:
-        _drawStar(
-            canvas, Offset(cx + r * 0.7, cy - r * 0.7), r * 0.2, Colors.amber);
-        _drawStar(
-            canvas, Offset(cx - r * 0.7, cy - r * 0.5), r * 0.15, Colors.amber);
+        _drawStar(canvas, Offset(cx + r * 0.7, cy - r * 0.7), r * 0.2, Colors.amber);
+        _drawStar(canvas, Offset(cx - r * 0.7, cy - r * 0.5), r * 0.15, Colors.amber);
         break;
       default:
         break;
@@ -1167,25 +1294,13 @@ class _MangaFacePainter extends CustomPainter {
 
   void _drawHeart(Canvas canvas, Offset center, double size, Color color) {
     final paint = Paint()..color = color;
-    final path = Path();
-    path.moveTo(center.dx, center.dy + size * 0.3);
-    path.cubicTo(
-      center.dx - size,
-      center.dy - size * 0.5,
-      center.dx - size * 0.5,
-      center.dy - size,
-      center.dx,
-      center.dy - size * 0.3,
-    );
-    path.cubicTo(
-      center.dx + size * 0.5,
-      center.dy - size,
-      center.dx + size,
-      center.dy - size * 0.5,
-      center.dx,
-      center.dy + size * 0.3,
-    );
-    path.close();
+    final path = Path()
+      ..moveTo(center.dx, center.dy + size * 0.3)
+      ..cubicTo(center.dx - size, center.dy - size * 0.5, center.dx - size * 0.5,
+          center.dy - size, center.dx, center.dy - size * 0.3)
+      ..cubicTo(center.dx + size * 0.5, center.dy - size, center.dx + size,
+          center.dy - size * 0.5, center.dx, center.dy + size * 0.3)
+      ..close();
     canvas.drawPath(path, paint);
   }
 
@@ -1213,7 +1328,12 @@ class _MangaFacePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _MangaFacePainter oldDelegate) =>
       oldDelegate.expression != expression ||
-      oldDelegate.blinkValue != blinkValue;
+      oldDelegate.blinkValue != blinkValue ||
+      oldDelegate.hairColor != hairColor ||
+      oldDelegate.eyeColor != eyeColor ||
+      oldDelegate.skinTone != skinTone ||
+      oldDelegate.faceShape != faceShape ||
+      oldDelegate.hairStyle != hairStyle;
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1226,7 +1346,6 @@ class FloatingMangaCharacter {
 
   static void show(BuildContext context) {
     if (_entry != null) return;
-
     _entry = OverlayEntry(
       builder: (context) => Positioned.fill(
         child: MangaCharacter(
@@ -1238,7 +1357,6 @@ class FloatingMangaCharacter {
         ),
       ),
     );
-
     Overlay.of(context).insert(_entry!);
   }
 
@@ -1247,15 +1365,9 @@ class FloatingMangaCharacter {
     _entry = null;
   }
 
-  static void say(String messageKey) {
-    key.currentState?.showMessage(messageKey);
-  }
-
-  static void sayCustom(String text, MangaExpression expression) {
-    key.currentState?.showCustomMessage(text, expression);
-  }
-
-  static void setExpression(MangaExpression expression) {
-    key.currentState?.setExpression(expression);
-  }
+  static void say(String messageKey) => key.currentState?.showMessage(messageKey);
+  static void sayCustom(String text, MangaExpression expression) =>
+      key.currentState?.showCustomMessage(text, expression);
+  static void setExpression(MangaExpression expression) =>
+      key.currentState?.setExpression(expression);
 }
