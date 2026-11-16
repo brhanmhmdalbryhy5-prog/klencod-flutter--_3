@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../core/app_events.dart';
 import '../main.dart';
 import '../models/anime.dart';
 import '../services/storage_service.dart';
@@ -173,9 +174,21 @@ class _LibraryScreenState extends State<LibraryScreen> {
     allAnimes[idx].watchedEpisodes++;
     final isNowComplete = anime.episodes > 0 &&
         allAnimes[idx].watchedEpisodes >= anime.episodes;
+    final isOneLeft = anime.episodes > 0 &&
+        allAnimes[idx].watchedEpisodes == anime.episodes - 1;
+
     if (isNowComplete) allAnimes[idx].status = 'مكتمل';
     await storage.saveAnimes(allAnimes);
     await loadAnimes();
+
+    // 🆕 إطلاق الحدث للشخصية
+    if (isNowComplete) {
+      AppEvents.fire('anime_completed');
+    } else if (isOneLeft) {
+      AppEvents.fire('one_episode_left');
+    } else {
+      AppEvents.fire('episode_done');
+    }
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -196,7 +209,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
     final isSameRating = (anime.rating - newRating).abs() < 0.1;
 
-    // 🆕 رسالة تأكيد قبل تغيير التقييم
     final confirm = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -249,9 +261,17 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
     await storage.saveAnimes(allAnimes);
     await loadAnimes();
+
+    // 🆕 إطلاق الحدث للشخصية
+    if (newRating >= 8) {
+      AppEvents.fire('high_rate');
+    } else if (newRating > 0 && newRating < 5) {
+      AppEvents.fire('low_rate');
+    } else if (newRating > 0) {
+      AppEvents.fire('rated');
+    }
   }
 
-  // 🆕 غلاف للسحب
   Widget _wrapWithSwipe(Anime anime, Widget child) {
     if (_selectionMode || !_swipeEnabled) return child;
 
@@ -314,14 +334,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // 🆕 نجوم التقييم السريع (10 نجوم)
-  // ══════════════════════════════════════════════════════════════
   Widget _buildQuickRating(Anime anime, {bool lightText = false}) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: List.generate(10, (index) {
-        final starValue = (index + 1) * 1.0; // 10 نجوم = قيم من 1.0 إلى 10.0
+        final starValue = (index + 1) * 1.0;
         final isFilled = anime.rating >= starValue - 0.5;
         return GestureDetector(
           onTap: () => _quickSetRating(anime, starValue),
@@ -339,9 +356,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // منطق التحديد المتعدد
-  // ══════════════════════════════════════════════════════════════
   void _toggleSelectionMode() {
     HapticFeedback.selectionClick();
     setState(() {
@@ -428,6 +442,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       if (saved) {
         await loadAnimes();
         if (!mounted) return;
+        AppEvents.fire('anime_completed'); // 🆕
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('✅ تم تحديد $updated أنمي كمكتمل.'),
@@ -447,9 +462,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // منطق الفلترة
-  // ══════════════════════════════════════════════════════════════
   List<Anime> get filteredAnimes {
     final query = searchText.trim().toLowerCase();
 
@@ -828,7 +840,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
     final allAnimes = await storage.loadAnimes();
     final saved = await storage.moveToTrash(allAnimes, anime.id);
     if (!mounted) return;
-    if (saved) await loadAnimes();
+    if (saved) {
+      AppEvents.fire('anime_deleted'); // 🆕
+      await loadAnimes();
+    }
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content:
             Text(saved ? 'تم نقل الأنمي إلى السلة' : 'تعذر حفظ العملية')));
@@ -844,6 +859,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
     final isFav = allAnimes[idx].favorite;
     final saved = await storage.saveAnimes(allAnimes);
     await loadAnimes();
+
+    if (saved) {
+      AppEvents.fire(isFav ? 'favorite_added' : 'favorite_removed'); // 🆕
+    }
 
     if (!mounted) return;
     if (saved) {
@@ -868,6 +887,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
     if (!mounted) return;
     if (saved) {
+      AppEvents.fire('anime_edited'); // 🆕
       await loadAnimes();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -936,6 +956,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       if (!mounted) return;
       if (saved) {
         await loadAnimes();
+        AppEvents.fire('anime_edited'); // 🆕
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text('تم جلب البيانات والصور وحفظها محلياً!')));
       } else {
@@ -1327,6 +1348,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         }
         await loadAnimes();
         if (!mounted) return;
+        AppEvents.fire('anime_edited'); // 🆕
         ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('تم حفظ تعديلات الأنمي')));
       } else {
