@@ -12,7 +12,7 @@ import '../main.dart';
 import '../models/anime.dart';
 import '../services/storage_service.dart';
 import '../services/anime_api_service.dart';
-import '../widgets/manga_character.dart'; // ضروري لاستخدام FloatingMangaCharacter
+import '../widgets/manga_character.dart';
 import 'anime_details_screen.dart';
 import 'otaku_oracle_screen.dart';
 import 'random_picker_screen.dart';
@@ -166,12 +166,21 @@ class _HomeScreenState extends State<HomeScreen> {
     all[idx].watchedEpisodes++;
     final isNowComplete = all[idx].episodes > 0 &&
         all[idx].watchedEpisodes >= all[idx].episodes;
+    final isOneLeft = all[idx].episodes > 0 &&
+        all[idx].watchedEpisodes == all[idx].episodes - 1;
+        
     if (isNowComplete) all[idx].status = 'مكتمل';
     await storage.saveAnimes(all);
     await loadData();
 
-    // إخبار الشخصية العائمة
-    FloatingMangaCharacter.say(isNowComplete ? 'complete' : 'progress_congrats');
+    // 🆕 إخبار الشخصية بالحدث المناسب
+    if (isNowComplete) {
+      FloatingMangaCharacter.say('complete');
+    } else if (isOneLeft) {
+      FloatingMangaCharacter.say('one_episode_left');
+    } else {
+      FloatingMangaCharacter.say('progress_congrats');
+    }
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -662,9 +671,13 @@ class _HomeScreenState extends State<HomeScreen> {
       final saved = await storage.saveAnimes(_allAnimes);
       if (!mounted) return;
 
-      // إخبار الشخصية العائمة
+      // 🆕 إخبار الشخصية العائمة بالحدث
       if (saved) {
-        if (result.rating >= 8) {
+        if (result.status == 'مكتمل') {
+          FloatingMangaCharacter.say('complete');
+        } else if (result.status == 'مخطط له') {
+          FloatingMangaCharacter.say('added_to_plan');
+        } else if (result.rating >= 8) {
           FloatingMangaCharacter.say('high_rate');
         } else if (result.rating > 0 && result.rating < 5) {
           FloatingMangaCharacter.say('low_rate');
