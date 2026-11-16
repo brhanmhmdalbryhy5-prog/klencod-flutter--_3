@@ -11,6 +11,7 @@ import '../services/export_service.dart';
 import 'trash_screen.dart';
 import 'data_health_screen.dart';
 import 'backup_progress_screen.dart';
+import '../widgets/manga_character_settings.dart'; // 🆕 استدعاء إعدادات الشخصية
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -1288,6 +1289,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     trailing: const Icon(Icons.chevron_left,
                         color: Colors.white38),
                     onTap: _showTitleColorPicker),
+                
+                // 🆕 إضافة إعدادات الشخصية العائمة
+                const SizedBox(height: 10),
+                _settingsTile(
+                    icon: Icons.smart_toy,
+                    color: const Color(0xFF00BCD4),
+                    title: 'إعدادات الشخصية العائمة',
+                    subtitle: 'التحكم في شكل وحركة الأوتاكو العائم',
+                    trailing: const Icon(Icons.chevron_left,
+                        color: Colors.white38),
+                    onTap: () => showMangaSettingsDialog(context)),
               ],
             ),
 
