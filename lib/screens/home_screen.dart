@@ -12,7 +12,7 @@ import '../main.dart';
 import '../models/anime.dart';
 import '../services/storage_service.dart';
 import '../services/anime_api_service.dart';
-import '../widgets/manga_character.dart';
+import '../widgets/manga_character.dart'; // 🆕 ضروري لاستخدام FloatingMangaCharacter
 import 'anime_details_screen.dart';
 import 'otaku_oracle_screen.dart';
 import 'random_picker_screen.dart';
@@ -28,9 +28,6 @@ class _HomeScreenState extends State<HomeScreen> {
   final StorageService storage = StorageService();
   final AnimeApiService apiService = AnimeApiService();
   final ImagePicker imagePicker = ImagePicker();
-
-  // 🆕 مفتاح التحكم بالشخصية
-  final GlobalKey<MangaCharacterState> _charKey = GlobalKey<MangaCharacterState>();
 
   List<Anime> animes = [];
   List<Anime> _allAnimes = [];
@@ -73,9 +70,9 @@ class _HomeScreenState extends State<HomeScreen> {
       animes = result.where((a) => a.parentId == null).toList();
       loading = false;
     });
-    // إخبار الشخصية بعدد الأنميات إذا كانت المكتبة فارغة
-    if (result.isEmpty && _charKey.currentState != null) {
-      _charKey.currentState!.showMessage('empty_library');
+    // إخبار الشخصية العائمة إذا كانت المكتبة فارغة
+    if (result.isEmpty) {
+      FloatingMangaCharacter.say('empty_library');
     }
   }
 
@@ -176,9 +173,8 @@ class _HomeScreenState extends State<HomeScreen> {
     await storage.saveAnimes(all);
     await loadData();
 
-    // 🆕 إخبار الشخصية
-    _charKey.currentState?.showMessage(
-        isNowComplete ? 'complete' : 'progress_congrats');
+    // 🆕 إخبار الشخصية العائمة
+    FloatingMangaCharacter.say(isNowComplete ? 'complete' : 'progress_congrats');
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -672,14 +668,14 @@ class _HomeScreenState extends State<HomeScreen> {
       final saved = await storage.saveAnimes(_allAnimes);
       if (!mounted) return;
 
-      // 🆕 إخبار الشخصية
+      // 🆕 إخبار الشخصية العائمة
       if (saved) {
         if (result.rating >= 8) {
-          _charKey.currentState?.showMessage('high_rate');
+          FloatingMangaCharacter.say('high_rate');
         } else if (result.rating > 0 && result.rating < 5) {
-          _charKey.currentState?.showMessage('low_rate');
+          FloatingMangaCharacter.say('low_rate');
         } else {
-          _charKey.currentState?.showMessage('add_anime');
+          FloatingMangaCharacter.say('add_anime');
         }
       }
 
@@ -760,7 +756,7 @@ class _HomeScreenState extends State<HomeScreen> {
           borderRadius: BorderRadius.circular(20),
           onTap: () {
             HapticFeedback.lightImpact();
-            _charKey.currentState?.showMessage('thinking');
+            FloatingMangaCharacter.say('thinking');
             Navigator.push(context,
                 MaterialPageRoute(builder: (_) => const OtakuOracleScreen()));
           },
@@ -823,7 +819,7 @@ class _HomeScreenState extends State<HomeScreen> {
           borderRadius: BorderRadius.circular(20),
           onTap: () {
             HapticFeedback.lightImpact();
-            _charKey.currentState?.showMessage('random_pick');
+            FloatingMangaCharacter.say('random_pick');
             Navigator.push(context,
                 MaterialPageRoute(builder: (_) => const RandomPickerScreen()));
           },
@@ -1008,7 +1004,7 @@ class _HomeScreenState extends State<HomeScreen> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(18, 16, 18, 28),
         children: [
-          // ════ الرأس + الشخصية ════
+          // ════ الرأس ════
           Row(
             children: [
               Container(
@@ -1048,15 +1044,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       shadowColor: primaryColor.withOpacity(0.7)),
                   icon: const Icon(Icons.add)),
             ],
-          ),
-
-          const SizedBox(height: 16),
-
-          // ════ الشخصية العائمة ════
-          MangaCharacter(
-            key: _charKey,
-            size: 90,
-            initialMessage: 'welcome_back',
           ),
 
           const SizedBox(height: 16),
