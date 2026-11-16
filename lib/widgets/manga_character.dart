@@ -146,7 +146,6 @@ class MangaMessages {
     'waifu_husbando': MangaMessage('شخصيتك المفضلة؟ 💖\nقل لي!', MangaExpression.love),
   };
 
-  /// إرجاع مفتاح رسالة عشوائي (يمكن استبعاد مفاتيح معينة)
   static String randomKey({Set<String> exclude = const {}}) {
     final keys = all.keys.where((k) => !exclude.contains(k)).toList();
     return keys[Random().nextInt(keys.length)];
@@ -180,24 +179,20 @@ class MangaCharacterState extends State<MangaCharacter>
     with TickerProviderStateMixin {
   MangaExpression _expression = MangaExpression.happy;
   String? _currentMessage;
-  bool? _bubbleOnLeft; // 🔒 تثبيت جهة الفقاعة عند أول ظهور
+  bool? _bubbleOnLeft;
 
   Timer? _hideTimer;
   Timer? _idleTimer;
   Timer? _blinkTimer;
 
-  // ─── حركة العوم (Lissajous) ──────────────
   late AnimationController _moveXController;
   late AnimationController _moveYController;
-
-  // ─── الرمش ───────────────────────────────
   late AnimationController _blinkController;
 
   @override
   void initState() {
     super.initState();
 
-    // حركتان بترددين مختلفين → مسار عضوي لا يتكرر
     _moveXController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 8),
@@ -208,7 +203,6 @@ class MangaCharacterState extends State<MangaCharacter>
       duration: const Duration(seconds: 11),
     )..repeat(reverse: true);
 
-    // الرمش (180ms لكل رمشة)
     _blinkController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 180),
@@ -223,11 +217,36 @@ class MangaCharacterState extends State<MangaCharacter>
     _startIdleTimer();
   }
 
-  // ═══ منطق الرمش ═══
+  // 🆕 الاستجابة لتغيير الإعدادات فوراً
+  @override
+  void didUpdateWidget(covariant MangaCharacter oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (widget.autoMove != oldWidget.autoMove) {
+      if (widget.autoMove) {
+        _moveXController.repeat(reverse: true);
+        _moveYController.repeat(reverse: true);
+      } else {
+        _moveXController.stop();
+        _moveYController.stop();
+        _moveXController.value = 0.5;
+        _moveYController.value = 0.5;
+      }
+    }
+
+    if (widget.enableBlink != oldWidget.enableBlink) {
+      if (widget.enableBlink) {
+        _scheduleBlink();
+      } else {
+        _blinkTimer?.cancel();
+        _blinkController.reset();
+      }
+    }
+  }
+
   void _scheduleBlink() {
     _blinkTimer?.cancel();
     if (!widget.enableBlink) return;
-    // 2-6 ثوانٍ بين الرمشات
     final delay = Duration(milliseconds: 2000 + Random().nextInt(4000));
     _blinkTimer = Timer(delay, _doBlink);
   }
@@ -241,7 +260,6 @@ class MangaCharacterState extends State<MangaCharacter>
     _scheduleBlink();
   }
 
-  // ═══ رسائل تلقائية كل 40 ثانية ═══
   void _startIdleTimer() {
     _idleTimer?.cancel();
     _idleTimer = Timer.periodic(const Duration(seconds: 40), (timer) {
@@ -281,7 +299,6 @@ class MangaCharacterState extends State<MangaCharacter>
     super.dispose();
   }
 
-  /// عرض رسالة محددة
   void showMessage(String messageKey) {
     final msg = MangaMessages.all[messageKey];
     if (msg == null || !mounted) return;
@@ -290,7 +307,7 @@ class MangaCharacterState extends State<MangaCharacter>
     setState(() {
       _currentMessage = msg.text;
       _expression = msg.expression;
-      _bubbleOnLeft = null; // سيُحدَّد في أول build
+      _bubbleOnLeft = null;
     });
 
     _hideTimer = Timer(const Duration(seconds: 5), () {
@@ -304,7 +321,6 @@ class MangaCharacterState extends State<MangaCharacter>
     });
   }
 
-  /// عرض رسالة مخصصة
   void showCustomMessage(String text, MangaExpression expression) {
     if (!mounted) return;
     _hideTimer?.cancel();
@@ -346,13 +362,12 @@ class MangaCharacterState extends State<MangaCharacter>
   @override
   Widget build(BuildContext context) {
     if (!widget.autoMove) {
-      // نسخة ثابتة (توضع في Stack عادي مع Positioned)
-      return _buildCharacterAndBubble(blinkValue: 0, tilt: 0, perspective: 1.0);
+      return _buildCharacterAndBubble(
+          blinkValue: 0, tilt: 0, perspective: 1.0);
     }
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        // الحماية من القيود اللانهائية
         if (!constraints.maxWidth.isFinite ||
             !constraints.maxHeight.isFinite ||
             constraints.maxWidth < widget.size + 60 ||
@@ -362,7 +377,8 @@ class MangaCharacterState extends State<MangaCharacter>
         }
 
         return AnimatedBuilder(
-          animation: Listenable.merge([_moveXController, _moveYController, _blinkController]),
+          animation: Listenable.merge(
+              [_moveXController, _moveYController, _blinkController]),
           builder: (context, _) {
             final tX = Curves.easeInOut.transform(_moveXController.value);
             final tY = Curves.easeInOut.transform(_moveYController.value);
@@ -375,20 +391,16 @@ class MangaCharacterState extends State<MangaCharacter>
             final dx = widget.margin.left + maxX * tX;
             final dy = widget.margin.top + maxY * tY;
 
-            // 🔮 منظور بسيط: يبدو أقرب (أكبر) في الأسفل، أبعد (أصغر) في الأعلى
-            final perspective = 0.88 + tY * 0.24; // 0.88 → 1.12
+            final perspective = 0.88 + tY * 0.24;
 
-            // 🌀 ميل بسيط حسب اتجاه الحركة
-            final velocityX = _moveXController.value - tX; // تقريب
+            final velocityX = _moveXController.value - tX;
             final tilt = (velocityX * 0.3).clamp(-0.12, 0.12);
 
-            // 🎯 تحديد جهة الفقاعة (مرة واحدة عند الظهور)
             _bubbleOnLeft ??= dx > constraints.maxWidth / 2;
 
             return Stack(
               clipBehavior: Clip.none,
               children: [
-                // ظل أرضي
                 Positioned(
                   left: dx + widget.size * 0.2 * perspective,
                   top: dy + widget.size * 0.95 * perspective,
@@ -408,7 +420,6 @@ class MangaCharacterState extends State<MangaCharacter>
                     ),
                   ),
                 ),
-                // الشخصية + الفقاعة
                 Positioned(
                   left: dx,
                   top: dy,
@@ -524,7 +535,6 @@ class _MangaFacePainter extends CustomPainter {
 
   bool get _isBlinking => blinkValue > 0.5;
 
-  // التعبيرات التي تملك عيوناً "عادية" يمكنها أن ترمش
   static const Set<MangaExpression> _blinkable = {
     MangaExpression.neutral,
     MangaExpression.angry,
@@ -542,7 +552,6 @@ class _MangaFacePainter extends CustomPainter {
     final cy = size.height / 2;
     final r = size.width * 0.42;
 
-    // ─── ظل الوجه (خلفي - يمنح عمقاً) ────────
     canvas.drawCircle(
       Offset(cx + 2, cy + 4),
       r * 1.02,
@@ -551,22 +560,20 @@ class _MangaFacePainter extends CustomPainter {
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
     );
 
-    // ─── الرأس بتدرج ثلاثي الأبعاد ────────────
     final faceRect = Rect.fromCircle(center: Offset(cx, cy), radius: r);
     final facePaint = Paint()
       ..shader = RadialGradient(
-        center: const Alignment(-0.35, -0.35), // الإضاءة من أعلى اليسار
+        center: const Alignment(-0.35, -0.35),
         radius: 1.3,
         colors: const [
-          Color(0xFFFFF2D6), // إضاءة
-          Color(0xFFFFE0BD), // متوسط
-          Color(0xFFF0C096), // ظل
+          Color(0xFFFFF2D6),
+          Color(0xFFFFE0BD),
+          Color(0xFFF0C096),
         ],
         stops: const [0.0, 0.55, 1.0],
       ).createShader(faceRect);
     canvas.drawCircle(Offset(cx, cy), r, facePaint);
 
-    // ─── خط الرأس ────────────────────────────
     canvas.drawCircle(
       Offset(cx, cy),
       r,
@@ -576,7 +583,6 @@ class _MangaFacePainter extends CustomPainter {
         ..strokeWidth = 2,
     );
 
-    // ─── الشعر بتدرج ─────────────────────────
     final hairRect = Rect.fromCircle(
         center: Offset(cx, cy - r * 0.5), radius: r * 1.1);
     final hairPaint = Paint()
@@ -584,9 +590,9 @@ class _MangaFacePainter extends CustomPainter {
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
         colors: const [
-          Color(0xFF3A1F12), // داكن في الجذور
-          Color(0xFF5A3222), // متوسط
-          Color(0xFF2C1810), // ظل
+          Color(0xFF3A1F12),
+          Color(0xFF5A3222),
+          Color(0xFF2C1810),
         ],
         stops: const [0.0, 0.5, 1.0],
       ).createShader(hairRect);
@@ -603,7 +609,6 @@ class _MangaFacePainter extends CustomPainter {
       ..close();
     canvas.drawPath(hairPath, hairPaint);
 
-    // لمعان على الشعر (specular highlight)
     canvas.drawPath(
       hairPath,
       Paint()
@@ -618,7 +623,6 @@ class _MangaFacePainter extends CustomPainter {
         ..blendMode = BlendMode.overlay,
     );
 
-    // ─── وجنات (blush ناعم) ──────────────────
     if (expression == MangaExpression.love ||
         expression == MangaExpression.shy ||
         expression == MangaExpression.veryHappy ||
@@ -653,16 +657,12 @@ class _MangaFacePainter extends CustomPainter {
       );
     }
 
-    // ─── العيون + الفم ───────────────────────
     _drawEyes(canvas, cx, cy, r);
     _drawMouth(canvas, cx, cy, r);
-
-    // ─── الإكسسوارات ────────────────────────
     _drawAccessories(canvas, cx, cy, r);
   }
 
   void _drawEyes(Canvas canvas, double cx, double cy, double r) {
-    // 🔮 الرمش يطغى على العيون (لكن فقط للأنواع القابلة للرمش)
     if (_isBlinking && _blinkable.contains(expression)) {
       final eyeY = cy - r * 0.05;
       final leftEyeX = cx - r * 0.35;
@@ -704,7 +704,6 @@ class _MangaFacePainter extends CustomPainter {
     final blackPaint = Paint()..color = Colors.black;
     final whitePaint = Paint()..color = Colors.white;
 
-    // 🎨 دالة مساعدة لرسم عين عادية بتدرج
     void drawNormalEye(double x) {
       final irisRect = Rect.fromCircle(
           center: Offset(x, eyeY), radius: eyeSize * 0.65);
@@ -722,7 +721,6 @@ class _MangaFacePainter extends CustomPainter {
             ],
           ).createShader(irisRect),
       );
-      // لمعة العين
       canvas.drawCircle(
         Offset(x - eyeSize * 0.22, eyeY - eyeSize * 0.28),
         eyeSize * 0.28,
@@ -801,7 +799,6 @@ class _MangaFacePainter extends CustomPainter {
                 width: eyeSize * 1.5,
                 height: eyeSize),
             0, pi, false, paint);
-        // دمعة بتدرج
         final tearRect = Rect.fromCircle(
             center: Offset(rightEyeX + eyeSize * 0.6, eyeY + eyeSize * 1.2),
             radius: eyeSize * 0.35);
@@ -884,7 +881,6 @@ class _MangaFacePainter extends CustomPainter {
                 width: r * 1.4,
                 height: r * 0.4)),
         );
-        // انعكاس على النظارة
         canvas.drawLine(
             Offset(cx - r * 0.5, eyeY - r * 0.1),
             Offset(cx - r * 0.2, eyeY - r * 0.1),
@@ -1228,7 +1224,6 @@ class FloatingMangaCharacter {
       GlobalKey<MangaCharacterState>();
   static OverlayEntry? _entry;
 
-  /// أظهر الشخصية فوق كل الشاشات (نادِها مرة واحدة فقط).
   static void show(BuildContext context) {
     if (_entry != null) return;
 
@@ -1252,17 +1247,14 @@ class FloatingMangaCharacter {
     _entry = null;
   }
 
-  /// عرض رسالة (تُستدعى من أي مكان في التطبيق)
   static void say(String messageKey) {
     key.currentState?.showMessage(messageKey);
   }
 
-  /// عرض رسالة مخصصة
   static void sayCustom(String text, MangaExpression expression) {
     key.currentState?.showCustomMessage(text, expression);
   }
 
-  /// تغيير التعبير فقط
   static void setExpression(MangaExpression expression) {
     key.currentState?.setExpression(expression);
   }
