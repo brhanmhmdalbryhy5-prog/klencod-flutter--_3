@@ -1184,3 +1184,86 @@ class _MangaFacePainter extends CustomPainter {
     path.cubicTo(
       center.dx + size * 0.5,
       center.dy - size,
+      center.dx + size,
+      center.dy - size * 0.5,
+      center.dx,
+      center.dy + size * 0.3,
+    );
+    path.close();
+    canvas.drawPath(path, paint);
+  }
+
+  void _drawStar(Canvas canvas, Offset center, double size, Color color) {
+    final paint = Paint()..color = color;
+    final path = Path();
+    for (int i = 0; i < 5; i++) {
+      final outerAngle = -pi / 2 + i * 2 * pi / 5;
+      final innerAngle = outerAngle + pi / 5;
+      final outerX = center.dx + cos(outerAngle) * size;
+      final outerY = center.dy + sin(outerAngle) * size;
+      final innerX = center.dx + cos(innerAngle) * size * 0.4;
+      final innerY = center.dy + sin(innerAngle) * size * 0.4;
+      if (i == 0) {
+        path.moveTo(outerX, outerY);
+      } else {
+        path.lineTo(outerX, outerY);
+      }
+      path.lineTo(innerX, innerY);
+    }
+    path.close();
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _MangaFacePainter oldDelegate) =>
+      oldDelegate.expression != expression ||
+      oldDelegate.blinkValue != blinkValue;
+}
+
+// ══════════════════════════════════════════════════════════════
+// مساعد لجعل الشخصية تطفو فوق كل الشاشات
+// ══════════════════════════════════════════════════════════════
+class FloatingMangaCharacter {
+  static final GlobalKey<MangaCharacterState> key =
+      GlobalKey<MangaCharacterState>();
+  static OverlayEntry? _entry;
+
+  /// أظهر الشخصية فوق كل الشاشات (نادِها مرة واحدة فقط).
+  static void show(BuildContext context) {
+    if (_entry != null) return;
+
+    _entry = OverlayEntry(
+      builder: (context) => Positioned.fill(
+        child: MangaCharacter(
+          key: key,
+          size: 90,
+          autoMove: true,
+          enableBlink: true,
+          initialMessage: 'welcome_back',
+        ),
+      ),
+    );
+
+    Overlay.of(context).insert(_entry!);
+  }
+
+  static void hide() {
+    _entry?.remove();
+    _entry = null;
+  }
+
+  /// عرض رسالة (تُستدعى من أي مكان في التطبيق)
+  static void say(String messageKey) {
+    key.currentState?.showMessage(messageKey);
+  }
+
+  /// عرض رسالة مخصصة
+  static void sayCustom(String text, MangaExpression expression) {
+    key.currentState?.showCustomMessage(text, expression);
+  }
+
+  /// تغيير التعبير فقط
+  static void setExpression(MangaExpression expression) {
+    key.currentState?.setExpression(expression);
+  }
+}
