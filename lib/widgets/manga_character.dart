@@ -101,12 +101,7 @@ class MangaMessages {
     'backup_fail': MangaMessage('فشل النسخ! 😱\nلا تقلق، حاول مجدداً.', MangaExpression.surprised),
     'no_internet': MangaMessage('لا إنترنت! 📖\nاقرأ مانغا بدلاً من ذلك!', MangaExpression.sad),
     'thinking': MangaMessage('دعني أفكر معك... 🤔', MangaExpression.thinking),
-    'excited': MangaMessage('ياي! هذا رائع! 🎉', MangaExpression.veryHappy),
- 'thinking': MangaMessage('دعني أفكر معك... 🤔', MangaExpression.thinking),
-'excited': MangaMessage('ياي! هذا رائع! 🎉', MangaExpression.excited),
-'one_episode_left': MangaMessage('متبقي حلقة واحدة فقط! 🔥\nلا تتوقف الآن!', MangaExpression.excited),
-'added_to_plan': MangaMessage('أضفته للمخطط؟ 📌\nلا تنساه!', MangaExpression.determined),
-'rated_anime': MangaMessage('تقييم جديد! ⭐\nرأيك يهمنا!', MangaExpression.thinking),
+    'excited': MangaMessage('ياي! هذا رائع! 🎉', 
  };
 
   static String randomKey({Set<String> exclude = const {}}) {
