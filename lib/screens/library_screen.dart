@@ -34,13 +34,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
   static const String _sortKey = 'anime_library_sort';
   static const String _viewKey = 'anime_library_view';
   static const String _swipeKey = 'anime_swipe_enabled';
+  static const String _cinematicKey = 'anime_cinematic_enabled';
 
-  // 🆕 تحديد متعدد
   bool _selectionMode = false;
   final Set<String> _selectedAnimeIds = {};
-
-  // 🆕 تفعيل السحب
   bool _swipeEnabled = true;
+  bool _cinematicEnabled = false;
 
   final List<String> allGenres = const [
     'أكشن', 'مغامرة', 'كوميدي', 'دراما', 'فانتازيا', 'رعب',
@@ -103,6 +102,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         sortMode = prefs.getString(_sortKey) ?? 'newest';
         viewMode = prefs.getInt(_viewKey) ?? 0;
         _swipeEnabled = prefs.getBool(_swipeKey) ?? true;
+        _cinematicEnabled = prefs.getBool(_cinematicKey) ?? false;
       });
     } catch (_) {}
   }
@@ -113,6 +113,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       await prefs.setString(_sortKey, sortMode);
       await prefs.setInt(_viewKey, viewMode);
       await prefs.setBool(_swipeKey, _swipeEnabled);
+      await prefs.setBool(_cinematicKey, _cinematicEnabled);
     } catch (_) {}
   }
 
@@ -140,7 +141,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
         const begin = Offset(0.0, 1.0);
         const end = Offset.zero;
         const curve = Curves.easeInOutCubic;
-        var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+        var tween =
+            Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
         return SlideTransition(
           position: animation.drive(tween),
           child: FadeTransition(opacity: animation, child: child),
@@ -151,7 +153,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   // ══════════════════════════════════════════════════════════════
-  // 🆕 Swipe Actions
+  // Swipe Actions
   // ══════════════════════════════════════════════════════════════
   Future<void> _incrementWatched(Anime anime) async {
     if (anime.episodes > 0 && anime.watchedEpisodes >= anime.episodes) {
@@ -181,7 +183,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     await storage.saveAnimes(allAnimes);
     await loadAnimes();
 
-    // 🆕 إطلاق الحدث للشخصية
     if (isNowComplete) {
       AppEvents.fire('anime_completed');
     } else if (isOneLeft) {
@@ -203,66 +204,102 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
-  // 🆕 تقييم سريع بالنجوم (10 نجوم مع رسالة تأكيد)
-  Future<void> _quickSetRating(Anime anime, double newRating) async {
+  // ══════════════════════════════════════════════════════════════
+  // 🆕 نافذة التقييم الجديدة (Slider + نجوم + مسح)
+  // ══════════════════════════════════════════════════════════════
+  Future<void> _openRatingDialog(Anime anime) async {
     HapticFeedback.selectionClick();
+    double tempRating = anime.rating;
 
-    final isSameRating = (anime.rating - newRating).abs() < 0.1;
-
-    final confirm = await showDialog<bool>(
+    final newRating = await showDialog<double>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: const Color(0xFF1B1F28),
-        title: Row(
-          children: [
-            Icon(
-              isSameRating ? Icons.star_border : Icons.star,
-              color: const Color(0xFFFFC857),
-            ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) => AlertDialog(
+          backgroundColor: const Color(0xFF1B1F28),
+          title: Row(children: [
+            const Icon(Icons.star, color: Color(0xFFFFC857)),
             const SizedBox(width: 8),
-            Text(isSameRating ? 'إلغاء التقييم' : 'تأكيد التقييم'),
+            Expanded(
+              child: Text('تقييم "${anime.title}"',
+                  style: const TextStyle(fontSize: 15),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis),
+            ),
+          ]),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                tempRating > 0
+                    ? '${tempRating.toStringAsFixed(1)} / 10'
+                    : 'لم يتم التقييم',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w900,
+                  color: primaryColorNotifier.value,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Slider(
+                value: tempRating,
+                min: 0,
+                max: 10,
+                divisions: 20,
+                label: tempRating.toStringAsFixed(1),
+                activeColor: const Color(0xFFFFC857),
+                onChanged: (v) => setSt(() => tempRating = v),
+              ),
+              const SizedBox(height: 4),
+              Wrap(
+                spacing: 2,
+                children: List.generate(10, (i) {
+                  final val = (i + 1).toDouble();
+                  return GestureDetector(
+                    onTap: () => setSt(() => tempRating = val),
+                    child: Icon(
+                      tempRating >= val - 0.5
+                          ? Icons.star
+                          : Icons.star_border,
+                      color: const Color(0xFFFFC857),
+                      size: 22,
+                    ),
+                  );
+                }),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('إلغاء'),
+            ),
+            if (anime.rating > 0)
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, 0.0),
+                child: const Text('مسح التقييم',
+                    style: TextStyle(color: Colors.redAccent)),
+              ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                  backgroundColor: primaryColorNotifier.value),
+              onPressed: () => Navigator.pop(ctx, tempRating),
+              child: const Text('حفظ'),
+            ),
           ],
         ),
-        content: Text(
-          isSameRating
-              ? 'سيتم إزالة التقييم الحالي (${anime.rating.toStringAsFixed(1)}) '
-                  'من "${anime.title}".\n\nهل تريد المتابعة؟'
-              : 'سيتم تغيير تقييم "${anime.title}"\n'
-                  'من ${anime.rating.toStringAsFixed(1)} '
-                  'إلى ${newRating.toStringAsFixed(1)} من 10.\n\n'
-                  'هل تريد المتابعة؟',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('إلغاء'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: primaryColorNotifier.value,
-            ),
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('تأكيد'),
-          ),
-        ],
       ),
     );
 
-    if (confirm != true) return;
+    if (newRating == null) return;
 
     final allAnimes = await storage.loadAnimes();
     final idx = allAnimes.indexWhere((a) => a.id == anime.id);
     if (idx == -1) return;
 
-    if (isSameRating) {
-      allAnimes[idx].rating = 0;
-    } else {
-      allAnimes[idx].rating = newRating;
-    }
+    allAnimes[idx].rating = newRating;
     await storage.saveAnimes(allAnimes);
     await loadAnimes();
 
-    // 🆕 إطلاق الحدث للشخصية
     if (newRating >= 8) {
       AppEvents.fire('high_rate');
     } else if (newRating > 0 && newRating < 5) {
@@ -272,6 +309,43 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // 🆕 عرض التقييم كنص (⭐ 9.5/10)
+  // ══════════════════════════════════════════════════════════════
+  Widget _buildQuickRating(Anime anime, {bool lightText = false}) {
+    return GestureDetector(
+      onTap: () => _openRatingDialog(anime),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.4),
+          borderRadius: BorderRadius.circular(8),
+          border:
+              Border.all(color: const Color(0xFFFFC857).withOpacity(0.5)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.star_rounded,
+                size: 14, color: Color(0xFFFFC857)),
+            const SizedBox(width: 4),
+            Text(
+              anime.rating > 0
+                  ? '${anime.rating.toStringAsFixed(1)} / 10'
+                  : 'قيّم',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: anime.rating > 0 ? Colors.white : Colors.white60,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 🆕 غلاف للسحب
   Widget _wrapWithSwipe(Anime anime, Widget child) {
     if (_selectionMode || !_swipeEnabled) return child;
 
@@ -331,28 +405,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
         return false;
       },
       child: child,
-    );
-  }
-
-  Widget _buildQuickRating(Anime anime, {bool lightText = false}) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: List.generate(10, (index) {
-        final starValue = (index + 1) * 1.0;
-        final isFilled = anime.rating >= starValue - 0.5;
-        return GestureDetector(
-          onTap: () => _quickSetRating(anime, starValue),
-          behavior: HitTestBehavior.opaque,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 2),
-            child: Icon(
-              isFilled ? Icons.star : Icons.star_border,
-              color: const Color(0xFFFFC857),
-              size: 14,
-            ),
-          ),
-        );
-      }),
     );
   }
 
@@ -442,7 +494,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       if (saved) {
         await loadAnimes();
         if (!mounted) return;
-        AppEvents.fire('anime_completed'); // 🆕
+        AppEvents.fire('anime_completed');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('✅ تم تحديد $updated أنمي كمكتمل.'),
@@ -524,13 +576,18 @@ class _LibraryScreenState extends State<LibraryScreen> {
         matchesAdvanced = false;
       }
       if (_advGenres.isNotEmpty) {
-        final animeGenres = anime.genre.split('،').map((e) => e.trim()).toList();
+        final animeGenres =
+            anime.genre.split('،').map((e) => e.trim()).toList();
         if (!_advGenres.any((g) => animeGenres.contains(g))) {
           matchesAdvanced = false;
         }
       }
 
-      return matchesSearch && matchesType && matchesStatus && matchesRating && matchesAdvanced;
+      return matchesSearch &&
+          matchesType &&
+          matchesStatus &&
+          matchesRating &&
+          matchesAdvanced;
     }).toList();
 
     switch (sortMode) {
@@ -574,13 +631,20 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   String get sortLabel {
     switch (sortMode) {
-      case 'oldest': return 'الأقدم إضافة';
-      case 'titleAsc': return 'الاسم: أ ← ي';
-      case 'titleDesc': return 'الاسم: ي ← أ';
-      case 'rating': return 'الأعلى تقييمًا';
-      case 'favorites': return 'المفضلة أولًا';
-      case 'random': return 'عشوائي';
-      default: return 'الأحدث إضافة';
+      case 'oldest':
+        return 'الأقدم إضافة';
+      case 'titleAsc':
+        return 'الاسم: أ ← ي';
+      case 'titleDesc':
+        return 'الاسم: ي ← أ';
+      case 'rating':
+        return 'الأعلى تقييمًا';
+      case 'favorites':
+        return 'المفضلة أولًا';
+      case 'random':
+        return 'عشوائي';
+      default:
+        return 'الأحدث إضافة';
     }
   }
 
@@ -841,7 +905,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     final saved = await storage.moveToTrash(allAnimes, anime.id);
     if (!mounted) return;
     if (saved) {
-      AppEvents.fire('anime_deleted'); // 🆕
+      AppEvents.fire('anime_deleted');
       await loadAnimes();
     }
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -861,7 +925,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     await loadAnimes();
 
     if (saved) {
-      AppEvents.fire(isFav ? 'favorite_added' : 'favorite_removed'); // 🆕
+      AppEvents.fire(isFav ? 'favorite_added' : 'favorite_removed');
     }
 
     if (!mounted) return;
@@ -887,7 +951,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
     if (!mounted) return;
     if (saved) {
-      AppEvents.fire('anime_edited'); // 🆕
+      AppEvents.fire('anime_edited');
       await loadAnimes();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -956,7 +1020,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       if (!mounted) return;
       if (saved) {
         await loadAnimes();
-        AppEvents.fire('anime_edited'); // 🆕
+        AppEvents.fire('anime_edited');
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text('تم جلب البيانات والصور وحفظها محلياً!')));
       } else {
@@ -1120,8 +1184,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
                             final newGenres =
                                 await _showGenrePicker(selectedGenres);
                             if (newGenres != null) {
-                              setDialogState(() =>
-                                  selectedGenres = newGenres);
+                              setDialogState(
+                                  () => selectedGenres = newGenres);
                             }
                           },
                           child: InputDecorator(
@@ -1348,7 +1412,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         }
         await loadAnimes();
         if (!mounted) return;
-        AppEvents.fire('anime_edited'); // 🆕
+        AppEvents.fire('anime_edited');
         ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('تم حفظ تعديلات الأنمي')));
       } else {
@@ -1939,12 +2003,18 @@ class _LibraryScreenState extends State<LibraryScreen> {
   Widget _buildToolbar() {
     IconData getViewIcon() {
       switch (viewMode) {
-        case 0: return Icons.view_agenda_outlined;
-        case 1: return Icons.grid_view_rounded;
-        case 2: return Icons.apps;
-        case 3: return Icons.view_carousel_outlined;
-        case 4: return Icons.view_headline;
-        default: return Icons.view_agenda_outlined;
+        case 0:
+          return Icons.view_agenda_outlined;
+        case 1:
+          return Icons.grid_view_rounded;
+        case 2:
+          return Icons.apps;
+        case 3:
+          return Icons.view_carousel_outlined;
+        case 4:
+          return Icons.view_headline;
+        default:
+          return Icons.view_agenda_outlined;
       }
     }
 
@@ -1967,7 +2037,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
               PopupMenuItem(value: 'random', child: Text('عشوائي 🎲')),
             ],
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
               decoration: BoxDecoration(
                   color: const Color(0xFF1B1F28),
                   borderRadius: BorderRadius.circular(12),
@@ -1975,7 +2046,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
               child: Row(children: [
                 const Icon(Icons.sort, size: 19),
                 const SizedBox(width: 8),
-                Expanded(child: Text(sortLabel, overflow: TextOverflow.ellipsis)),
+                Expanded(
+                    child: Text(sortLabel,
+                        overflow: TextOverflow.ellipsis)),
                 const Icon(Icons.keyboard_arrow_down)
               ]),
             ),
@@ -1995,27 +2068,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
               _saveLibraryPreferences();
             },
             icon: Icon(getViewIcon(), color: const Color(0xFFFFC857)),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Container(
-          decoration: BoxDecoration(
-              color: _selectionMode
-                  ? primaryColorNotifier.value
-                  : const Color(0xFF1B1F28),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                  color: _selectionMode
-                      ? primaryColorNotifier.value
-                      : Colors.white12,
-                  width: _selectionMode ? 2 : 1)),
-          child: IconButton(
-            tooltip: _selectionMode ? 'إلغاء التحديد' : 'تحديد متعدد',
-            onPressed: _toggleSelectionMode,
-            icon: Icon(
-              _selectionMode ? Icons.close : Icons.checklist,
-              color: _selectionMode ? Colors.white : const Color(0xFFFFC857),
-            ),
           ),
         ),
       ],
@@ -2060,62 +2112,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   ],
                 ),
               )),
-    );
-  }
-
-  Widget _buildSelectionActionBar(Color primaryColor) {
-    return Positioned(
-      bottom: 16,
-      left: 16,
-      right: 16,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1B1F28),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: primaryColor.withOpacity(0.6), width: 2),
-          boxShadow: [
-            BoxShadow(
-                color: primaryColor.withOpacity(0.4),
-                blurRadius: 20,
-                spreadRadius: 3)
-          ],
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.check_circle, color: primaryColor, size: 24),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text('${_selectedAnimeIds.length} محدد',
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 14)),
-            ),
-            if (_selectedAnimeIds.isNotEmpty)
-              IconButton(
-                tooltip: 'إلغاء التحديد',
-                onPressed: _clearSelection,
-                icon: const Icon(Icons.clear_all,
-                    color: Colors.white70, size: 20),
-              ),
-            IconButton(
-              tooltip: 'تحديد الكل',
-              onPressed: _selectAllVisible,
-              icon: const Icon(Icons.select_all, color: Colors.cyan, size: 20),
-            ),
-            const SizedBox(width: 4),
-            FilledButton.icon(
-              style: FilledButton.styleFrom(
-                backgroundColor: primaryColor,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              ),
-              onPressed: _selectedAnimeIds.isEmpty ? null : _markSelectedAsCompleted,
-              icon: const Icon(Icons.done_all, size: 18),
-              label: Text('إكمال (${_selectedAnimeIds.length})',
-                  style: const TextStyle(fontSize: 11)),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -2192,8 +2188,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
         case 0:
         default:
           return Column(
-              children:
-                  items.map((a) => _wrapWithSwipe(a, _buildRowCard(a))).toList());
+              children: items
+                  .map((a) => _wrapWithSwipe(a, _buildRowCard(a)))
+                  .toList());
       }
     }
 
@@ -2209,7 +2206,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     duration: const Duration(milliseconds: 500),
                     curve: Curves.easeInOut);
               },
-              child: const Icon(Icons.keyboard_arrow_up, color: Colors.white),
+              child: const Icon(Icons.keyboard_arrow_up,
+                  color: Colors.white),
             )
           : null,
       body: Stack(
@@ -2233,7 +2231,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       style: TextStyle(
                           fontSize: 27, fontWeight: FontWeight.w900)),
                   const SizedBox(height: 6),
-                  Text('كل أعمالك في مكان واحد • ${animes.length} أنمي',
+                  Text(
+                      'كل أعمالك في مكان واحد • ${animes.length} أنمي',
                       style: const TextStyle(color: Colors.white60)),
                   const SizedBox(height: 22),
                   Row(
@@ -2289,7 +2288,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
                               color: primaryColor.withOpacity(0.4))),
                       child: Row(
                         children: [
-                          Icon(Icons.filter_alt, color: primaryColor, size: 18),
+                          Icon(Icons.filter_alt,
+                              color: primaryColor, size: 18),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text('فلتر متقدم نشط',
@@ -2359,7 +2359,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
                             selectedColor: primaryColor,
                             backgroundColor: const Color(0xFF1B1F28),
                             side: BorderSide(
-                                color: selected ? primaryColor : Colors.white12),
+                                color: selected
+                                    ? primaryColor
+                                    : Colors.white12),
                             onSelected: (_) {
                               HapticFeedback.selectionClick();
                               setState(() => selectedStatus = status);
@@ -2394,8 +2396,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                     ? const Color(0xFFFFC857)
                                     : Colors.white12),
                             labelStyle: TextStyle(
-                                color:
-                                    selected ? Colors.black : Colors.white),
+                                color: selected
+                                    ? Colors.black
+                                    : Colors.white),
                             onSelected: (_) {
                               HapticFeedback.selectionClick();
                               setState(() => selectedRatingFilter = val);
@@ -2409,12 +2412,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   _buildToolbar(),
                   const SizedBox(height: 18),
                   buildContent(),
-                  SizedBox(height: _selectionMode ? 120 : 80),
+                  const SizedBox(height: 80),
                 ],
               ),
             ),
           ),
-          if (_selectionMode) _buildSelectionActionBar(primaryColor),
         ],
       ),
     );
