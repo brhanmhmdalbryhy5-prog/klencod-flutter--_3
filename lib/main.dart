@@ -70,10 +70,7 @@ class _AnimeMemoryAppState extends State<AnimeMemoryApp>
   static const Color background = Color(0xFF111318);
   static const Color panel = Color(0xFF1B1F28);
 
-  // 🔗 هنا يتم ربط كل حدث في التطبيق بالرد المناسب للشخصية
-  // لتغيير أي رد: عدّل الكلمة على اليسار (الحدث) أو اليمين (مفتاح الرسالة)
   static const Map<String, String> _eventToMessage = {
-    // أحداث الأنمي
     'anime_added': 'add_anime',
     'anime_deleted': 'delete_anime',
     'anime_edited': 'edit_anime',
@@ -83,14 +80,12 @@ class _AnimeMemoryAppState extends State<AnimeMemoryApp>
     'added_to_plan': 'added_to_plan',
     'added_to_watching': 'add_anime',
 
-    // المفضلة والتقييم
     'favorite_added': 'favorite_added',
     'favorite_removed': 'remove_from_favorites',
     'high_rate': 'high_rate',
     'low_rate': 'low_rate',
     'rated': 'rated_anime',
 
-    // النسخ الاحتياطي
     'backup_success': 'backup_success',
     'backup_failed': 'backup_fail',
     'restore_success': 'restore_success',
@@ -98,16 +93,13 @@ class _AnimeMemoryAppState extends State<AnimeMemoryApp>
     'export_success': 'backup_success',
     'import_success': 'restore_success',
 
-    // التنقل
     'entered_home': 'idle',
     'entered_library': 'search_mode',
     'entered_memories': 'idle',
     'entered_settings': 'thinking',
 
-    // الإعدادات
     'settings_changed': 'new_day',
 
-    // أخرى
     'no_internet': 'no_internet',
     'empty_library': 'empty_library',
     'random_pick': 'random_pick',
@@ -124,8 +116,11 @@ class _AnimeMemoryAppState extends State<AnimeMemoryApp>
 
   void _handleEvent(String event) {
     final msgKey = _eventToMessage[event];
+    debugPrint('🎌 Manga Event: $event → $msgKey'); // للتشخيص
     if (msgKey != null && MangaMessages.all.containsKey(msgKey)) {
       FloatingMangaCharacter.say(msgKey);
+    } else {
+      debugPrint('⚠️ SKIPPED: $event (msgKey=$msgKey)');
     }
   }
 
@@ -206,6 +201,7 @@ class _AnimeMemoryAppState extends State<AnimeMemoryApp>
                           child: Directionality(
                             textDirection: TextDirection.rtl,
                             child: MangaCharacter(
+                              key: FloatingMangaCharacter.key, // 🔴 السطر الحاسم
                               size: config.size,
                               autoMove: config.autoMove,
                               enableBlink: config.enableBlink,
@@ -255,7 +251,6 @@ class _MainNavigationState extends State<MainNavigation> {
     SettingsScreen()
   ];
 
-  // 🆕 حدث التنقل لكل تبويب
   static const List<String> _tabEvents = [
     'entered_home',
     'entered_library',
@@ -274,7 +269,7 @@ class _MainNavigationState extends State<MainNavigation> {
           selectedIndex: selectedIndex,
           onDestinationSelected: (index) {
             setState(() => selectedIndex = index);
-            AppEvents.fire(_tabEvents[index]); // 🆕 الشخصية تتفاعل مع التنقل
+            AppEvents.fire(_tabEvents[index]);
           },
           destinations: const [
             NavigationDestination(
