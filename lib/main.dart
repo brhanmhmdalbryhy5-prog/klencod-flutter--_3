@@ -93,6 +93,10 @@ class _AnimeMemoryAppState extends State<AnimeMemoryApp>
     'export_success': 'backup_success',
     'import_success': 'restore_success',
 
+    // 🆕 أخبار الأنمي
+    'news_fetched': 'excited',
+    'news_fetch_failed': 'backup_fail',
+
     'entered_home': 'idle',
     'entered_library': 'search_mode',
     'entered_memories': 'idle',
@@ -116,11 +120,8 @@ class _AnimeMemoryAppState extends State<AnimeMemoryApp>
 
   void _handleEvent(String event) {
     final msgKey = _eventToMessage[event];
-    debugPrint('🎌 Manga Event: $event → $msgKey'); // للتشخيص
     if (msgKey != null && MangaMessages.all.containsKey(msgKey)) {
       FloatingMangaCharacter.say(msgKey);
-    } else {
-      debugPrint('⚠️ SKIPPED: $event (msgKey=$msgKey)');
     }
   }
 
@@ -201,7 +202,7 @@ class _AnimeMemoryAppState extends State<AnimeMemoryApp>
                           child: Directionality(
                             textDirection: TextDirection.rtl,
                             child: MangaCharacter(
-                              key: FloatingMangaCharacter.key, // 🔴 السطر الحاسم
+                              key: FloatingMangaCharacter.key,
                               size: config.size,
                               autoMove: config.autoMove,
                               enableBlink: config.enableBlink,
@@ -281,9 +282,9 @@ class _MainNavigationState extends State<MainNavigation> {
                 selectedIcon: Icon(Icons.movie_creation),
                 label: 'المكتبة'),
             NavigationDestination(
-                icon: Icon(Icons.auto_awesome_outlined),
-                selectedIcon: Icon(Icons.auto_awesome),
-                label: 'ذكرياتي'),
+                icon: Icon(Icons.newspaper_outlined),
+                selectedIcon: Icon(Icons.newspaper),
+                label: 'الأخبار'),
             NavigationDestination(
                 icon: Icon(Icons.settings_outlined),
                 selectedIcon: Icon(Icons.settings),
