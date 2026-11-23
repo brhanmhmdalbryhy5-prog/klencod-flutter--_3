@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
@@ -33,13 +34,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   static const String _sortKey = 'anime_library_sort';
   static const String _viewKey = 'anime_library_view';
-  static const String _swipeKey = 'anime_swipe_enabled';
   static const String _cinematicKey = 'anime_cinematic_enabled';
 
   bool _selectionMode = false;
   final Set<String> _selectedAnimeIds = {};
-  bool _swipeEnabled = true;
   bool _cinematicEnabled = false;
+
+  StreamSubscription? _eventSub;
 
   final List<String> allGenres = const [
     'أكشن', 'مغامرة', 'كوميدي', 'دراما', 'فانتازيا', 'رعب',
@@ -74,6 +75,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     super.initState();
     loadAnimes();
     _loadLibraryPreferences();
+    _subscribeToEvents();
     _scrollController.addListener(() {
       if (_scrollController.offset > 300 && !_showBackToTop) {
         setState(() => _showBackToTop = true);
@@ -83,8 +85,17 @@ class _LibraryScreenState extends State<LibraryScreen> {
     });
   }
 
+  void _subscribeToEvents() {
+    _eventSub = AppEvents.stream.listen((event) {
+      if (event == 'settings_changed' || event == 'continue_prefs_changed') {
+        _loadLibraryPreferences();
+      }
+    });
+  }
+
   @override
   void dispose() {
+    _eventSub?.cancel();
     searchController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -101,8 +112,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
       setState(() {
         sortMode = prefs.getString(_sortKey) ?? 'newest';
         viewMode = prefs.getInt(_viewKey) ?? 0;
-        _swipeEnabled = prefs.getBool(_swipeKey) ?? true;
         _cinematicEnabled = prefs.getBool(_cinematicKey) ?? false;
+
+        // إذا كان الوضع الحالي سينمائي لكنه معطل → ارجع للقائمة
+        if (!_cinematicEnabled && viewMode == 3) {
+          viewMode = 0;
+        }
       });
     } catch (_) {}
   }
@@ -112,9 +127,26 @@ class _LibraryScreenState extends State<LibraryScreen> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_sortKey, sortMode);
       await prefs.setInt(_viewKey, viewMode);
-      await prefs.setBool(_swipeKey, _swipeEnabled);
-      await prefs.setBool(_cinematicKey, _cinematicEnabled);
     } catch (_) {}
+  }
+
+  void _cycleViewMode() {
+    HapticFeedback.lightImpact();
+    setState(() {
+      if (_cinematicEnabled) {
+        viewMode = (viewMode + 1) % 5;
+      } else {
+        // 0, 1, 2, 4 (تخطي 3 = سينمائي)
+        const modes = [0, 1, 2, 4];
+        final idx = modes.indexOf(viewMode);
+        if (idx == -1) {
+          viewMode = 0;
+        } else {
+          viewMode = modes[(idx + 1) % modes.length];
+        }
+      }
+    });
+    _saveLibraryPreferences();
   }
 
   Future<void> loadAnimes() async {
@@ -153,7 +185,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   // ══════════════════════════════════════════════════════════════
-  // Swipe Actions
+  // +1 حلقة
   // ══════════════════════════════════════════════════════════════
   Future<void> _incrementWatched(Anime anime) async {
     if (anime.episodes > 0 && anime.watchedEpisodes >= anime.episodes) {
@@ -204,8 +236,29 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
+  Widget _plusOneButton(Anime anime, Color primaryColor, {bool mini = false}) {
+    final isComplete =
+        anime.episodes > 0 && anime.watchedEpisodes >= anime.episodes;
+    return Material(
+      color: isComplete ? Colors.white12 : primaryColor.withOpacity(0.9),
+      borderRadius: BorderRadius.circular(mini ? 8 : 10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(mini ? 8 : 10),
+        onTap: isComplete ? null : () => _incrementWatched(anime),
+        child: Padding(
+          padding: EdgeInsets.all(mini ? 6 : 8),
+          child: Icon(
+            isComplete ? Icons.check : Icons.add,
+            color: isComplete ? Colors.greenAccent : Colors.white,
+            size: mini ? 16 : 18,
+          ),
+        ),
+      ),
+    );
+  }
+
   // ══════════════════════════════════════════════════════════════
-  // 🆕 نافذة التقييم الجديدة (Slider + نجوم + مسح)
+  // نافذة التقييم (Slider + نجوم + مسح)
   // ══════════════════════════════════════════════════════════════
   Future<void> _openRatingDialog(Anime anime) async {
     HapticFeedback.selectionClick();
@@ -309,9 +362,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // 🆕 عرض التقييم كنص (⭐ 9.5/10)
-  // ══════════════════════════════════════════════════════════════
   Widget _buildQuickRating(Anime anime, {bool lightText = false}) {
     return GestureDetector(
       onTap: () => _openRatingDialog(anime),
@@ -345,69 +395,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
-  // 🆕 غلاف للسحب
-  Widget _wrapWithSwipe(Anime anime, Widget child) {
-    if (_selectionMode || !_swipeEnabled) return child;
-
-    return Dismissible(
-      key: ValueKey('swipe_${anime.id}'),
-      direction: DismissDirection.horizontal,
-      background: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        decoration: BoxDecoration(
-          color: const Color(0xFFFF5364).withOpacity(0.9),
-          borderRadius: BorderRadius.circular(18),
-        ),
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 24),
-        child: const Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.favorite, color: Colors.white, size: 32),
-            SizedBox(height: 4),
-            Text('المفضلة',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold)),
-          ],
-        ),
-      ),
-      secondaryBackground: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        decoration: BoxDecoration(
-          color: Colors.green.withOpacity(0.9),
-          borderRadius: BorderRadius.circular(18),
-        ),
-        alignment: Alignment.centerLeft,
-        padding: const EdgeInsets.only(left: 24),
-        child: const Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.add_circle, color: Colors.white, size: 32),
-            SizedBox(height: 4),
-            Text('+1 حلقة',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold)),
-          ],
-        ),
-      ),
-      confirmDismiss: (direction) async {
-        if (direction == DismissDirection.startToEnd) {
-          await _incrementWatched(anime);
-        } else if (direction == DismissDirection.endToStart) {
-          await toggleFavorite(anime);
-        }
-        return false;
-      },
-      child: child,
-    );
-  }
-
+  // ══════════════════════════════════════════════════════════════
+  // التحديد المتعدد (يبقى للاستخدام المستقبلي من الإعدادات)
+  // ══════════════════════════════════════════════════════════════
   void _toggleSelectionMode() {
     HapticFeedback.selectionClick();
     setState(() {
@@ -514,23 +504,26 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // فلترة (مع تعديل #2: قيد المشاهدة = مواسم)
+  // ══════════════════════════════════════════════════════════════
   List<Anime> get filteredAnimes {
     final query = searchText.trim().toLowerCase();
 
     final List<Anime> sourceList;
     if (selectedStatus == 'قيد المشاهدة (تقدم)') {
+      // 🆕: المواسم فقط (والأنميات المستقلة بدون مواسم)
       sourceList = _allAnimes.where((a) {
         final hasProgress = a.watchedEpisodes > 0 &&
             (a.episodes == 0 || a.watchedEpisodes < a.episodes);
-        if (a.parentId == null) {
-          if (hasProgress) return true;
-          return _allAnimes.any((s) =>
-              s.parentId == a.id &&
-              s.watchedEpisodes > 0 &&
-              (s.episodes == 0 || s.watchedEpisodes < s.episodes));
-        } else {
-          return hasProgress;
-        }
+        if (!hasProgress) return false;
+
+        // إذا كان موسم → اعرضه
+        if (a.parentId != null) return true;
+
+        // إذا كان الأصل → اعرضه فقط إذا لم يكن له مواسم
+        final hasChildren = _allAnimes.any((s) => s.parentId == a.id);
+        return !hasChildren;
       }).toList();
     } else {
       sourceList = animes;
@@ -992,6 +985,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     final int? releaseYear = data['releaseYear'];
     final String? imagePath = data['imagePath'];
     final String? fetchedFormat = data['format'];
+    final String? studios = data['studios'];
 
     if (genres.isNotEmpty ||
         summary.isNotEmpty ||
@@ -1010,6 +1004,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         if (releaseYear != null) target.releaseYear = releaseYear;
         if (imagePath != null) target.imagePath = imagePath;
         if (fetchedFormat != null) target.format = fetchedFormat;
+        if (studios != null) target.studios = studios;
         if ((data['characters'] as List).isNotEmpty) {
           target.characters =
               List<Map<String, dynamic>>.from(data['characters']);
@@ -1517,6 +1512,80 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
+  // 🆕 شريط بيانات كامل (استوديو + نوع + ملخص)
+  Widget _buildFullDetails(Anime anime, Color color) {
+    final formatLabel = _formatLabel(anime.format);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (formatLabel.isNotEmpty || (anime.studios ?? '').isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Wrap(spacing: 6, runSpacing: 4, children: [
+            if (formatLabel.isNotEmpty)
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: color.withOpacity(0.4)),
+                ),
+                child: Text(formatLabel,
+                    style: TextStyle(
+                        color: color,
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold)),
+              ),
+            if ((anime.studios ?? '').isNotEmpty)
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.white10,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Icons.business,
+                      size: 10, color: Colors.white54),
+                  const SizedBox(width: 3),
+                  Text(anime.studios!,
+                      style: const TextStyle(
+                          color: Colors.white70, fontSize: 9)),
+                ]),
+              ),
+          ]),
+        ],
+        if (anime.summary.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Text(anime.summary,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                  color: Colors.white38, fontSize: 10, height: 1.4)),
+        ],
+      ],
+    );
+  }
+
+  String _formatLabel(String? format) {
+    switch (format) {
+      case 'TV':
+        return 'مسلسل';
+      case 'TV_SHORT':
+        return 'مسلسل قصير';
+      case 'MOVIE':
+        return 'فيلم';
+      case 'OVA':
+        return 'OVA';
+      case 'ONA':
+        return 'ONA';
+      case 'SPECIAL':
+        return 'خاص';
+      default:
+        return '';
+    }
+  }
+
   Widget _buildRowCard(Anime anime) {
     final color = colors[anime.colorIndex.abs() % colors.length];
     final details = [
@@ -1555,7 +1624,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildAnimeTitle(anime.title),
+                          Row(children: [
+                            Expanded(child: _buildAnimeTitle(anime.title)),
+                            const SizedBox(width: 6),
+                            _plusOneButton(anime, color),
+                          ]),
                           const SizedBox(height: 4),
                           _buildQuickRating(anime),
                           const SizedBox(height: 6),
@@ -1568,28 +1641,28 @@ class _LibraryScreenState extends State<LibraryScreen> {
                               style: const TextStyle(
                                   color: Colors.white54, fontSize: 12)),
                           if (details.isNotEmpty) ...[
-                            const SizedBox(height: 6),
+                            const SizedBox(height: 4),
                             Text(details,
                                 style: TextStyle(
                                     color: color,
-                                    fontSize: 12,
+                                    fontSize: 11,
                                     fontWeight: FontWeight.bold)),
                           ],
-                          Row(
-                            children: [
-                              if (anime.globalRating != null) ...[
-                                const SizedBox(height: 5),
-                                const Icon(Icons.public,
-                                    size: 14, color: Colors.cyan),
-                                const SizedBox(width: 4),
-                                Text(
-                                    '${anime.globalRating!.toStringAsFixed(1)}',
-                                    style: const TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.cyan)),
-                              ],
-                            ],
-                          ),
+                          if (anime.globalRating != null) ...[
+                            const SizedBox(height: 4),
+                            Row(children: [
+                              const Icon(Icons.public,
+                                  size: 13, color: Colors.cyan),
+                              const SizedBox(width: 4),
+                              Text(
+                                  '${anime.globalRating!.toStringAsFixed(1)}',
+                                  style: const TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.cyan,
+                                      fontWeight: FontWeight.bold)),
+                            ]),
+                          ],
+                          _buildFullDetails(anime, color),
                           _buildProgressBar(anime),
                           if (anime.favorite) ...[
                             const SizedBox(height: 5),
@@ -1625,6 +1698,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   Widget _buildGridCard(Anime anime) {
     final color = colors[anime.colorIndex.abs() % colors.length];
+    final formatLabel = _formatLabel(anime.format);
     return Container(
       decoration: BoxDecoration(
           color: const Color(0xFF1B1F28),
@@ -1664,6 +1738,24 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         top: 8,
                         child: Icon(Icons.favorite,
                             color: Color(0xFFFF5364), size: 19)),
+                  if (formatLabel.isNotEmpty)
+                    Positioned(
+                      left: 6,
+                      bottom: 6,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(formatLabel,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold)),
+                      ),
+                    ),
                   if (_selectionMode)
                     Positioned(
                       top: 8,
@@ -1674,13 +1766,17 @@ class _LibraryScreenState extends State<LibraryScreen> {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(8, 8, 8, 9),
+              padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _buildAnimeTitle(anime.title, fontSize: 13),
-                  const SizedBox(height: 2),
-                  _buildQuickRating(anime),
+                  const SizedBox(height: 4),
+                  Row(children: [
+                    _buildQuickRating(anime),
+                    const Spacer(),
+                    _plusOneButton(anime, color, mini: true),
+                  ]),
                   const SizedBox(height: 2),
                   Text(
                       anime.genre.isEmpty ? 'بدون تصنيف' : anime.genre,
@@ -1688,6 +1784,14 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                           color: Colors.white54, fontSize: 11)),
+                  if ((anime.studios ?? '').isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text('🎬 ${anime.studios}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            color: Colors.white38, fontSize: 9)),
+                  ],
                   _buildProgressBar(anime),
                 ],
               ),
@@ -1760,11 +1864,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   Widget _buildCinematicCard(Anime anime) {
     final imagePath = anime.imagePath;
+    final formatLabel = _formatLabel(anime.format);
 
     return GestureDetector(
       onTap: () => _onCardTap(anime),
       child: Container(
-        height: 220,
+        height: 240,
         margin: const EdgeInsets.only(bottom: 15),
         decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
@@ -1798,7 +1903,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   ],
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
-                          stops: [0.4, 0.8, 1.0]))),
+                          stops: [0.3, 0.75, 1.0]))),
               Positioned(
                 bottom: 15,
                 left: 15,
@@ -1806,9 +1911,35 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildAnimeTitle(anime.title,
-                        fontSize: 18, lightText: true),
-                    const SizedBox(height: 6),
+                    Row(children: [
+                      if (formatLabel.isNotEmpty) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                              color: Colors.black54,
+                              borderRadius: BorderRadius.circular(4)),
+                          child: Text(formatLabel,
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold)),
+                        ),
+                        const SizedBox(width: 6),
+                      ],
+                      Expanded(
+                          child: _buildAnimeTitle(anime.title,
+                              fontSize: 18, lightText: true)),
+                    ]),
+                    const SizedBox(height: 4),
+                    if ((anime.studios ?? '').isNotEmpty) ...[
+                      Text('🎬 ${anime.studios}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              color: Colors.white70, fontSize: 11)),
+                      const SizedBox(height: 4),
+                    ],
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -1825,7 +1956,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         _buildQuickRating(anime, lightText: true),
                       ],
                     ),
-                    _buildProgressBar(anime, onImage: true),
+                    const SizedBox(height: 4),
+                    Row(children: [
+                      Expanded(child: _buildProgressBar(anime, onImage: true)),
+                      _plusOneButton(anime, primaryColorNotifier.value),
+                    ]),
                   ],
                 ),
               ),
@@ -1860,6 +1995,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   Widget _buildCompactListCard(Anime anime) {
+    final color = colors[anime.colorIndex.abs() % colors.length];
+    final formatLabel = _formatLabel(anime.format);
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
@@ -1882,35 +2019,58 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       child: anime.imagePath != null &&
                               File(anime.imagePath!).existsSync()
                           ? Image.file(File(anime.imagePath!),
-                              width: 45, height: 45, fit: BoxFit.cover)
+                              width: 50, height: 50, fit: BoxFit.cover)
                           : Container(
-                              width: 45,
-                              height: 45,
+                              width: 50,
+                              height: 50,
                               color: Colors.black26,
                               child: const Icon(Icons.movie,
                                   size: 20, color: Colors.white24)),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildAnimeTitle(anime.title, fontSize: 14),
-                        const SizedBox(height: 4),
+                        _buildAnimeTitle(anime.title, fontSize: 13),
+                        const SizedBox(height: 3),
                         _buildQuickRating(anime),
-                        const SizedBox(height: 4),
-                        Text(
-                            anime.genre.isEmpty
-                                ? 'بدون تصنيف'
-                                : anime.genre,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                                color: Colors.white54, fontSize: 10)),
+                        const SizedBox(height: 3),
+                        Row(children: [
+                          if (formatLabel.isNotEmpty) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 5, vertical: 1),
+                              decoration: BoxDecoration(
+                                  color: color.withOpacity(0.2),
+                                  borderRadius:
+                                      BorderRadius.circular(4)),
+                              child: Text(formatLabel,
+                                  style: TextStyle(
+                                      color: color,
+                                      fontSize: 8,
+                                      fontWeight: FontWeight.bold)),
+                            ),
+                            const SizedBox(width: 4),
+                          ],
+                          Expanded(
+                            child: Text(
+                                anime.genre.isEmpty
+                                    ? 'بدون تصنيف'
+                                    : anime.genre,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    color: Colors.white54,
+                                    fontSize: 10)),
+                          ),
+                        ]),
                       ],
                     ),
                   ),
+                  const SizedBox(width: 6),
+                  _plusOneButton(anime, color, mini: true),
                   if (!_selectionMode) _animeMenu(anime),
                 ],
               ),
@@ -2062,11 +2222,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
               border: Border.all(color: Colors.white12)),
           child: IconButton(
             tooltip: 'تغيير العرض',
-            onPressed: () {
-              HapticFeedback.lightImpact();
-              setState(() => viewMode = (viewMode + 1) % 5);
-              _saveLibraryPreferences();
-            },
+            onPressed: _cycleViewMode,
             icon: Icon(getViewIcon(), color: const Color(0xFFFFC857)),
           ),
         ),
@@ -2160,9 +2316,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   crossAxisCount: 2,
                   crossAxisSpacing: 10,
                   mainAxisSpacing: 12,
-                  childAspectRatio: 0.55),
+                  childAspectRatio: 0.52),
               itemBuilder: (context, index) =>
-                  _wrapWithSwipe(items[index], _buildGridCard(items[index])));
+                  _buildGridCard(items[index]));
         case 2:
           return GridView.builder(
               shrinkWrap: true,
@@ -2173,24 +2329,23 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   crossAxisSpacing: 8,
                   mainAxisSpacing: 8,
                   childAspectRatio: 0.6),
-              itemBuilder: (context, index) => _wrapWithSwipe(
-                  items[index], _buildCompactGridCard(items[index])));
+              itemBuilder: (context, index) =>
+                  _buildCompactGridCard(items[index]));
         case 3:
+          if (!_cinematicEnabled) {
+            return Column(
+                children:
+                    items.map((a) => _buildRowCard(a)).toList());
+          }
           return Column(
-              children: items
-                  .map((a) => _wrapWithSwipe(a, _buildCinematicCard(a)))
-                  .toList());
+              children: items.map((a) => _buildCinematicCard(a)).toList());
         case 4:
           return Column(
-              children: items
-                  .map((a) => _wrapWithSwipe(a, _buildCompactListCard(a)))
-                  .toList());
+              children: items.map((a) => _buildCompactListCard(a)).toList());
         case 0:
         default:
           return Column(
-              children: items
-                  .map((a) => _wrapWithSwipe(a, _buildRowCard(a)))
-                  .toList());
+              children: items.map((a) => _buildRowCard(a)).toList());
       }
     }
 
