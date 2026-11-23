@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/app_events.dart';
 import '../main.dart';
+import '../models/anime.dart';
 import '../services/backup_service.dart';
 import '../services/theme_service.dart';
 import '../services/anime_api_service.dart';
@@ -28,6 +29,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool isCompressing = false;
   bool isClassifying = false;
 
+  // ═══ إعدادات "استمر في المشاهدة" ═══
+  String _continueLayout = 'list';
+  int _continueLimit = 5;
+  String _continueSort = 'newest';
+  bool _continueSeasonOnly = false;
+  bool _continueHideCompleted = false;
+
+  // ═══ إعدادات المكتبة ═══
+  bool _cinematicEnabled = false;
+  bool _autoCompressVideos = false;
+
   final Set<String> _expandedSections = {'customization'};
 
   final AnimeApiService apiService = AnimeApiService();
@@ -37,17 +49,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    _loadThemePreference();
+    _loadPreferences();
   }
 
-  Future<void> _loadThemePreference() async {
+  Future<void> _loadPreferences() async {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
       darkMode = prefs.getBool('isDarkMode') ?? true;
       autoDarkMode = prefs.getBool('auto_dark_mode') ?? false;
       autoFetchEnabled = prefs.getBool('auto_fetch_enabled') ?? false;
+
+      _continueLayout = prefs.getString('continue_layout') ?? 'list';
+      _continueLimit = prefs.getInt('continue_limit') ?? 5;
+      _continueSort = prefs.getString('continue_sort') ?? 'newest';
+      _continueSeasonOnly = prefs.getBool('continue_season_only') ?? false;
+      _continueHideCompleted =
+          prefs.getBool('continue_hide_completed') ?? false;
+
+      _cinematicEnabled = prefs.getBool('anime_cinematic_enabled') ?? false;
+      _autoCompressVideos =
+          prefs.getBool('auto_compress_videos') ?? false;
     });
+  }
+
+  Future<void> _saveContinuePref(String key, dynamic value) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (value is String) {
+      await prefs.setString(key, value);
+    } else if (value is int) {
+      await prefs.setInt(key, value);
+    } else if (value is bool) {
+      await prefs.setBool(key, value);
+    }
+    setState(() {});
+    AppEvents.fire('continue_prefs_changed');
+    AppEvents.fire('settings_changed');
   }
 
   Future<void> _toggleAutoDark(bool value) async {
@@ -73,6 +110,162 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await prefs.setBool('isDarkMode', value);
     themeNotifier.value = value ? ThemeMode.dark : ThemeMode.light;
     AppEvents.fire('settings_changed');
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // 🆕 تحديد الكل كمكتمل من الإعدادات
+  // ══════════════════════════════════════════════════════════════
+  Future<void> _markAnimesAsCompleted() async {
+    final allAnimes = await storage.loadAnimes();
+    final candidates = allAnimes.where((a) => a.status != 'مكتمل').toList();
+
+    if (candidates.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا توجد أنميات غير مكتملة.')),
+      );
+      return;
+    }
+
+    final selected = <String>{};
+    final result = await showDialog<List<String>>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) => AlertDialog(
+          backgroundColor: const Color(0xFF1B1F28),
+          title: Row(children: [
+            const Icon(Icons.done_all, color: Colors.greenAccent),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text('تحديد الأنميات كمكتملة (${candidates.length})',
+                  style: const TextStyle(fontSize: 14)),
+            ),
+          ]),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 400,
+            child: Column(
+              children: [
+                Row(children: [
+                  TextButton(
+                    onPressed: () => setSt(() {
+                      selected.clear();
+                      for (final a in candidates) {
+                        selected.add(a.id);
+                      }
+                    }),
+                    child: const Text('تحديد الكل'),
+                  ),
+                  TextButton(
+                    onPressed: () => setSt(() => selected.clear()),
+                    child: const Text('إلغاء التحديد'),
+                  ),
+                ]),
+                const Divider(color: Colors.white12),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: candidates.length,
+                    itemBuilder: (ctx, i) {
+                      final a = candidates[i];
+                      return CheckboxListTile(
+                        title: Text(a.title.isEmpty ? 'بدون اسم' : a.title,
+                            style: const TextStyle(fontSize: 13)),
+                        subtitle: Text(
+                            '${a.watchedEpisodes}/${a.episodes == 0 ? "?" : a.episodes}',
+                            style: const TextStyle(fontSize: 11)),
+                        value: selected.contains(a.id),
+                        activeColor: primaryColorNotifier.value,
+                        onChanged: (v) => setSt(() {
+                          if (v == true) {
+                            selected.add(a.id);
+                          } else {
+                            selected.remove(a.id);
+                          }
+                        }),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('إلغاء'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                  backgroundColor: primaryColorNotifier.value),
+              onPressed: selected.isEmpty
+                  ? null
+                  : () => Navigator.pop(ctx, selected.toList()),
+              child: Text('تأكيد (${selected.length})'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (result == null || result.isEmpty) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1B1F28),
+        title: const Text('تأكيد'),
+        content: Text(
+            'سيتم تحديد ${result.length} أنمي كمكتمل. هل تريد المتابعة؟'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+                backgroundColor: primaryColorNotifier.value),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('تأكيد'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    try {
+      int updated = 0;
+      for (final anime in allAnimes) {
+        if (result.contains(anime.id)) {
+          if (anime.episodes > 0) {
+            anime.watchedEpisodes = anime.episodes;
+          }
+          anime.status = 'مكتمل';
+          updated++;
+        }
+      }
+      final saved = await storage.saveAnimes(allAnimes);
+      if (!mounted) return;
+
+      if (saved) {
+        AppEvents.fire('anime_completed');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ تم تحديد $updated أنمي كمكتمل.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تعذر حفظ التغييرات.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('حدث خطأ: $e')));
+      }
+    }
   }
 
   Widget _buildSection({
@@ -1281,6 +1474,176 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
 
+            // ═══════════════════════════════════════════════
+            // 🆕 قسم "استمر في المشاهدة"
+            // ═══════════════════════════════════════════════
+            _buildSection(
+              id: 'continue_watching',
+              title: 'استمر في المشاهدة',
+              subtitle: 'تخصيص عرض الأنميات قيد المشاهدة',
+              icon: Icons.play_circle_outline,
+              color: Colors.tealAccent,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: Text('نمط العرض',
+                      style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold)),
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    _layoutChip('list', 'قائمة', Icons.view_agenda),
+                    _layoutChip('grid2', 'شبكة 2', Icons.grid_view),
+                    _layoutChip('grid3', 'شبكة 3', Icons.apps),
+                    _layoutChip('cinematic', 'سينمائي', Icons.movie),
+                    _layoutChip('carousel', 'شريط', Icons.view_carousel),
+                    _layoutChip('compact', 'مضغوط', Icons.view_headline),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                ListTile(
+                  dense: true,
+                  title: const Text('عدد العناصر',
+                      style: TextStyle(fontSize: 13)),
+                  subtitle: const Text(
+                      '5 أو 10 أو 15 أو الكل',
+                      style: TextStyle(fontSize: 11)),
+                  trailing: DropdownButton<int>(
+                    value: _continueLimit,
+                    dropdownColor: const Color(0xFF1B1F28),
+                    items: const [
+                      DropdownMenuItem(value: 5, child: Text('5')),
+                      DropdownMenuItem(value: 10, child: Text('10')),
+                      DropdownMenuItem(value: 15, child: Text('15')),
+                      DropdownMenuItem(value: 0, child: Text('الكل')),
+                    ],
+                    onChanged: (v) {
+                      if (v != null) {
+                        _saveContinuePref('continue_limit', v);
+                        setState(() => _continueLimit = v);
+                      }
+                    },
+                  ),
+                ),
+                ListTile(
+                  dense: true,
+                  title: const Text('الترتيب',
+                      style: TextStyle(fontSize: 13)),
+                  subtitle: const Text('حسب الأحدث أو التقدم',
+                      style: TextStyle(fontSize: 11)),
+                  trailing: DropdownButton<String>(
+                    value: _continueSort,
+                    dropdownColor: const Color(0xFF1B1F28),
+                    items: const [
+                      DropdownMenuItem(
+                          value: 'newest', child: Text('الأحدث')),
+                      DropdownMenuItem(
+                          value: 'progress', child: Text('الأكثر تقدماً')),
+                    ],
+                    onChanged: (v) {
+                      if (v != null) {
+                        _saveContinuePref('continue_sort', v);
+                        setState(() => _continueSort = v);
+                      }
+                    },
+                  ),
+                ),
+                SwitchListTile(
+                  title: const Text('المواسم فقط',
+                      style: TextStyle(fontSize: 13)),
+                  subtitle: const Text('إخفاء الأنمي الأصلي',
+                      style: TextStyle(fontSize: 11)),
+                  value: _continueSeasonOnly,
+                  activeColor: primaryColor,
+                  onChanged: (v) {
+                    _saveContinuePref('continue_season_only', v);
+                    setState(() => _continueSeasonOnly = v);
+                  },
+                ),
+                SwitchListTile(
+                  title: const Text('إخفاء المكتملة',
+                      style: TextStyle(fontSize: 13)),
+                  subtitle: const Text('لا تظهر الأنميات المكتملة',
+                      style: TextStyle(fontSize: 11)),
+                  value: _continueHideCompleted,
+                  activeColor: primaryColor,
+                  onChanged: (v) {
+                    _saveContinuePref('continue_hide_completed', v);
+                    setState(() => _continueHideCompleted = v);
+                  },
+                ),
+              ],
+            ),
+
+            // ═══════════════════════════════════════════════
+            // 🆕 قسم "إعدادات المكتبة"
+            // ═══════════════════════════════════════════════
+            _buildSection(
+              id: 'library_settings',
+              title: 'إعدادات المكتبة',
+              subtitle: 'عرض سينمائي، تحديد المكتملة، ضغط الفيديو',
+              icon: Icons.movie_creation_outlined,
+              color: Colors.deepPurpleAccent,
+              children: [
+                SwitchListTile(
+                  title: const Text('تفعيل العرض السينمائي',
+                      style: TextStyle(fontSize: 13)),
+                  subtitle: const Text('يظهر نمط السينما في المكتبة',
+                      style: TextStyle(fontSize: 11)),
+                  value: _cinematicEnabled,
+                  activeColor: primaryColor,
+                  onChanged: (v) {
+                    setState(() => _cinematicEnabled = v);
+                    _saveContinuePref('anime_cinematic_enabled', v);
+                  },
+                ),
+                const SizedBox(height: 4),
+                _settingsTile(
+                    icon: Icons.done_all,
+                    color: Colors.greenAccent,
+                    title: 'تحديد أنميات كمكتملة',
+                    subtitle: 'تحديد مجموعة دفعة واحدة',
+                    trailing: const Icon(Icons.chevron_left,
+                        color: Colors.white38),
+                    onTap: _markAnimesAsCompleted),
+                const SizedBox(height: 10),
+                SwitchListTile(
+                  title: const Text('ضغط تلقائي للفيديوهات',
+                      style: TextStyle(fontSize: 13)),
+                  subtitle: const Text('ضغط الفيديوهات تلقائياً عند الحفظ',
+                      style: TextStyle(fontSize: 11)),
+                  value: _autoCompressVideos,
+                  activeColor: primaryColor,
+                  onChanged: (v) {
+                    setState(() => _autoCompressVideos = v);
+                    _saveContinuePref('auto_compress_videos', v);
+                  },
+                ),
+                const SizedBox(height: 4),
+                _settingsTile(
+                    icon: Icons.compress,
+                    color: const Color(0xFF9C27B0),
+                    title: 'ضغط الفيديوهات يدوياً',
+                    subtitle: 'ضغط جميع الفيديوهات الآن',
+                    trailing: isCompressing
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2))
+                        : const Icon(Icons.chevron_left,
+                            color: Colors.white38),
+                    onTap: (isCompressing || isDownloading)
+                        ? null
+                        : _compressAllVideos),
+              ],
+            ),
+
             _buildSection(
               id: 'downloads',
               title: 'التحميل والتحديث',
@@ -1379,7 +1742,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _buildSection(
               id: 'maintenance',
               title: 'أدوات الصيانة والفرز',
-              subtitle: 'فحص، ضغط، فرز، وتنظيف',
+              subtitle: 'فحص، فرز، وتنظيف',
               icon: Icons.build_circle_outlined,
               color: const Color(0xFFF39C12),
               children: [
@@ -1415,23 +1778,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             builder: (_) => const DataHealthScreen()),
                       );
                     }),
-                const SizedBox(height: 10),
-                _settingsTile(
-                    icon: Icons.compress,
-                    color: const Color(0xFF9C27B0),
-                    title: 'ضغط الفيديوهات التذكارية',
-                    subtitle: 'يقلل حجم الفيديوهات 50-70%',
-                    trailing: isCompressing
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2))
-                        : const Icon(Icons.chevron_left,
-                            color: Colors.white38),
-                    onTap: (isCompressing || isDownloading)
-                        ? null
-                        : _compressAllVideos),
                 const SizedBox(height: 10),
                 _settingsTile(
                     icon: Icons.delete_sweep_outlined,
@@ -1540,6 +1886,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 10),
           ],
         );
+      },
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // 🆕 رقاقة اختيار التخطيط
+  // ══════════════════════════════════════════════════════════════
+  Widget _layoutChip(String value, String label, IconData icon) {
+    final isSelected = _continueLayout == value;
+    return ChoiceChip(
+      avatar: Icon(icon,
+          size: 16,
+          color: isSelected ? Colors.white : Colors.white54),
+      label: Text(label, style: const TextStyle(fontSize: 11)),
+      selected: isSelected,
+      selectedColor: primaryColorNotifier.value,
+      backgroundColor: const Color(0xFF111318),
+      labelStyle: TextStyle(
+          color: isSelected ? Colors.white : Colors.white70,
+          fontSize: 11),
+      side: BorderSide(
+          color: isSelected
+              ? primaryColorNotifier.value
+              : Colors.white24),
+      onSelected: (_) {
+        _saveContinuePref('continue_layout', value);
+        setState(() => _continueLayout = value);
       },
     );
   }
