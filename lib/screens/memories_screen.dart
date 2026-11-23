@@ -1,3 +1,4 @@
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -399,7 +400,8 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
     }
   }
 
-  void _toggleFavorite(File file) async {
+  // إصلاح: إرجاع Future<void> بدلاً من void
+  Future<void> _toggleFavorite(File file) async {
     final name = _fileName(file);
     final meta = metadata[name] ?? const MemoryMeta();
     metadata[name] = meta.copyWith(favorite: !meta.favorite);
@@ -407,7 +409,8 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
     if (mounted) setState(() {});
   }
 
-  void _editCaption(File file) async {
+  // إصلاح: إرجاع Future<void> بدلاً من void
+  Future<void> _editCaption(File file) async {
     final name = _fileName(file);
     final meta = metadata[name] ?? const MemoryMeta();
     final controller = TextEditingController(text: meta.caption);
@@ -454,7 +457,8 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
     if (mounted) setState(() {});
   }
 
-  void _changeCategory(File file) async {
+  // إصلاح: إرجاع Future<void> بدلاً من void
+  Future<void> _changeCategory(File file) async {
     final name = _fileName(file);
     final meta = metadata[name] ?? const MemoryMeta();
 
@@ -1096,6 +1100,9 @@ class _MemoryViewerPage extends StatefulWidget {
 }
 
 class _MemoryViewerPageState extends State<_MemoryViewerPage> {
+  // إصلاح: تعريف لون لوحة عارض الصور
+  static const Color panel = Color(0xFF1B1F28);
+
   late PageController _pageController;
   late int _currentIndex;
 
@@ -1161,7 +1168,7 @@ class _MemoryViewerPageState extends State<_MemoryViewerPage> {
             ),
             onPressed: () async {
               await widget.onFavoriteToggle(currentFile);
-              setState(() {});
+              if (mounted) setState(() {});
             },
           ),
           IconButton(
@@ -1175,11 +1182,11 @@ class _MemoryViewerPageState extends State<_MemoryViewerPage> {
               switch (value) {
                 case 'caption':
                   await widget.onEditCaption(currentFile);
-                  setState(() {});
+                  if (mounted) setState(() {});
                   break;
                 case 'category':
                   await widget.onChangeCategory(currentFile);
-                  setState(() {});
+                  if (mounted) setState(() {});
                   break;
                 case 'delete':
                   final ok = await widget.onDelete(currentFile);
