@@ -53,7 +53,7 @@ class MangaMessage {
 }
 
 // ══════════════════════════════════════════════════════════════
-// الرسائل (تمت إضافة رسائل للأحداث الجديدة)
+// الرسائل
 // ══════════════════════════════════════════════════════════════
 class MangaMessages {
   static const Map<String, MangaMessage> all = {
@@ -73,7 +73,7 @@ class MangaMessages {
     'midnight': MangaMessage('منتصف الليل! 🕛\nهل ما زلت مستيقظاً؟', MangaExpression.sleepy),
     'before_dawn': MangaMessage('قبل الفجر؟! 🌌\nأسطورة حقيقية!', MangaExpression.starstruck),
     'lunchtime': MangaMessage('وقت الغداء! 🍜\nأنمي + أكل = سعادة!', MangaExpression.happy),
-    
+
     // أحداث إضافة وتعديل
     'add_anime': MangaMessage('أنمي جديد! رائع! 🎬\nأضفه للمكتبة!', MangaExpression.excited),
     'add_season': MangaMessage('موسم جديد! 📺\nمتابعة مستمرة!', MangaExpression.happy),
@@ -82,7 +82,7 @@ class MangaMessages {
     'delete_anime': MangaMessage('حذفت أنمي؟ 😢\nستفتقده!', MangaExpression.sad),
     'favorite_added': MangaMessage('المفضلة! ❤️\nذوق رفيع!', MangaExpression.love),
     'remove_from_favorites': MangaMessage('أزلته من المفضلة؟ 💔\nتأكد من قرارك!', MangaExpression.shy),
-    
+
     // أحداث المشاهدة والتقييم
     'progress_congrats': MangaMessage('أكمل الحلقة! 🎯\nأنت تستطيع!', MangaExpression.determined),
     'episode_done': MangaMessage('حلقة إضافية! 📺\nمستمر بقوة!', MangaExpression.happy),
@@ -92,7 +92,7 @@ class MangaMessages {
     'rated_anime': MangaMessage('تقييم جديد! ⭐\nرأيك يهمنا!', MangaExpression.thinking),
     'high_rate': MangaMessage('تقييم عالٍ! أعجبك حقاً! ⭐\nذوق رفيع!', MangaExpression.starstruck),
     'low_rate': MangaMessage('لم يعجبك؟ لا بأس،\nلكل ذوقه! 😅', MangaExpression.shy),
-    
+
     // رسائل أخرى
     'idle': MangaMessage('هل شاهدت شيئاً جديداً اليوم؟', MangaExpression.thinking),
     'random_pick': MangaMessage('اختيار عشوائي؟\nأنا أحب المفاجآت! 🎲', MangaExpression.wink),
@@ -101,8 +101,8 @@ class MangaMessages {
     'backup_fail': MangaMessage('فشل النسخ! 😱\nلا تقلق، حاول مجدداً.', MangaExpression.surprised),
     'no_internet': MangaMessage('لا إنترنت! 📖\nاقرأ مانغا بدلاً من ذلك!', MangaExpression.sad),
     'thinking': MangaMessage('دعني أفكر معك... 🤔', MangaExpression.thinking),
-    'excited': MangaMessage('ياي! هذا رائع! 🎉', 
- };
+    'excited': MangaMessage('ياي! هذا رائع! 🎉', MangaExpression.excited),
+  };
 
   static String randomKey({Set<String> exclude = const {}}) {
     final keys = all.keys.where((k) => !exclude.contains(k)).toList();
@@ -580,7 +580,7 @@ class MangaCharacterPreview extends StatelessWidget {
 }
 
 // ══════════════════════════════════════════════════════════════
-// رسم الوجه (يحتوي على كل التعبيرات كما هي في الكود السابق)
+// رسم الوجه
 // ══════════════════════════════════════════════════════════════
 class _MangaFacePainter extends CustomPainter {
   final MangaExpression expression;
