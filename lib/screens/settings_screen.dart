@@ -10,9 +10,11 @@ import '../services/bulk_download_service.dart';
 import '../services/storage_service.dart';
 import '../services/video_compression_service.dart';
 import '../services/export_service.dart';
+import '../services/anime_news_service.dart';
 import 'trash_screen.dart';
 import 'data_health_screen.dart';
 import 'backup_progress_screen.dart';
+import 'anime_news_screen.dart';
 import '../widgets/manga_character_settings.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -29,14 +31,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool isCompressing = false;
   bool isClassifying = false;
 
-  // ═══ إعدادات "استمر في المشاهدة" ═══
+  // إعدادات "استمر في المشاهدة"
   String _continueLayout = 'list';
   int _continueLimit = 5;
   String _continueSort = 'newest';
   bool _continueSeasonOnly = false;
   bool _continueHideCompleted = false;
 
-  // ═══ إعدادات المكتبة ═══
+  // إعدادات المكتبة
   bool _cinematicEnabled = false;
   bool _autoCompressVideos = false;
 
@@ -68,8 +70,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           prefs.getBool('continue_hide_completed') ?? false;
 
       _cinematicEnabled = prefs.getBool('anime_cinematic_enabled') ?? false;
-      _autoCompressVideos =
-          prefs.getBool('auto_compress_videos') ?? false;
+      _autoCompressVideos = prefs.getBool('auto_compress_videos') ?? false;
     });
   }
 
@@ -112,9 +113,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     AppEvents.fire('settings_changed');
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // 🆕 تحديد الكل كمكتمل من الإعدادات
-  // ══════════════════════════════════════════════════════════════
   Future<void> _markAnimesAsCompleted() async {
     final allAnimes = await storage.loadAnimes();
     final candidates = allAnimes.where((a) => a.status != 'مكتمل').toList();
@@ -1243,6 +1241,143 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await _runAction(action: () => bulkService.downloadAllScenes());
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // 🆕 جلب أخبار الأنمي (مع شريط تقدم حقيقي)
+  // ══════════════════════════════════════════════════════════════
+  Future<void> _fetchAnimeNews() async {
+    final progressNotifier = ValueNotifier<double>(0.0);
+    final stageNotifier = ValueNotifier<String>('جارٍ التحضير...');
+    final titleNotifier = ValueNotifier<String?>(null);
+
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => PopScope(
+          canPop: false,
+          child: AlertDialog(
+            backgroundColor: const Color(0xFF1B1F28),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.newspaper, size: 50, color: Colors.cyan),
+                const SizedBox(height: 16),
+                const Text('جلب الأنميات القادمة',
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 16)),
+                const SizedBox(height: 16),
+                ValueListenableBuilder<double>(
+                  valueListenable: progressNotifier,
+                  builder: (_, value, __) => Column(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: LinearProgressIndicator(
+                          value: value,
+                          minHeight: 10,
+                          backgroundColor: Colors.white12,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                              primaryColorNotifier.value),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text('${(value * 100).toInt()}%',
+                          style: const TextStyle(
+                              fontSize: 12, color: Colors.white54)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ValueListenableBuilder<String>(
+                  valueListenable: stageNotifier,
+                  builder: (_, stage, __) => Text(stage,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          fontSize: 12, color: Colors.white70)),
+                ),
+                const SizedBox(height: 6),
+                ValueListenableBuilder<String?>(
+                  valueListenable: titleNotifier,
+                  builder: (_, title, __) {
+                    if (title == null || title.isEmpty) {
+                      return const SizedBox.shrink();
+                    }
+                    return Text(title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 10, color: Colors.white38));
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    final service = AnimeNewsService();
+    final result = await service.fetchUpcoming(
+      onProgress: (p, stage, title) {
+        progressNotifier.value = p;
+        stageNotifier.value = stage;
+        titleNotifier.value = title;
+      },
+    );
+
+    await Future.delayed(const Duration(milliseconds: 400));
+    if (mounted) Navigator.pop(context);
+
+    if (!mounted) return;
+
+    if (result.success && result.count > 0) {
+      AppEvents.fire('news_fetched');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✅ تم جلب ${result.count} أنمي قادم'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } else {
+      if (result.error != null) AppEvents.fire('news_fetch_failed');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result.error ?? 'فشل الجلب'),
+          backgroundColor: Colors.redAccent,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
+  }
+
+  Future<void> _clearAnimeNews() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1B1F28),
+        title: const Text('مسح الأخبار؟'),
+        content: const Text('سيتم حذف كل الأخبار المحفوظة.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('إلغاء')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('مسح'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    final count = await AnimeNewsService().clearNews();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('تم مسح $count أنمي')),
+    );
+  }
+
   Future<void> _clearAllGenres() async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -1474,9 +1609,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
 
-            // ═══════════════════════════════════════════════
-            // 🆕 قسم "استمر في المشاهدة"
-            // ═══════════════════════════════════════════════
             _buildSection(
               id: 'continue_watching',
               title: 'استمر في المشاهدة',
@@ -1510,8 +1642,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   dense: true,
                   title: const Text('عدد العناصر',
                       style: TextStyle(fontSize: 13)),
-                  subtitle: const Text(
-                      '5 أو 10 أو 15 أو الكل',
+                  subtitle: const Text('5 أو 10 أو 15 أو الكل',
                       style: TextStyle(fontSize: 11)),
                   trailing: DropdownButton<int>(
                     value: _continueLimit,
@@ -1580,9 +1711,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
 
-            // ═══════════════════════════════════════════════
-            // 🆕 قسم "إعدادات المكتبة"
-            // ═══════════════════════════════════════════════
             _buildSection(
               id: 'library_settings',
               title: 'إعدادات المكتبة',
@@ -1739,6 +1867,52 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
 
+            // 🆕 قسم أخبار الأنمي
+            _buildSection(
+              id: 'news',
+              title: 'أخبار الأنمي',
+              subtitle: 'الأنميات القادمة بمواعيد مؤكدة',
+              icon: Icons.newspaper,
+              color: Colors.cyan,
+              children: [
+                _settingsTile(
+                  icon: Icons.download,
+                  color: Colors.cyan,
+                  title: 'جلب أخبار الأنمي القادمة',
+                  subtitle: 'فقط الأنميات التي لها موعد رسمي مستقبلي',
+                  trailing:
+                      const Icon(Icons.chevron_left, color: Colors.white38),
+                  onTap: isDownloading ? null : _fetchAnimeNews,
+                ),
+                const SizedBox(height: 10),
+                _settingsTile(
+                  icon: Icons.open_in_new,
+                  color: Colors.tealAccent,
+                  title: 'عرض صفحة الأخبار',
+                  subtitle: 'استعرض الأنميات القادمة المحفوظة',
+                  trailing:
+                      const Icon(Icons.chevron_left, color: Colors.white38),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const AnimeNewsScreen()),
+                    );
+                  },
+                ),
+                const SizedBox(height: 10),
+                _settingsTile(
+                  icon: Icons.delete_sweep,
+                  color: Colors.redAccent,
+                  title: 'مسح الأخبار المحفوظة',
+                  subtitle: 'حذف كل الأنميات القادمة والصور',
+                  trailing:
+                      const Icon(Icons.chevron_left, color: Colors.white38),
+                  onTap: _clearAnimeNews,
+                ),
+              ],
+            ),
+
             _buildSection(
               id: 'maintenance',
               title: 'أدوات الصيانة والفرز',
@@ -1890,9 +2064,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // 🆕 رقاقة اختيار التخطيط
-  // ══════════════════════════════════════════════════════════════
   Widget _layoutChip(String value, String label, IconData icon) {
     final isSelected = _continueLayout == value;
     return ChoiceChip(
