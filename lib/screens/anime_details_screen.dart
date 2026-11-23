@@ -16,6 +16,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
 
+import '../core/app_events.dart';
 import '../main.dart';
 import '../models/anime.dart';
 import '../services/anime_api_service.dart';
@@ -92,11 +93,14 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
 
     List<Anime> relatedAnimes;
     if (currentAnime.parentId == null) {
-      relatedAnimes = allAnimes.where((a) => a.parentId == currentAnime.id).toList();
+      relatedAnimes =
+          allAnimes.where((a) => a.parentId == currentAnime.id).toList();
     } else {
-      final parent = allAnimes.where((a) => a.id == currentAnime.parentId).toList();
+      final parent =
+          allAnimes.where((a) => a.id == currentAnime.parentId).toList();
       final siblings = allAnimes
-          .where((a) => a.parentId == currentAnime.parentId && a.id != currentAnime.id)
+          .where((a) =>
+              a.parentId == currentAnime.parentId && a.id != currentAnime.id)
           .toList();
       relatedAnimes = [...parent, ...siblings];
     }
@@ -109,7 +113,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
       _loading = false;
     });
 
-    if (currentAnime.videoPath != null && File(currentAnime.videoPath!).existsSync()) {
+    if (currentAnime.videoPath != null &&
+        File(currentAnime.videoPath!).existsSync()) {
       _initializeVideo(currentAnime.videoPath!);
     }
   }
@@ -173,10 +178,12 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
               builder: (context, value, _) => Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.compress, size: 50, color: Colors.purpleAccent),
+                  const Icon(Icons.compress,
+                      size: 50, color: Colors.purpleAccent),
                   const SizedBox(height: 16),
                   const Text('جاري ضغط الفيديو...',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 15)),
                   const SizedBox(height: 16),
                   ClipRRect(
                     borderRadius: BorderRadius.circular(8),
@@ -184,12 +191,14 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                       value: value,
                       minHeight: 10,
                       backgroundColor: Colors.white12,
-                      valueColor: AlwaysStoppedAnimation<Color>(primaryColorNotifier.value),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                          primaryColorNotifier.value),
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text('${(value * 100).toInt()}%',
-                      style: const TextStyle(fontSize: 12, color: Colors.white54)),
+                      style: const TextStyle(
+                          fontSize: 12, color: Colors.white54)),
                 ],
               ),
             ),
@@ -214,14 +223,17 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
       final directory = await getApplicationDocumentsDirectory();
       final folder = Directory('${directory.path}/anime_videos');
       if (!await folder.exists()) await folder.create(recursive: true);
-      final destination = '${folder.path}/${DateTime.now().microsecondsSinceEpoch}.mp4';
+      final destination =
+          '${folder.path}/${DateTime.now().microsecondsSinceEpoch}.mp4';
       final savedFile = await fileToSave.copy(destination);
 
       final allAnimes = await storage.loadAnimes();
       final index = allAnimes.indexWhere((a) => a.id == currentAnime.id);
       if (index != -1) {
         final oldPath = allAnimes[index].videoPath;
-        if (oldPath != null && oldPath.isNotEmpty && oldPath != savedFile.path) {
+        if (oldPath != null &&
+            oldPath.isNotEmpty &&
+            oldPath != savedFile.path) {
           try {
             final oldFile = File(oldPath);
             if (await oldFile.exists()) await oldFile.delete();
@@ -233,21 +245,27 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
         setState(() => currentAnime.videoPath = savedFile.path);
         _initializeVideo(savedFile.path);
 
+        AppEvents.fire('anime_edited');
+
         if (mounted) {
           final newSize = await savedFile.length();
           if (newSize < originalSize) {
-            final savings = ((1 - newSize / originalSize) * 100).toStringAsFixed(1);
-            final savedMB = ((originalSize - newSize) / (1024 * 1024)).toStringAsFixed(1);
+            final savings =
+                ((1 - newSize / originalSize) * 100).toStringAsFixed(1);
+            final savedMB = ((originalSize - newSize) / (1024 * 1024))
+                .toStringAsFixed(1);
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('✅ تم حفظ الفيديو (ضُغط بنسبة $savings% • وفرت $savedMB MB)'),
+                content: Text(
+                    '✅ تم حفظ الفيديو (ضُغط بنسبة $savings% • وفرت $savedMB MB)'),
                 backgroundColor: Colors.green,
                 duration: const Duration(seconds: 4),
               ),
             );
           } else {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('✅ تم حفظ الفيديو (لم يحتج لضغط)')),
+              const SnackBar(
+                  content: Text('✅ تم حفظ الفيديو (لم يحتج لضغط)')),
             );
           }
         }
@@ -262,7 +280,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
 
   void _showImageZoom() {
     HapticFeedback.lightImpact();
-    if (currentAnime.imagePath != null && File(currentAnime.imagePath!).existsSync()) {
+    if (currentAnime.imagePath != null &&
+        File(currentAnime.imagePath!).existsSync()) {
       showDialog(
         context: context,
         builder: (_) => Dialog(
@@ -272,13 +291,14 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
             panEnabled: true,
             minScale: 1.0,
             maxScale: 5.0,
-            child: Image.file(File(currentAnime.imagePath!), fit: BoxFit.contain),
+            child: Image.file(File(currentAnime.imagePath!),
+                fit: BoxFit.contain),
           ),
         ),
       );
     } else {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('لا توجد صورة محلية لتكبيرها.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('لا توجد صورة محلية لتكبيرها.')));
     }
   }
 
@@ -301,7 +321,10 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
         backgroundColor: Colors.transparent,
         insetPadding: const EdgeInsets.all(10),
         child: InteractiveViewer(
-            panEnabled: true, minScale: 1.0, maxScale: 5.0, child: imageWidget!),
+            panEnabled: true,
+            minScale: 1.0,
+            maxScale: 5.0,
+            child: imageWidget!),
       ),
     );
   }
@@ -321,7 +344,10 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
         backgroundColor: Colors.transparent,
         insetPadding: const EdgeInsets.all(10),
         child: InteractiveViewer(
-            panEnabled: true, minScale: 1.0, maxScale: 5.0, child: imageWidget!),
+            panEnabled: true,
+            minScale: 1.0,
+            maxScale: 5.0,
+            child: imageWidget!),
       ),
     );
   }
@@ -329,12 +355,16 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
   Future<void> _editAnimeDetails() async {
     HapticFeedback.lightImpact();
     final titleController = TextEditingController(text: currentAnime.title);
-    final partNameController = TextEditingController(text: currentAnime.partName ?? '');
+    final partNameController =
+        TextEditingController(text: currentAnime.partName ?? '');
     final episodesController = TextEditingController(
         text: currentAnime.episodes == 0 ? '' : '${currentAnime.episodes}');
     final watchedController = TextEditingController(
-        text: currentAnime.watchedEpisodes == 0 ? '' : '${currentAnime.watchedEpisodes}');
-    final studiosController = TextEditingController(text: currentAnime.studios ?? '');
+        text: currentAnime.watchedEpisodes == 0
+            ? ''
+            : '${currentAnime.watchedEpisodes}');
+    final studiosController =
+        TextEditingController(text: currentAnime.studios ?? '');
     double rating = currentAnime.rating;
     String? newImagePath = currentAnime.imagePath;
     String? newBackImagePath = currentAnime.backImagePath;
@@ -346,7 +376,9 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
           builder: (context, setDialogState) {
             return AlertDialog(
               backgroundColor: panel,
-              title: Text(currentAnime.parentId != null ? 'تعديل الموسم/الفيلم' : 'تعديل الأنمي'),
+              title: Text(currentAnime.parentId != null
+                  ? 'تعديل الموسم/الفيلم'
+                  : 'تعديل الأنمي'),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -356,9 +388,12 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                         final picked = await _picker.pickImage(
                             source: ImageSource.gallery, imageQuality: 85);
                         if (picked != null) {
-                          final directory = await getApplicationDocumentsDirectory();
-                          final folder = Directory('${directory.path}/anime_images');
-                          if (!await folder.exists()) await folder.create(recursive: true);
+                          final directory =
+                              await getApplicationDocumentsDirectory();
+                          final folder =
+                              Directory('${directory.path}/anime_images');
+                          if (!await folder.exists())
+                            await folder.create(recursive: true);
                           final dest =
                               '${folder.path}/${DateTime.now().microsecondsSinceEpoch}.jpg';
                           final saved = await File(picked.path).copy(dest);
@@ -371,12 +406,15 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                         decoration: BoxDecoration(
                           color: Colors.black26,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: primaryColorNotifier.value),
+                          border: Border.all(
+                              color: primaryColorNotifier.value),
                         ),
-                        child: newImagePath != null && File(newImagePath!).existsSync()
+                        child: newImagePath != null &&
+                                File(newImagePath!).existsSync()
                             ? ClipRRect(
                                 borderRadius: BorderRadius.circular(11),
-                                child: Image.file(File(newImagePath!), fit: BoxFit.cover))
+                                child: Image.file(File(newImagePath!),
+                                    fit: BoxFit.cover))
                             : const Center(
                                 child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
@@ -388,7 +426,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                     ),
                     if (newImagePath != null)
                       TextButton.icon(
-                          onPressed: () => setDialogState(() => newImagePath = null),
+                          onPressed: () =>
+                              setDialogState(() => newImagePath = null),
                           icon: const Icon(Icons.delete_outline, size: 16),
                           label: const Text('إزالة الصورة الأمامية')),
                     const SizedBox(height: 10),
@@ -397,13 +436,17 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                         final picked = await _picker.pickImage(
                             source: ImageSource.gallery, imageQuality: 85);
                         if (picked != null) {
-                          final directory = await getApplicationDocumentsDirectory();
-                          final folder = Directory('${directory.path}/anime_images');
-                          if (!await folder.exists()) await folder.create(recursive: true);
+                          final directory =
+                              await getApplicationDocumentsDirectory();
+                          final folder =
+                              Directory('${directory.path}/anime_images');
+                          if (!await folder.exists())
+                            await folder.create(recursive: true);
                           final dest =
                               '${folder.path}/${DateTime.now().microsecondsSinceEpoch}_back.jpg';
                           final saved = await File(picked.path).copy(dest);
-                          setDialogState(() => newBackImagePath = saved.path);
+                          setDialogState(
+                              () => newBackImagePath = saved.path);
                         }
                       },
                       child: Container(
@@ -414,37 +457,45 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: Colors.purpleAccent),
                         ),
-                        child: newBackImagePath != null && File(newBackImagePath!).existsSync()
+                        child: newBackImagePath != null &&
+                                File(newBackImagePath!).existsSync()
                             ? ClipRRect(
                                 borderRadius: BorderRadius.circular(11),
-                                child: Image.file(File(newBackImagePath!), fit: BoxFit.cover))
+                                child: Image.file(File(newBackImagePath!),
+                                    fit: BoxFit.cover))
                             : const Center(
                                 child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                  Icon(Icons.flip, size: 30, color: Colors.purpleAccent),
-                                  Text('إضافة صورة خلفية (اختياري)', style: TextStyle(fontSize: 12)),
+                                  Icon(Icons.flip,
+                                      size: 30, color: Colors.purpleAccent),
+                                  Text('إضافة صورة خلفية (اختياري)',
+                                      style: TextStyle(fontSize: 12)),
                                 ])),
                       ),
                     ),
                     if (newBackImagePath != null)
                       TextButton.icon(
-                          onPressed: () => setDialogState(() => newBackImagePath = null),
+                          onPressed: () =>
+                              setDialogState(() => newBackImagePath = null),
                           icon: const Icon(Icons.delete_outline, size: 16),
                           label: const Text('إزالة الصورة الخلفية')),
                     const SizedBox(height: 12),
                     TextField(
                         controller: titleController,
-                        decoration: const InputDecoration(labelText: 'الاسم')),
+                        decoration:
+                            const InputDecoration(labelText: 'الاسم')),
                     const SizedBox(height: 10),
                     TextField(
                         controller: studiosController,
-                        decoration: const InputDecoration(labelText: 'الاستوديو')),
+                        decoration:
+                            const InputDecoration(labelText: 'الاستوديو')),
                     if (currentAnime.parentId != null) ...[
                       const SizedBox(height: 10),
                       TextField(
                           controller: partNameController,
-                          decoration: const InputDecoration(labelText: 'اسم الموسم')),
+                          decoration:
+                              const InputDecoration(labelText: 'اسم الموسم')),
                     ],
                     const SizedBox(height: 10),
                     Row(
@@ -453,15 +504,16 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                           child: TextField(
                               controller: episodesController,
                               keyboardType: TextInputType.number,
-                              decoration:
-                                  const InputDecoration(labelText: 'إجمالي الحلقات')),
+                              decoration: const InputDecoration(
+                                  labelText: 'إجمالي الحلقات')),
                         ),
                         const SizedBox(width: 10),
                         Expanded(
                           child: TextField(
                               controller: watchedController,
                               keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(labelText: 'شاهدت')),
+                              decoration: const InputDecoration(
+                                  labelText: 'شاهدت')),
                         ),
                       ],
                     ),
@@ -494,6 +546,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
       final allAnimes = await storage.loadAnimes();
       final index = allAnimes.indexWhere((a) => a.id == currentAnime.id);
       if (index != -1) {
+        final oldRating = allAnimes[index].rating;
         allAnimes[index]
           ..title = titleController.text.trim()
           ..partName = partNameController.text.trim()
@@ -507,6 +560,18 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
           ..backImagePath = newBackImagePath;
         await storage.saveAnimes(allAnimes);
         await _loadData();
+
+        AppEvents.fire('anime_edited');
+
+        if ((rating - oldRating).abs() > 0.05) {
+          if (rating >= 8) {
+            AppEvents.fire('high_rate');
+          } else if (rating > 0 && rating < 5) {
+            AppEvents.fire('low_rate');
+          } else if (rating > 0) {
+            AppEvents.fire('rated');
+          }
+        }
       }
     }
   }
@@ -537,6 +602,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
     allAnimes.removeWhere((a) => a.id == sub.id);
     await storage.saveAnimes(allAnimes);
     await _loadData();
+
+    AppEvents.fire('anime_deleted');
   }
 
   Future<void> _fetchMainImageOnly() async {
@@ -557,7 +624,9 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
           content: const Text('يرجى تشغيل الإنترنت لجلب الصورة.',
               style: TextStyle(height: 1.6)),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('حسناً'))
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('حسناً'))
           ],
         ),
       );
@@ -580,7 +649,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
               const Icon(Icons.image, size: 50, color: Colors.orangeAccent),
               const SizedBox(height: 16),
               const Text('جاري جلب الصورة...',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  style:
+                      TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
               const SizedBox(height: 16),
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
@@ -588,12 +658,14 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                   value: value,
                   minHeight: 10,
                   backgroundColor: Colors.white12,
-                  valueColor: AlwaysStoppedAnimation<Color>(primaryColorNotifier.value),
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                      primaryColorNotifier.value),
                 ),
               ),
               const SizedBox(height: 8),
               Text('${(value * 100).toInt()}%',
-                  style: const TextStyle(fontSize: 12, color: Colors.white54)),
+                  style: const TextStyle(
+                      fontSize: 12, color: Colors.white54)),
             ],
           ),
         ),
@@ -634,7 +706,9 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
           ]),
           content: Text(error!, style: const TextStyle(height: 1.6)),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('حسناً'))
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('حسناً'))
           ],
         ),
       );
@@ -656,9 +730,11 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
         if (imagePath != null) allAnimes[index].imagePath = imagePath;
         await storage.saveAnimes(allAnimes);
       }
+      AppEvents.fire('anime_edited');
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('تم جلب وحفظ صورة الغلاف محلياً.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('تم جلب وحفظ صورة الغلاف محلياً.')));
     } else {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
@@ -672,17 +748,19 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
       RenderRepaintBoundary boundary =
           _cardKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
       ui.Image image = await boundary.toImage(pixelRatio: 3.0);
-      ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      ByteData? byteData =
+          await image.toByteData(format: ui.ImageByteFormat.png);
       Uint8List pngBytes = byteData!.buffer.asUint8List();
       final directory = await getApplicationDocumentsDirectory();
-      final file =
-          File('${directory.path}/anime_card_${DateTime.now().millisecondsSinceEpoch}.png');
+      final file = File(
+          '${directory.path}/anime_card_${DateTime.now().millisecondsSinceEpoch}.png');
       await file.writeAsBytes(pngBytes);
-      await Share.shareXFiles([XFile(file.path)], text: 'أنمي: ${currentAnime.title}');
+      await Share.shareXFiles([XFile(file.path)],
+          text: 'أنمي: ${currentAnime.title}');
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('تعذر مشاركة البطاقة.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('تعذر مشاركة البطاقة.')));
       }
     }
   }
@@ -722,13 +800,15 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
       child: Container(
         width: 340,
         decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24), color: const Color(0xFF1B1F28)),
+            borderRadius: BorderRadius.circular(24),
+            color: const Color(0xFF1B1F28)),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(24),
           child: Stack(
             children: [
               if (imagePath != null && File(imagePath).existsSync())
-                Positioned.fill(child: Image.file(File(imagePath), fit: BoxFit.cover)),
+                Positioned.fill(
+                    child: Image.file(File(imagePath), fit: BoxFit.cover)),
               Positioned.fill(
                 child: BackdropFilter(
                   filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
@@ -751,13 +831,16 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                           ]),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(16),
-                        child: imagePath != null && File(imagePath).existsSync()
-                            ? Image.file(File(imagePath), height: 220, fit: BoxFit.cover)
+                        child: imagePath != null &&
+                                File(imagePath).existsSync()
+                            ? Image.file(File(imagePath),
+                                height: 220, fit: BoxFit.cover)
                             : Container(
                                 height: 220,
                                 width: 150,
                                 color: Colors.black26,
-                                child: const Icon(Icons.movie, size: 60, color: Colors.white24)),
+                                child: const Icon(Icons.movie,
+                                    size: 60, color: Colors.white24)),
                       ),
                     ),
                     const SizedBox(height: 20),
@@ -765,8 +848,9 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                         textAlign: TextAlign.center,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: titleStyle.copyWith(
-                            shadows: [Shadow(color: Colors.black87, blurRadius: 10)])),
+                        style: titleStyle.copyWith(shadows: [
+                          Shadow(color: Colors.black87, blurRadius: 10)
+                        ])),
                     const SizedBox(height: 12),
                     if (genres.isNotEmpty)
                       Wrap(
@@ -775,15 +859,16 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                         runSpacing: 6,
                         children: genres.take(3).map((g) {
                           return Container(
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
                             decoration: BoxDecoration(
                                 color: primaryColor.withOpacity(0.2),
                                 borderRadius: BorderRadius.circular(20),
-                                border:
-                                    Border.all(color: primaryColor.withOpacity(0.5))),
-                            child:
-                                Text(g, style: const TextStyle(color: Colors.white, fontSize: 10)),
+                                border: Border.all(
+                                    color: primaryColor.withOpacity(0.5))),
+                            child: Text(g,
+                                style: const TextStyle(
+                                    color: Colors.white, fontSize: 10)),
                           );
                         }).toList(),
                       ),
@@ -798,8 +883,11 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
                           if (currentAnime.rating > 0)
-                            _cardStat(Icons.star, '${currentAnime.rating.toStringAsFixed(1)}',
-                                'تقييمك', const Color(0xFFFFC857)),
+                            _cardStat(
+                                Icons.star,
+                                '${currentAnime.rating.toStringAsFixed(1)}',
+                                'تقييمك',
+                                const Color(0xFFFFC857)),
                           if (currentAnime.globalRating != null)
                             _cardStat(
                                 Icons.public,
@@ -807,11 +895,17 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                                 'عالمي',
                                 Colors.cyan),
                           if (currentAnime.releaseYear != null)
-                            _cardStat(Icons.calendar_today, '${currentAnime.releaseYear}',
-                                'السنة', Colors.white70),
+                            _cardStat(
+                                Icons.calendar_today,
+                                '${currentAnime.releaseYear}',
+                                'السنة',
+                                Colors.white70),
                           if (currentAnime.episodes > 0)
-                            _cardStat(Icons.play_circle_outline,
-                                '${currentAnime.episodes}', 'حلقة', primaryColor),
+                            _cardStat(
+                                Icons.play_circle_outline,
+                                '${currentAnime.episodes}',
+                                'حلقة',
+                                primaryColor),
                         ],
                       ),
                     ),
@@ -832,7 +926,9 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                             fontSize: 32,
                             color: titleColor,
                             shadows: [
-                              Shadow(color: titleColor.withOpacity(0.5), blurRadius: 8)
+                              Shadow(
+                                  color: titleColor.withOpacity(0.5),
+                                  blurRadius: 8)
                             ])),
                   ],
                 ),
@@ -849,8 +945,11 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
       children: [
         Icon(icon, color: color, size: 22),
         const SizedBox(height: 4),
-        Text(value, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 16)),
-        Text(label, style: const TextStyle(color: Colors.white54, fontSize: 10)),
+        Text(value,
+            style: TextStyle(
+                color: color, fontWeight: FontWeight.bold, fontSize: 16)),
+        Text(label,
+            style: const TextStyle(color: Colors.white54, fontSize: 10)),
       ],
     );
   }
@@ -878,8 +977,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                   style: ElevatedButton.styleFrom(
                       backgroundColor: primaryColorNotifier.value,
                       foregroundColor: Colors.white,
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 12),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12))),
                   icon: const Icon(Icons.share),
@@ -889,7 +988,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                 const SizedBox(width: 12),
                 IconButton(
                     onPressed: () => Navigator.pop(dialogContext),
-                    style: IconButton.styleFrom(backgroundColor: Colors.white12),
+                    style: IconButton.styleFrom(
+                        backgroundColor: Colors.white12),
                     icon: const Icon(Icons.close, color: Colors.white)),
               ],
             ),
@@ -901,7 +1001,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
 
   Future<void> _incrementWatchedEpisode() async {
     HapticFeedback.lightImpact();
-    if (currentAnime.episodes > 0 && currentAnime.watchedEpisodes >= currentAnime.episodes) {
+    if (currentAnime.episodes > 0 &&
+        currentAnime.watchedEpisodes >= currentAnime.episodes) {
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('لقد أكملت جميع الحلقات!')));
       return;
@@ -912,15 +1013,44 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
     final allAnimes = await storage.loadAnimes();
     final index = allAnimes.indexWhere((a) => a.id == currentAnime.id);
     if (index != -1) {
+      final isNowComplete = currentAnime.episodes > 0 &&
+          currentAnime.watchedEpisodes >= currentAnime.episodes;
+      final isOneLeft = currentAnime.episodes > 0 &&
+          currentAnime.watchedEpisodes == currentAnime.episodes - 1;
+
+      if (isNowComplete) {
+        currentAnime.status = 'مكتمل';
+      }
+
       allAnimes[index] = currentAnime;
       await storage.saveAnimes(allAnimes);
+
+      if (isNowComplete) {
+        AppEvents.fire('anime_completed');
+      } else if (isOneLeft) {
+        AppEvents.fire('one_episode_left');
+      } else {
+        AppEvents.fire('episode_done');
+      }
+
+      if (isNowComplete) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('🎉 أكملت هذا الأنمي بالكامل!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      }
     }
   }
 
   Future<void> _fetchDataManually() async {
     if (currentAnime.title.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('الأنمي لا يملك اسماً، لا يمكن البحث عنه.')));
+          const SnackBar(
+              content: Text('الأنمي لا يملك اسماً، لا يمكن البحث عنه.')));
       return;
     }
 
@@ -936,10 +1066,13 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
             SizedBox(width: 8),
             Text('لا يوجد إنترنت')
           ]),
-          content: const Text('يرجى تشغيل الاتصال بالإنترنت لجلب البيانات.',
+          content: const Text(
+              'يرجى تشغيل الاتصال بالإنترنت لجلب البيانات.',
               style: TextStyle(height: 1.6)),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('حسناً'))
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('حسناً'))
           ],
         ),
       );
@@ -962,7 +1095,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
               const Icon(Icons.cloud_download, size: 50, color: Colors.cyan),
               const SizedBox(height: 16),
               const Text('جاري جلب البيانات والصور...',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  style:
+                      TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
               const SizedBox(height: 16),
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
@@ -970,12 +1104,14 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                   value: value,
                   minHeight: 10,
                   backgroundColor: Colors.white12,
-                  valueColor: AlwaysStoppedAnimation<Color>(primaryColorNotifier.value),
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                      primaryColorNotifier.value),
                 ),
               ),
               const SizedBox(height: 8),
               Text('${(value * 100).toInt()}%',
-                  style: const TextStyle(fontSize: 12, color: Colors.white54)),
+                  style: const TextStyle(
+                      fontSize: 12, color: Colors.white54)),
             ],
           ),
         ),
@@ -1016,7 +1152,9 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
           ]),
           content: Text(errorMessage!, style: const TextStyle(height: 1.6)),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('حسناً'))
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('حسناً'))
           ],
         ),
       );
@@ -1051,7 +1189,9 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
           content: const Text('لم يتم العثور على بيانات لهذا الأنمي.',
               style: TextStyle(height: 1.6)),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('حسناً'))
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('حسناً'))
           ],
         ),
       );
@@ -1074,7 +1214,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
         currentAnime.imagePath = mainImagePath;
       }
       if (charactersData.isNotEmpty) {
-        currentAnime.characters = List<Map<String, dynamic>>.from(charactersData);
+        currentAnime.characters =
+            List<Map<String, dynamic>>.from(charactersData);
       }
       if (fetchedFormat != null) currentAnime.format = fetchedFormat;
       if (fetchedIdMal != null) currentAnime.idMal = fetchedIdMal;
@@ -1088,8 +1229,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
 
     if (subAnimesData.isNotEmpty) {
       for (var sub in subAnimesData) {
-        final existingIndex =
-            allAnimes.indexWhere((a) => a.title == sub['title'] && a.parentId == currentAnime.id);
+        final existingIndex = allAnimes.indexWhere((a) =>
+            a.title == sub['title'] && a.parentId == currentAnime.id);
 
         if (existingIndex == -1) {
           final newSub = Anime(
@@ -1124,7 +1265,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
           if (existing.imagePath == null && sub['imagePath'] != null) {
             existing.imagePath = sub['imagePath'];
           }
-          if (existing.summary.isEmpty && (sub['summary'] ?? '').isNotEmpty) {
+          if (existing.summary.isEmpty &&
+              (sub['summary'] ?? '').isNotEmpty) {
             existing.summary = sub['summary'];
           }
           if (existing.genre.isEmpty && (sub['genre'] ?? '').isNotEmpty) {
@@ -1135,7 +1277,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
           }
           if (existing.characters.isEmpty &&
               (sub['characters'] as List?)?.isNotEmpty == true) {
-            existing.characters = List<Map<String, dynamic>>.from(sub['characters']);
+            existing.characters =
+                List<Map<String, dynamic>>.from(sub['characters']);
           }
           if (existing.format == null && sub['format'] != null) {
             existing.format = sub['format'];
@@ -1150,9 +1293,11 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
     await storage.saveAnimes(allAnimes);
     await _loadData();
 
+    AppEvents.fire('anime_edited');
+
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('تم جلب البيانات وحفظ الصور محلياً!')));
+    ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم جلب البيانات وحفظ الصور محلياً!')));
   }
 
   void _addSubAnime() {
@@ -1164,11 +1309,12 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
         title: const Text('إضافة موسم أو فيلم يدوياً'),
         content: TextField(
             controller: controller,
-            decoration:
-                const InputDecoration(labelText: 'اسم الموسم (مثلاً: الموسم الثاني)')),
+            decoration: const InputDecoration(
+                labelText: 'اسم الموسم (مثلاً: الموسم الثاني)')),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(dialogContext), child: const Text('إلغاء')),
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('إلغاء')),
           FilledButton(
             onPressed: () async {
               if (controller.text.trim().isEmpty) return;
@@ -1183,6 +1329,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
               await storage.saveAnimes(allAnimes);
               if (mounted) Navigator.pop(dialogContext);
               await _loadData();
+              AppEvents.fire('anime_edited');
             },
             child: const Text('إضافة'),
           ),
@@ -1204,7 +1351,9 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
           border: Border.all(color: primaryColor.withOpacity(0.3), width: 1),
           boxShadow: [
             BoxShadow(
-                color: primaryColor.withOpacity(0.2), blurRadius: 15, spreadRadius: 2)
+                color: primaryColor.withOpacity(0.2),
+                blurRadius: 15,
+                spreadRadius: 2)
           ]),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1212,10 +1361,14 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
           Row(children: [
             Icon(icon, color: primaryColor, size: 20),
             const SizedBox(width: 8),
-            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15))
+            Text(title,
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold, fontSize: 15))
           ]),
           const SizedBox(height: 10),
-          Text(value, style: const TextStyle(height: 1.7, color: Colors.white70, fontSize: 14)),
+          Text(value,
+              style: const TextStyle(
+                  height: 1.7, color: Colors.white70, fontSize: 14)),
         ],
       ),
     );
@@ -1270,7 +1423,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                           backgroundColor: Colors.white10,
                           backgroundImage: imageProvider,
                           child: imageProvider == null
-                              ? const Icon(Icons.person, color: Colors.white54, size: 30)
+                              ? const Icon(Icons.person,
+                                  color: Colors.white54, size: 30)
                               : null,
                         ),
                       ),
@@ -1282,7 +1436,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                           textAlign: TextAlign.center,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Colors.white70, fontSize: 11),
+                          style: const TextStyle(
+                              color: Colors.white70, fontSize: 11),
                         ),
                       ),
                     ],
@@ -1319,11 +1474,14 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
               const Spacer(),
               if (_fetchingScenes)
                 const SizedBox(
-                    width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2))
               else
                 IconButton(
                   tooltip: 'جلب المزيد من المشاهد',
-                  icon: const Icon(Icons.add_photo_alternate, color: Colors.cyan),
+                  icon: const Icon(Icons.add_photo_alternate,
+                      color: Colors.cyan),
                   onPressed: _fetchScenes,
                 ),
             ],
@@ -1337,7 +1495,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: scenes.length,
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              gridDelegate:
+                  const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 3,
                 crossAxisSpacing: 8,
                 mainAxisSpacing: 8,
@@ -1360,19 +1519,22 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                         child: SizedBox(
                           width: 20,
                           height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.cyan),
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.cyan),
                         ),
                       ),
                     ),
                     errorWidget: (_, __, ___) => Container(
                       color: Colors.black26,
-                      child: const Icon(Icons.broken_image, color: Colors.white24),
+                      child: const Icon(Icons.broken_image,
+                          color: Colors.white24),
                     ),
                   );
                 } else {
                   imgWidget = Container(
                       color: Colors.black26,
-                      child: const Icon(Icons.image, color: Colors.white24));
+                      child: const Icon(Icons.image,
+                          color: Colors.white24));
                 }
                 return Stack(
                   children: [
@@ -1393,7 +1555,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                           borderRadius: BorderRadius.circular(30),
                           child: const Padding(
                             padding: EdgeInsets.all(4),
-                            child: Icon(Icons.close, size: 14, color: Colors.redAccent),
+                            child: Icon(Icons.close,
+                                size: 14, color: Colors.redAccent),
                           ),
                         ),
                       ),
@@ -1447,8 +1610,9 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
         return;
       }
 
-      final existingUrls =
-          currentAnime.scenes.map((s) => s['imageUrl']?.toString() ?? '').toSet();
+      final existingUrls = currentAnime.scenes
+          .map((s) => s['imageUrl']?.toString() ?? '')
+          .toSet();
       final newScenes = <Map<String, dynamic>>[];
       for (var s in scenes) {
         final url = s['imageUrl']?.toString() ?? '';
@@ -1470,6 +1634,7 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
 
       if (mounted) {
         setState(() {});
+        AppEvents.fire('anime_edited');
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text('تم جلب ${newScenes.length} مشهد جديد.')));
       }
@@ -1494,7 +1659,9 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
         title: const Text('حذف المشهد؟'),
         content: const Text('سيُحذف المشهد نهائياً من الجهاز.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('إلغاء')),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () => Navigator.pop(ctx, true),
@@ -1580,9 +1747,10 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
             child: Container(
               decoration: BoxDecoration(
                 border: Border.all(
-                  color: isFront ? primaryColor.withOpacity(0.8) : Colors.purpleAccent.withOpacity(0.8),
-                  width: 2.5
-                ),
+                    color: isFront
+                        ? primaryColor.withOpacity(0.8)
+                        : Colors.purpleAccent.withOpacity(0.8),
+                    width: 2.5),
                 color: Colors.black,
               ),
               child: Stack(
@@ -1673,7 +1841,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                         ? _coverCard(displayImagePath, isFront: true)
                         : Transform(
                             alignment: Alignment.center,
-                            transform: Matrix4.identity()..scale(-1.0, 1.0, 1.0),
+                            transform: Matrix4.identity()
+                              ..scale(-1.0, 1.0, 1.0),
                             child: _coverCard(displayImagePath, isFront: false),
                           ),
                   ),
@@ -1694,14 +1863,16 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
         constraints: const BoxConstraints(maxHeight: 350),
         child: Hero(
             tag: 'anime_image_${currentAnime.id}',
-            child: Image.file(File(path), width: double.infinity, fit: BoxFit.contain)),
+            child: Image.file(File(path),
+                width: double.infinity, fit: BoxFit.contain)),
       );
     }
     return Container(
         height: 180,
         width: double.infinity,
         color: panel,
-        child: const Icon(Icons.movie_creation_outlined, size: 65, color: Colors.white30));
+        child: const Icon(Icons.movie_creation_outlined,
+            size: 65, color: Colors.white30));
   }
 
   Widget _buildSeasonGridCard(Anime sub) {
@@ -1716,14 +1887,18 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
         color: panel,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-            color: isOriginal ? primaryColor.withOpacity(0.5) : Colors.white12,
+            color: isOriginal
+                ? primaryColor.withOpacity(0.5)
+                : Colors.white12,
             width: isOriginal ? 2 : 1),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: () async {
           await Navigator.push(
-              context, MaterialPageRoute(builder: (_) => AnimeDetailsScreen(anime: sub)));
+              context,
+              MaterialPageRoute(
+                  builder: (_) => AnimeDetailsScreen(anime: sub)));
           await _loadData();
         },
         child: Column(
@@ -1734,12 +1909,14 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                 fit: StackFit.expand,
                 children: [
                   ClipRRect(
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                    borderRadius:
+                        const BorderRadius.vertical(top: Radius.circular(12)),
                     child: hasLocalImage
                         ? Image.file(File(sub.imagePath!), fit: BoxFit.cover)
                         : Container(
                             color: primaryColor.withOpacity(0.2),
-                            child: const Icon(Icons.playlist_play, color: Colors.white)),
+                            child: const Icon(Icons.playlist_play,
+                                color: Colors.white)),
                   ),
                   Positioned(
                     top: 2,
@@ -1759,9 +1936,11 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                       top: 8,
                       left: 8,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                            color: primaryColor, borderRadius: BorderRadius.circular(6)),
+                            color: primaryColor,
+                            borderRadius: BorderRadius.circular(6)),
                         child: const Text('الأصلي',
                             style: TextStyle(
                                 color: Colors.white,
@@ -1781,22 +1960,28 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white)),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                          color: Colors.white)),
                   const SizedBox(height: 4),
                   Text(
                     '${sub.partName ?? 'الأنمي الأصلي'}${sub.releaseYear != null ? ' • ${sub.releaseYear}' : ''}${sub.episodes > 0 ? ' • ${sub.episodes} حلقة' : ''}',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white54, fontSize: 10),
+                    style: const TextStyle(
+                        color: Colors.white54, fontSize: 10),
                   ),
                   if (sub.globalRating != null) ...[
                     const SizedBox(height: 4),
                     Row(children: [
-                      const Icon(Icons.public, size: 12, color: Colors.cyan),
+                      const Icon(Icons.public,
+                          size: 12, color: Colors.cyan),
                       const SizedBox(width: 3),
                       Text(sub.globalRating!.toStringAsFixed(1),
                           style: const TextStyle(
-                              color: Colors.cyan, fontSize: 10, fontWeight: FontWeight.bold)),
+                              color: Colors.cyan,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold)),
                     ]),
                   ],
                 ],
@@ -1810,7 +1995,9 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
 
   @override
   Widget build(BuildContext context) {
-    final title = currentAnime.title.trim().isEmpty ? 'أنمي بدون اسم' : currentAnime.title;
+    final title = currentAnime.title.trim().isEmpty
+        ? 'أنمي بدون اسم'
+        : currentAnime.title;
     final genres = currentAnime.genre
         .split('،')
         .map((e) => e.trim())
@@ -1818,19 +2005,22 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
         .toList();
     final primaryColor = primaryColorNotifier.value;
 
-    double progress =
-        currentAnime.episodes > 0 ? (currentAnime.watchedEpisodes / currentAnime.episodes) : 0.0;
+    double progress = currentAnime.episodes > 0
+        ? (currentAnime.watchedEpisodes / currentAnime.episodes)
+        : 0.0;
     if (progress > 1.0) progress = 1.0;
 
     final isOriginalAnime = currentAnime.parentId == null;
-    final sectionTitle =
-        isOriginalAnime ? 'المواسم والأفلام المرتبطة' : 'الأجزاء الأخرى من السلسلة';
+    final sectionTitle = isOriginalAnime
+        ? 'المواسم والأفلام المرتبطة'
+        : 'الأجزاء الأخرى من السلسلة';
 
     return Scaffold(
       backgroundColor: background,
       appBar: AppBar(
         backgroundColor: background,
-        title: Text(isOriginalAnime ? 'تفاصيل الأنمي' : 'تفاصيل الموسم/الفيلم'),
+        title: Text(
+            isOriginalAnime ? 'تفاصيل الأنمي' : 'تفاصيل الموسم/الفيلم'),
         centerTitle: true,
         actions: [
           IconButton(
@@ -1844,7 +2034,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                 onPressed: _fetchMainImageOnly),
           IconButton(
               tooltip: 'صنع بطاقة للمشاركة',
-              icon: const Icon(Icons.dashboard_customize_outlined, color: Colors.cyan),
+              icon: const Icon(Icons.dashboard_customize_outlined,
+                  color: Colors.cyan),
               onPressed: _showShareDialog),
         ],
       ),
@@ -1865,11 +2056,14 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                     fontSize: 25,
                     fontWeight: FontWeight.w900,
                     color: titleColorNotifier.value)),
-            if (currentAnime.partName != null && currentAnime.partName!.isNotEmpty)
+            if (currentAnime.partName != null &&
+                currentAnime.partName!.isNotEmpty)
               Text(currentAnime.partName!,
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                      fontSize: 16, color: primaryColor, fontWeight: FontWeight.bold)),
+                      fontSize: 16,
+                      color: primaryColor,
+                      fontWeight: FontWeight.bold)),
             const SizedBox(height: 14),
             Wrap(
               alignment: WrapAlignment.center,
@@ -1879,29 +2073,36 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
               children: [
                 if (currentAnime.status.isNotEmpty)
                   Chip(
-                      avatar: const Icon(Icons.bookmark_outline, size: 18),
+                      avatar:
+                          const Icon(Icons.bookmark_outline, size: 18),
                       label: Text(currentAnime.status)),
                 if (currentAnime.releaseYear != null)
                   Chip(
                       avatar: const Icon(Icons.calendar_today, size: 16),
                       label: Text('${currentAnime.releaseYear}'),
                       backgroundColor: primaryColor.withOpacity(0.2),
-                      side: BorderSide(color: primaryColor.withOpacity(0.5))),
-                if (currentAnime.studios != null && currentAnime.studios!.isNotEmpty)
+                      side: BorderSide(
+                          color: primaryColor.withOpacity(0.5))),
+                if (currentAnime.studios != null &&
+                    currentAnime.studios!.isNotEmpty)
                   Chip(
                       avatar: const Icon(Icons.business, size: 16),
                       label: Text(currentAnime.studios!),
                       backgroundColor: primaryColor.withOpacity(0.2),
-                      side: BorderSide(color: primaryColor.withOpacity(0.5))),
+                      side: BorderSide(
+                          color: primaryColor.withOpacity(0.5))),
                 ...genres.map((genre) => Chip(
-                    avatar: const Icon(Icons.category_outlined, size: 18),
+                    avatar:
+                        const Icon(Icons.category_outlined, size: 18),
                     label: Text(genre),
                     backgroundColor: primaryColor.withOpacity(0.2),
-                    side: BorderSide(color: primaryColor.withOpacity(0.5)))),
+                    side: BorderSide(
+                        color: primaryColor.withOpacity(0.5)))),
                 IconButton(
                     tooltip: 'جلب البيانات والمواسم',
                     onPressed: _fetchDataManually,
-                    icon: const Icon(Icons.cloud_download_outlined, color: Colors.cyan)),
+                    icon: const Icon(Icons.cloud_download_outlined,
+                        color: Colors.cyan)),
               ],
             ),
 
@@ -1912,13 +2113,19 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                 children: [
                   Text(sectionTitle,
                       style: const TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white)),
                   Row(
                     children: [
                       IconButton(
                         tooltip: _isSeasonGridView ? 'عرض قائمة' : 'عرض شبكة',
-                        icon: Icon(_isSeasonGridView ? Icons.view_list : Icons.grid_view,
-                            color: Colors.white70, size: 20),
+                        icon: Icon(
+                            _isSeasonGridView
+                                ? Icons.view_list
+                                : Icons.grid_view,
+                            color: Colors.white70,
+                            size: 20),
                         onPressed: _toggleSeasonView,
                       ),
                       if (isOriginalAnime)
@@ -1934,13 +2141,15 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
               if (subAnimes.isEmpty)
                 const Text(
                     'لا توجد مواسم مضافة. اضغط على "جلب البيانات" للبحث عنها.',
-                    style: TextStyle(color: Colors.white54, fontSize: 12))
+                    style:
+                        TextStyle(color: Colors.white54, fontSize: 12))
               else if (_isSeasonGridView)
                 GridView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: subAnimes.length,
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  gridDelegate:
+                      const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 2,
                     crossAxisSpacing: 10,
                     mainAxisSpacing: 10,
@@ -1962,9 +2171,12 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                   } else if (sub.partName != null) {
                     subtitleParts.add(sub.partName!);
                   }
-                  if (sub.releaseYear != null) subtitleParts.add('${sub.releaseYear}');
-                  if (sub.episodes > 0) subtitleParts.add('${sub.episodes} حلقة');
-                  if (subtitleParts.isEmpty) subtitleParts.add('غير محدد');
+                  if (sub.releaseYear != null)
+                    subtitleParts.add('${sub.releaseYear}');
+                  if (sub.episodes > 0)
+                    subtitleParts.add('${sub.episodes} حلقة');
+                  if (subtitleParts.isEmpty)
+                    subtitleParts.add('غير محدد');
 
                   return Container(
                     margin: const EdgeInsets.only(bottom: 8),
@@ -1978,8 +2190,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                           width: isOriginal ? 2 : 1),
                     ),
                     child: ListTile(
-                      contentPadding:
-                          const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 5),
                       leading: ClipRRect(
                         borderRadius: BorderRadius.circular(8),
                         child: hasLocalImage
@@ -2004,10 +2216,12 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                           Expanded(
                             child: Text(subtitleParts.join(' • '),
                                 style: const TextStyle(
-                                    color: Colors.white54, fontSize: 11)),
+                                    color: Colors.white54,
+                                    fontSize: 11)),
                           ),
                           if (sub.globalRating != null) ...[
-                            const Icon(Icons.public, size: 12, color: Colors.cyan),
+                            const Icon(Icons.public,
+                                size: 12, color: Colors.cyan),
                             const SizedBox(width: 3),
                             Text(sub.globalRating!.toStringAsFixed(1),
                                 style: const TextStyle(
@@ -2030,8 +2244,11 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                         ],
                       ),
                       onTap: () async {
-                        await Navigator.push(context,
-                            MaterialPageRoute(builder: (_) => AnimeDetailsScreen(anime: sub)));
+                        await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) =>
+                                    AnimeDetailsScreen(anime: sub)));
                         await _loadData();
                       },
                     ),
@@ -2048,17 +2265,22 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                 decoration: BoxDecoration(
                     color: panel,
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: primaryColor.withOpacity(0.4))),
+                    border: Border.all(
+                        color: primaryColor.withOpacity(0.4))),
                 child: Column(
                   children: [
                     Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Text('تقدم المشاهدة',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                          Text('${currentAnime.watchedEpisodes} / ${currentAnime.episodes}',
                               style: TextStyle(
-                                  color: primaryColor, fontWeight: FontWeight.bold)),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16)),
+                          Text(
+                              '${currentAnime.watchedEpisodes} / ${currentAnime.episodes}',
+                              style: TextStyle(
+                                  color: primaryColor,
+                                  fontWeight: FontWeight.bold)),
                         ]),
                     const SizedBox(height: 12),
                     ClipRRect(
@@ -2067,7 +2289,8 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                             value: progress,
                             minHeight: 10,
                             backgroundColor: Colors.white12,
-                            valueColor: AlwaysStoppedAnimation<Color>(primaryColor))),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                                primaryColor))),
                     const SizedBox(height: 12),
                     SizedBox(
                       width: double.infinity,
@@ -2104,14 +2327,17 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text('تذكار فيديو',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.bold)),
                       IconButton(
-                          icon: const Icon(Icons.video_call, color: Colors.cyan),
+                          icon: const Icon(Icons.video_call,
+                              color: Colors.cyan),
                           onPressed: _pickVideo),
                     ],
                   ),
                   if (_chewieController != null &&
-                      _chewieController!.videoPlayerController.value.isInitialized)
+                      _chewieController!
+                          .videoPlayerController.value.isInitialized)
                     AspectRatio(
                       aspectRatio: _chewieController!
                           .videoPlayerController.value.aspectRatio,
@@ -2121,14 +2347,17 @@ class _AnimeDetailsScreenState extends State<AnimeDetailsScreen>
                     const Center(
                         child: Text(
                             'لا يوجد فيديو مضاف. اضغط على الأيقونة لإضافة فيديو من المعرض.',
-                            style: TextStyle(color: Colors.white54, fontSize: 12),
+                            style: TextStyle(
+                                color: Colors.white54, fontSize: 12),
                             textAlign: TextAlign.center)),
                 ],
               ),
             ),
 
-            _section('ملخص القصة', currentAnime.summary, Icons.menu_book_outlined),
-            _section('ذكرياتك مع الأنمي', currentAnime.memory, Icons.auto_awesome_outlined),
+            _section('ملخص القصة', currentAnime.summary,
+                Icons.menu_book_outlined),
+            _section('ذكرياتك مع الأنمي', currentAnime.memory,
+                Icons.auto_awesome_outlined),
           ],
         ),
       ),
