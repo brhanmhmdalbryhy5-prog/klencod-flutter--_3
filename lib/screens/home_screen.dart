@@ -1,5 +1,5 @@
+import 'dart:async';
 import 'dart:io';
-import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -34,6 +34,15 @@ class _HomeScreenState extends State<HomeScreen> {
   bool loading = true;
   bool isAutoFetching = false;
 
+  // ═══ إعدادات "استمر في المشاهدة" ═══
+  String _continueLayout = 'list';
+  int _continueLimit = 5;
+  String _continueSort = 'newest';
+  bool _continueSeasonOnly = false;
+  bool _continueHideCompleted = false;
+
+  StreamSubscription? _eventSub;
+
   final List<Color> colors = const [
     Color(0xFF741C2B), Color(0xFF247BA0), Color(0xFF7651A8),
     Color(0xFFB87928), Color(0xFF27866F), Color(0xFFB34E68)
@@ -48,13 +57,69 @@ class _HomeScreenState extends State<HomeScreen> {
     'ألعاب', 'فنون قتالية', 'ساموراي', 'شياطين', 'إيسيكاي'
   ];
 
+  // ═══ مولّد الألقاب (مطابق لـ otaku_oracle) ═══
+  static const List<String> _titlePrefixes = [
+    'حارس', 'أمير', 'بطل', 'فارس', 'روح', 'قلب', 'ظل', 'نور', 'نجم', 'صقر',
+    'نمر', 'تنين', 'فينيق', 'ساموراي', 'نينجا', 'ساحر', 'محارب', 'مستكشف',
+    'رحّالة', 'فيلسوف', 'عبقري', 'مبتكر', 'مبدع', 'رائد', 'أسطورة', 'حلم',
+    'خيال', 'أثير', 'شفق', 'فجر', 'غروب', 'ليل', 'نهار', 'زمرد', 'ياقوت',
+    'لؤلؤ', 'ماس', 'ذهب', 'فضة', 'برونز', 'بلاتين', 'قمر', 'شمس', 'نيزك',
+    'مذنب', 'مجرة', 'فضاء', 'كون', 'بحر', 'جبل',
+  ];
+
+  static const List<String> _titleCores = [
+    'الأنمي', 'المانغا', 'الأوتاكو', 'القصص', 'الحكايات', 'الأساطير', 'الخيال',
+    'الإبداع', 'الفن', 'الرسم', 'اللوحات', 'المشاهد', 'اللقطات', 'الحلقات',
+    'المواسم', 'الأفلام', 'الشخصيات', 'الأبطال', 'الأشرار', 'الحلفاء',
+    'الأصدقاء', 'العائلة', 'الذكريات', 'الأحلام', 'الأمنيات', 'الأقدار',
+    'الرحلة', 'الطريق', 'النهاية', 'البداية', 'الفصول', 'الصفحات', 'الكلمات',
+    'الألحان', 'النغمات', 'الأصوات', 'الصور', 'الألوان', 'النجوم', 'الأكوان',
+  ];
+
+  static const int _titlesPerLevel = 5;
+  static int get _totalTitles => _titlePrefixes.length * _titleCores.length;
+
+  static String _generateTitle(int index) {
+    if (index < 0) index = 0;
+    final i = index % _totalTitles;
+    final prefixIdx = i ~/ _titleCores.length;
+    final coreIdx = i % _titleCores.length;
+    return '${_titlePrefixes[prefixIdx]} ${_titleCores[coreIdx]}';
+  }
+
   @override
   void initState() {
     super.initState();
     _initialLoad();
+
+    // إعادة تحميل الإعدادات عند تغييرها
+    _eventSub = AppEvents.stream.listen((event) {
+      if (event == 'continue_prefs_changed') {
+        _loadContinuePrefs();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _eventSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadContinuePrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _continueLayout = prefs.getString('continue_layout') ?? 'list';
+      _continueLimit = prefs.getInt('continue_limit') ?? 5;
+      _continueSort = prefs.getString('continue_sort') ?? 'newest';
+      _continueSeasonOnly = prefs.getBool('continue_season_only') ?? false;
+      _continueHideCompleted = prefs.getBool('continue_hide_completed') ?? false;
+    });
   }
 
   Future<void> _initialLoad() async {
+    await _loadContinuePrefs();
     await loadData();
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getBool('auto_fetch_enabled') ?? false) {
@@ -130,19 +195,39 @@ class _HomeScreenState extends State<HomeScreen> {
     return rated.fold<double>(0, (sum, a) => sum + a.rating) / rated.length;
   }
 
+  // ═══ قائمة "استمر في المشاهدة" مع دعم المواسم ═══
   List<Anime> get _continueWatchingList {
-    final inProgress = _allAnimes.where((a) {
+    var list = _allAnimes.where((a) {
+      if (_continueHideCompleted && a.status == 'مكتمل') return false;
+      if (_continueSeasonOnly && a.parentId == null) return false;
       return a.watchedEpisodes > 0 &&
           (a.episodes == 0 || a.watchedEpisodes < a.episodes);
     }).toList();
 
-    inProgress.sort((a, b) {
-      final dateA = DateTime.tryParse(a.date) ?? DateTime(2000);
-      final dateB = DateTime.tryParse(b.date) ?? DateTime(2000);
-      return dateB.compareTo(dateA);
-    });
+    switch (_continueSort) {
+      case 'progress':
+        list.sort((a, b) {
+          final pA = a.episodes > 0
+              ? a.watchedEpisodes / a.episodes
+              : 0.0;
+          final pB = b.episodes > 0
+              ? b.watchedEpisodes / b.episodes
+              : 0.0;
+          return pB.compareTo(pA);
+        });
+        break;
+      case 'newest':
+      default:
+        list.sort((a, b) {
+          final dA = DateTime.tryParse(a.date) ?? DateTime(2000);
+          final dB = DateTime.tryParse(b.date) ?? DateTime(2000);
+          return dB.compareTo(dA);
+        });
+        break;
+    }
 
-    return inProgress.take(5).toList();
+    if (_continueLimit > 0) return list.take(_continueLimit).toList();
+    return list;
   }
 
   Future<void> _incrementWatched(Anime anime) async {
@@ -185,7 +270,7 @@ class _HomeScreenState extends State<HomeScreen> {
         SnackBar(
           content: Text(isNowComplete
               ? '🎉 اكتمل ${anime.title}!'
-              : '➕ ${anime.title}: ${all[idx].watchedEpisodes}/${all[idx].episodes}'),
+              : '➕ ${anime.title}: ${all[idx].watchedEpisodes}/${anime.episodes}'),
           duration: const Duration(milliseconds: 1500),
           backgroundColor: isNowComplete ? Colors.green : Colors.blue,
         ),
@@ -193,6 +278,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  // ═══ منفذ "استمر في المشاهدة" حسب التخطيط ═══
   Widget _buildContinueWatching(Color primaryColor) {
     final list = _continueWatchingList;
     if (list.isEmpty) return const SizedBox.shrink();
@@ -213,19 +299,41 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         const SizedBox(height: 12),
-        ...list.map((anime) => _buildContinueCard(anime, primaryColor)),
+        _buildContinueContent(list, primaryColor),
         const SizedBox(height: 8),
       ],
     );
   }
 
+  Widget _buildContinueContent(List<Anime> list, Color primaryColor) {
+    switch (_continueLayout) {
+      case 'grid2':
+        return _buildGridLayout(list, 2, primaryColor);
+      case 'grid3':
+        return _buildGridLayout(list, 3, primaryColor);
+      case 'cinematic':
+        return _buildCinematicLayout(list, primaryColor);
+      case 'carousel':
+        return _buildCarouselLayout(list, primaryColor);
+      case 'compact':
+        return _buildCompactLayout(list, primaryColor);
+      case 'list':
+      default:
+        return Column(
+          children:
+              list.map((a) => _buildContinueCard(a, primaryColor)).toList(),
+        );
+    }
+  }
+
+  // ─── نمط 1: قائمة عمودية (الحالي) ───
   Widget _buildContinueCard(Anime anime, Color primaryColor) {
     final progress = anime.episodes > 0
         ? (anime.watchedEpisodes / anime.episodes).clamp(0.0, 1.0)
         : 0.0;
 
-    final hasImage = anime.imagePath != null &&
-        File(anime.imagePath!).existsSync();
+    final hasImage =
+        anime.imagePath != null && File(anime.imagePath!).existsSync();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -298,32 +406,400 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(width: 8),
-              Material(
-                color: primaryColor,
-                borderRadius: BorderRadius.circular(10),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(10),
-                  onTap: () => _incrementWatched(anime),
-                  child: const Padding(
-                    padding: EdgeInsets.all(10),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.add, color: Colors.white, size: 22),
-                        Text('+1',
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+              _plusOneButton(anime, primaryColor),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _plusOneButton(Anime anime, Color primaryColor,
+      {bool mini = false}) {
+    return Material(
+      color: primaryColor,
+      borderRadius: BorderRadius.circular(mini ? 8 : 10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(mini ? 8 : 10),
+        onTap: () => _incrementWatched(anime),
+        child: Padding(
+          padding: EdgeInsets.all(mini ? 6 : 10),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.add,
+                  color: Colors.white, size: mini ? 16 : 22),
+              if (!mini)
+                const Text('+1',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ─── نمط 2 و 3: شبكة 2×N أو 3×N ───
+  Widget _buildGridLayout(
+      List<Anime> list, int crossCount, Color primaryColor) {
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: list.length,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: crossCount,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+        childAspectRatio: crossCount == 2 ? 0.85 : 0.7,
+      ),
+      itemBuilder: (context, index) {
+        final anime = list[index];
+        final progress = anime.episodes > 0
+            ? (anime.watchedEpisodes / anime.episodes).clamp(0.0, 1.0)
+            : 0.0;
+        final hasImage = anime.imagePath != null &&
+            File(anime.imagePath!).existsSync();
+
+        return Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF1B1F28),
+            borderRadius: BorderRadius.circular(14),
+            border:
+                Border.all(color: primaryColor.withOpacity(0.4), width: 1.5),
+          ),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => AnimeDetailsScreen(anime: anime)),
+              );
+              await loadData();
+            },
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(13)),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        hasImage
+                            ? Image.file(File(anime.imagePath!),
+                                fit: BoxFit.cover)
+                            : Container(
+                                color: primaryColor.withOpacity(0.2),
+                                child: Icon(Icons.movie,
+                                    color: primaryColor, size: 32)),
+                        Positioned(
+                          left: 6,
+                          bottom: 6,
+                          right: 6,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: LinearProgressIndicator(
+                              value: progress,
+                              minHeight: 5,
+                              backgroundColor: Colors.black54,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                  primaryColor),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(6),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(anime.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontSize: 11, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 2),
+                      Text(
+                          '${anime.watchedEpisodes}/${anime.episodes == 0 ? "?" : anime.episodes}',
+                          style: const TextStyle(
+                              color: Colors.white54, fontSize: 10)),
+                      const SizedBox(height: 4),
+                      _plusOneButton(anime, primaryColor, mini: true),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // ─── نمط 4: سينمائي ───
+  Widget _buildCinematicLayout(List<Anime> list, Color primaryColor) {
+    return Column(
+      children: list.map((anime) {
+        final progress = anime.episodes > 0
+            ? (anime.watchedEpisodes / anime.episodes).clamp(0.0, 1.0)
+            : 0.0;
+        final hasImage = anime.imagePath != null &&
+            File(anime.imagePath!).existsSync();
+
+        return GestureDetector(
+          onTap: () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (_) => AnimeDetailsScreen(anime: anime)),
+            );
+            await loadData();
+          },
+          child: Container(
+            height: 180,
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black.withOpacity(0.5),
+                    blurRadius: 15,
+                    spreadRadius: 2)
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(18),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (hasImage)
+                    Image.file(File(anime.imagePath!), fit: BoxFit.cover)
+                  else
+                    Container(
+                        color: primaryColor.withOpacity(0.3),
+                        child: Icon(Icons.movie,
+                            color: primaryColor, size: 60)),
+                  Container(
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.transparent,
+                          Colors.black87,
+                          Colors.black,
+                        ],
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        stops: [0.3, 0.7, 1.0],
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    left: 12,
+                    right: 12,
+                    bottom: 12,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(anime.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white)),
+                        const SizedBox(height: 4),
+                        Text(
+                            'شاهدت ${anime.watchedEpisodes}/${anime.episodes == 0 ? "?" : anime.episodes}',
+                            style: const TextStyle(
+                                color: Colors.white70, fontSize: 11)),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(4),
+                                child: LinearProgressIndicator(
+                                  value: progress,
+                                  minHeight: 6,
+                                  backgroundColor: Colors.white24,
+                                  valueColor:
+                                      AlwaysStoppedAnimation<Color>(
+                                          primaryColor),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            _plusOneButton(anime, primaryColor, mini: true),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  // ─── نمط 5: شريط أفقي (Carousel) ───
+  Widget _buildCarouselLayout(List<Anime> list, Color primaryColor) {
+    return SizedBox(
+      height: 190,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: list.length,
+        itemBuilder: (context, index) {
+          final anime = list[index];
+          final progress = anime.episodes > 0
+              ? (anime.watchedEpisodes / anime.episodes).clamp(0.0, 1.0)
+              : 0.0;
+          final hasImage = anime.imagePath != null &&
+              File(anime.imagePath!).existsSync();
+
+          return Container(
+            width: 130,
+            margin: const EdgeInsets.only(left: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1B1F28),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                  color: primaryColor.withOpacity(0.4), width: 1.5),
+            ),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(14),
+              onTap: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => AnimeDetailsScreen(anime: anime)),
+                );
+                await loadData();
+              },
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(13)),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          hasImage
+                              ? Image.file(File(anime.imagePath!),
+                                  fit: BoxFit.cover)
+                              : Container(
+                                  color: primaryColor.withOpacity(0.2),
+                                  child: Icon(Icons.movie,
+                                      color: primaryColor, size: 32)),
+                          Positioned(
+                            left: 6,
+                            right: 6,
+                            bottom: 6,
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: LinearProgressIndicator(
+                                value: progress,
+                                minHeight: 4,
+                                backgroundColor: Colors.black54,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                    primaryColor),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(6),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(anime.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 2),
+                        Text(
+                            '${anime.watchedEpisodes}/${anime.episodes == 0 ? "?" : anime.episodes}',
+                            style: const TextStyle(
+                                color: Colors.white54, fontSize: 9)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // ─── نمط 6: قائمة مضغوطة ───
+  Widget _buildCompactLayout(List<Anime> list, Color primaryColor) {
+    return Column(
+      children: list.map((anime) {
+        final hasImage = anime.imagePath != null &&
+            File(anime.imagePath!).existsSync();
+        return Container(
+          margin: const EdgeInsets.only(bottom: 6),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1B1F28),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: ListTile(
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            onTap: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => AnimeDetailsScreen(anime: anime)),
+              );
+              await loadData();
+            },
+            leading: ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: hasImage
+                  ? Image.file(File(anime.imagePath!),
+                      width: 40, height: 40, fit: BoxFit.cover)
+                  : Container(
+                      width: 40,
+                      height: 40,
+                      color: primaryColor.withOpacity(0.2),
+                      child: Icon(Icons.movie,
+                          color: primaryColor, size: 20),
+                    ),
+            ),
+            title: Text(anime.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    fontSize: 12, fontWeight: FontWeight.bold)),
+            subtitle: Text(
+                '${anime.watchedEpisodes}/${anime.episodes == 0 ? "?" : anime.episodes}',
+                style:
+                    const TextStyle(color: Colors.white54, fontSize: 10)),
+            trailing:
+                _plusOneButton(anime, primaryColor, mini: true),
+          ),
+        );
+      }).toList(),
     );
   }
 
@@ -900,7 +1376,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildLatestAchievementCard() {
     int totalCount = animes.length;
-    if (totalCount < 10) return const SizedBox.shrink();
+    if (totalCount < _titlesPerLevel) return const SizedBox.shrink();
 
     final List<Color> achColors = [
       const Color(0xFFCD7F32), const Color(0xFFC0C0C0), const Color(0xFFFFD700),
@@ -915,38 +1391,11 @@ class _HomeScreenState extends State<HomeScreen> {
       Icons.military_tech, Icons.diamond, Icons.emoji_events
     ];
 
-    final List<String> achTitles = [
-      'البداية', 'المستكشف', 'الباحث', 'المتذوق', 'الهاوي', 'المشجع',
-      'المحلل', 'الناقد', 'الأسطورة الصاعدة', 'الخبير',
-      'المبتدئ المعتمد', 'المغامر', 'جامع القصص', 'عاشق الأنمي', 'صائد الجواهر',
-      'المتابع', 'المراجع', 'المستشار', 'الأسطورة الشابة', 'الأسطورة',
-      'الجيل الثاني', 'الفارس', 'الحارس', 'المحارب', 'المنقذ', 'الساحر',
-      'العبقري', 'الوحش', 'الشيطان', 'الملاك',
-      'الأسطورة الملكية', 'الأسطورة الذهبية', 'الأسطورة الماسية',
-      'الأسطورة البلاتينية', 'الأسطورة النخبوية', 'الأسطورة النادرة',
-      'الأسطورة الفريدة', 'الأسطورة الأعظم', 'الأسطورة الأقوى',
-      'الأسطورة المطلقة',
-      'الحكيم', 'الفيلسوف', 'المعلم', 'المرشد', 'القائد', 'الزعيم',
-      'الملك', 'الإمبراطور', 'القيصر', 'الفرعون',
-      'بطل العالم', 'بطل الكون', 'بطل المجرة', 'بطل الأكوان', 'بطل الأبعاد',
-      'بطل الزمن', 'بطل الفضاء', 'بطل اللانهاية', 'بطل الخيال', 'بطل الواقع',
-      'التنين', 'الفينيق', 'العنقاء', 'الغول', 'الشيطان الأكبر',
-      'الملاك الأكبر', 'الإله', 'الخالد', 'الأبدي', 'اللامحدود',
-      'التيتان', 'العملاق', 'الجبار', 'الطاغية', 'المدمر', 'المحطم',
-      'الفاتح', 'الغازي', 'المنتصر', 'القاهر',
-      'المستنير', 'المتنور', 'المبدع', 'المبتكر', 'الرائد', 'السباق',
-      'الأول', 'الفريد', 'النادر', 'الأسطوري',
-      'الأسطورة الخالدة', 'الأسطورة الأبدية', 'الأسطورة اللامحدودة',
-      'الأسطورة الكونية', 'الأسطورة المجرية', 'الأسطورة الأبعادية',
-      'الأسطورة الزمنية', 'الأسطورة الفضائية', 'الأسطورة اللانهائية',
-      'إمبراطور الأوتاكو'
-    ];
-
-    int index = (totalCount / 10).floor() - 1;
-    if (index >= achTitles.length) index = achTitles.length - 1;
+    int index = (totalCount ~/ _titlesPerLevel) - 1;
+    if (index >= _totalTitles) index = _totalTitles - 1;
     if (index < 0) index = 0;
 
-    String title = achTitles[index];
+    String title = _generateTitle(index);
     IconData icon = achIcons[index % achIcons.length];
     Color color = achColors[index % achColors.length];
 
@@ -973,17 +1422,19 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Icon(icon, color: color, size: 30),
           ),
           const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('أحدث إنجاز لك',
-                  style: TextStyle(color: Colors.white54, fontSize: 12)),
-              Text(title,
-                  style: TextStyle(
-                      color: color,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold)),
-            ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('أحدث إنجاز لك',
+                    style: TextStyle(color: Colors.white54, fontSize: 12)),
+                Text(title,
+                    style: TextStyle(
+                        color: color,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold)),
+              ],
+            ),
           ),
         ],
       ),
@@ -996,6 +1447,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return RefreshIndicator(
       onRefresh: () async {
+        await _loadContinuePrefs();
         await loadData();
         final prefs = await SharedPreferences.getInstance();
         if (prefs.getBool('auto_fetch_enabled') ?? false) {
