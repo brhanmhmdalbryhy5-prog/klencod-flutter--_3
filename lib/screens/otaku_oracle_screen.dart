@@ -29,42 +29,39 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
   static const String _milestonesSeenKey = 'milestones_seen';
 
   // ══════════════════════════════════════════════════════════════
-  // 🆕 نظام الألقاب الجديد — مولّد آلي (2000 لقب)
-  // كل 5 أنميات = لقب جديد | خالٍ من أي شرك أو أسماء إلهية
+  // 🆕 2000 لقب فريد — 20 بادئة × 20 صفة × 5 أنواع
+  // كل لقب يفتح عند إضافة أنمي واحد | بلا شرك
   // ══════════════════════════════════════════════════════════════
+  static const int _titlesPerLevel = 1;
+
   static const List<String> _prefixes = [
-    'حارس', 'أمير', 'بطل', 'فارس', 'روح',
-    'قلب', 'ظل', 'نور', 'نجم', 'صقر',
-    'نمر', 'تنين', 'فينيق', 'ساموراي', 'نينجا',
-    'ساحر', 'محارب', 'مستكشف', 'رحّالة', 'فيلسوف',
-    'عبقري', 'مبتكر', 'مبدع', 'رائد', 'أسطورة',
-    'حلم', 'خيال', 'أثير', 'شفق', 'فجر',
-    'غروب', 'ليل', 'نهار', 'زمرد', 'ياقوت',
-    'لؤلؤ', 'ماس', 'ذهب', 'فضة', 'برونز',
-    'بلاتين', 'قمر', 'شمس', 'نيزك', 'مذنب',
-    'مجرة', 'فضاء', 'كون', 'بحر', 'جبل',
+    'حارس', 'أمير', 'سيد', 'بطل', 'فارس',
+    'روح', 'قلب', 'ظل', 'نور', 'نجم',
+    'صقر', 'تنين', 'فينيق', 'ساموراي', 'محارب',
+    'مستكشف', 'فيلسوف', 'مبتكر', 'صياد', 'عرّاف',
+  ];
+
+  static const List<String> _adjectives = [
+    'لامع', 'ذهبي', 'فضي', 'سريع', 'شجاع',
+    'نادر', 'وقور', 'رفيع', 'زاهر', 'باهر',
+    'بهيج', 'متوهج', 'مذهل', 'رائع', 'راسخ',
+    'مشع', 'مضئ', 'سعيد', 'فاتن', 'جذاب',
   ];
 
   static const List<String> _cores = [
-    'الأنمي', 'المانغا', 'الأوتاكو', 'القصص', 'الحكايات',
-    'الأساطير', 'الخيال', 'الإبداع', 'الفن', 'الرسم',
-    'اللوحات', 'المشاهد', 'اللقطات', 'الحلقات', 'المواسم',
-    'الأفلام', 'الشخصيات', 'الأبطال', 'الأشرار', 'الحلفاء',
-    'الأصدقاء', 'العائلة', 'الذكريات', 'الأحلام', 'الأمنيات',
-    'الأقدار', 'الرحلة', 'الطريق', 'النهاية', 'البداية',
-    'الفصول', 'الصفحات', 'الكلمات', 'الألحان', 'النغمات',
-    'الأصوات', 'الصور', 'الألوان', 'النجوم', 'الأكوان',
+    'الأنمي', 'المانغا', 'الأوتاكو', 'القصص', 'الأساطير',
   ];
 
-  static const int _titlesPerLevel = 5;
-  static int get _totalTitles => _prefixes.length * _cores.length;
+  static const int _totalTitles =
+      20 * 20 * 5; // = 2000
 
   static String _generateTitle(int index) {
     if (index < 0) index = 0;
     final i = index % _totalTitles;
-    final prefixIdx = i ~/ _cores.length;
-    final coreIdx = i % _cores.length;
-    return '${_prefixes[prefixIdx]} ${_cores[coreIdx]}';
+    final prefixIdx = i % 20;
+    final adjectiveIdx = (i ~/ 20) % 20;
+    final coreIdx = i ~/ 400;
+    return '${_prefixes[prefixIdx]} ${_adjectives[adjectiveIdx]} ${_cores[coreIdx]}';
   }
 
   @override
@@ -74,11 +71,11 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
   }
 
   void _scrollToLatestAchievement() {
-    int unlockedIndex = (animes.length / _titlesPerLevel).floor();
+    int unlockedIndex = (animes.length / _titlesPerLevel).floor() - 1;
     if (unlockedIndex > _totalTitles - 1) unlockedIndex = _totalTitles - 1;
     if (unlockedIndex < 0) unlockedIndex = 0;
 
-    double offset = (unlockedIndex * 100.0) - 150.0;
+    double offset = (unlockedIndex * 90.0) - 150.0;
     if (offset < 0) offset = 0;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -99,21 +96,17 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
 
     final newCount = saved.where((a) => a.parentId == null).length;
 
-    // 🆕 تتبع فتح الألقاب الجديدة
     try {
       final prefs = await SharedPreferences.getInstance();
       final lastCount = prefs.getInt(_lastMilestoneKey) ?? 0;
       final seenBefore = prefs.getBool(_milestonesSeenKey) ?? false;
 
-      if (seenBefore && newCount > lastCount) {
-        final newLevel = newCount ~/ _titlesPerLevel;
-        final oldLevel = lastCount ~/ _titlesPerLevel;
-        if (newLevel > oldLevel && newCount >= _titlesPerLevel) {
-          FloatingMangaCharacter.sayCustom(
-            '🏆 لقب جديد!\n${_generateTitle(newLevel - 1)}',
-            MangaExpression.veryHappy,
-          );
-        }
+      if (seenBefore && newCount > lastCount && newCount > 0) {
+        final lastTitle = _generateTitle(newCount - 1);
+        FloatingMangaCharacter.sayCustom(
+          '🏆 لقب جديد!\n$lastTitle',
+          MangaExpression.veryHappy,
+        );
       }
 
       await prefs.setBool(_milestonesSeenKey, true);
@@ -173,16 +166,18 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
     int totalCount = animes.length;
 
     final List<Color> colors = [
-      const Color(0xFFCD7F32), const Color(0xFFC0C0C0), const Color(0xFFFFD700),
-      const Color(0xFF00E5FF), const Color(0xFFE040FB), const Color(0xFFFF5252),
-      const Color(0xFF69F0AE), const Color(0xFFFFAB40), const Color(0xFF448AFF),
-      const Color(0xFFFF4081),
+      const Color(0xFFCD7F32), const Color(0xFFC0C0C0),
+      const Color(0xFFFFD700), const Color(0xFF00E5FF),
+      const Color(0xFFE040FB), const Color(0xFFFF5252),
+      const Color(0xFF69F0AE), const Color(0xFFFFAB40),
+      const Color(0xFF448AFF), const Color(0xFFFF4081),
     ];
 
     final List<IconData> icons = [
-      Icons.star_border, Icons.explore, Icons.local_cafe, Icons.psychology,
-      Icons.auto_awesome, Icons.verified, Icons.workspace_premium,
-      Icons.military_tech, Icons.diamond, Icons.emoji_events,
+      Icons.star_border, Icons.explore, Icons.local_cafe,
+      Icons.psychology, Icons.auto_awesome, Icons.verified,
+      Icons.workspace_premium, Icons.military_tech,
+      Icons.diamond, Icons.emoji_events,
     ];
 
     return Container(
@@ -206,7 +201,7 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
           ]),
           const SizedBox(height: 10),
           Text(
-              'لقد أضفت $totalCount أنمي حتى الآن. كل 5 أنميات تفتح لقباً جديداً!',
+              'لقد أضفت $totalCount أنمي. كل أنمي يفتح لقباً جديداً!',
               style: const TextStyle(color: Colors.white60, fontSize: 12)),
           const SizedBox(height: 16),
           SizedBox(
@@ -223,7 +218,7 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
                 final isUnlocked = totalCount >= count;
 
                 return Container(
-                  width: 90,
+                  width: 100,
                   margin: const EdgeInsets.only(left: 10),
                   child: Column(
                     children: [
@@ -247,8 +242,7 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
                                 ]
                               : [],
                         ),
-                        child: Icon(
-                            isUnlocked ? icon : Icons.lock,
+                        child: Icon(isUnlocked ? icon : Icons.lock,
                             color: isUnlocked ? color : Colors.white38,
                             size: 30),
                       ),
@@ -258,16 +252,13 @@ class _OtakuOracleScreenState extends State<OtakuOracleScreen> {
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                              color: isUnlocked
-                                  ? Colors.white
-                                  : Colors.white54,
+                              color:
+                                  isUnlocked ? Colors.white : Colors.white54,
                               fontSize: 10,
                               fontWeight: FontWeight.bold)),
                       Text('$count',
                           style: TextStyle(
-                              color: isUnlocked
-                                  ? color
-                                  : Colors.white38,
+                              color: isUnlocked ? color : Colors.white38,
                               fontSize: 10)),
                     ],
                   ),
