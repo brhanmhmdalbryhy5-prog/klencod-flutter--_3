@@ -11,6 +11,8 @@ import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/anime.dart';
+import '../models/anime_news.dart';
+import 'anime_news_service.dart';
 import 'storage_service.dart';
 
 // ══════════════════════════════════════════════════════════════
@@ -102,6 +104,8 @@ class BackupProgress {
 // ══════════════════════════════════════════════════════════════
 class BackupService {
   static const String characterPrefix = 'anime_character_image_';
+  static const String _newsPrefsKey = 'anime_news_data';
+  static const String _newsLastFetchKey = 'anime_news_last_fetch';
 
   final ValueNotifier<BackupProgress?> progress = ValueNotifier(null);
 
@@ -113,10 +117,8 @@ class BackupService {
   String _stage = '';
   bool _isRestore = false;
 
-  // 🆕 آلية الإلغاء
   bool _cancelRequested = false;
 
-  /// طلب إلغاء العملية الحالية (تُستدعى من شاشة التقدم).
   void cancel() {
     if (_cancelRequested) return;
     _cancelRequested = true;
@@ -137,7 +139,7 @@ class BackupService {
   }
 
   // ══════════════════════════════════════════════════════════════
-  // 1️⃣ الإنشاء الكامل (مع اختيار مكان الحفظ)
+  // 1️⃣ الإنشاء الكامل (مع اختيار مكان الحفظ) — يشمل الأخبار
   // ══════════════════════════════════════════════════════════════
   Future<String> createBackup() async {
     final tempDir = await getTemporaryDirectory();
@@ -169,6 +171,10 @@ class BackupService {
       final prefs = await SharedPreferences.getInstance();
       final appDir = await getApplicationDocumentsDirectory();
       final memDir = Directory('${appDir.path}/anime_memory_photos');
+
+      // 🆕 الأخبار
+      final news = await AnimeNewsService().loadNews();
+      final newsDir = Directory('${appDir.path}/anime_news_images');
 
       // ═══ احسب الحجم الإجمالي + عدد الملفات قبل البدء ═══
       _totalBytes = 0;
@@ -226,8 +232,18 @@ class BackupService {
         }
       }
 
-      // + ملفان إضافيان (metadata.json + animes.json)
+      // 🆕 صور الأخبار
+      if (news.isNotEmpty && await newsDir.exists()) {
+        await for (final entity in newsDir.list()) {
+          if (entity is! File) continue;
+          _totalBytes += await entity.length();
+          _totalFiles++;
+        }
+      }
+
+      // + ملفات JSON: metadata + animes (+ anime_news إن وُجد)
       _totalFiles += 2;
+      if (news.isNotEmpty) _totalFiles += 1;
 
       _checkCancelled();
 
@@ -268,7 +284,6 @@ class BackupService {
         final anime = animes[i];
         final item = anime.toJson();
 
-        // غلاف أمامي
         if (anime.imagePath != null &&
             anime.imagePath!.isNotEmpty &&
             File(anime.imagePath!).existsSync()) {
@@ -281,7 +296,6 @@ class BackupService {
           item['imagePath'] = null;
         }
 
-        // غلاف خلفي
         if (anime.backImagePath != null &&
             anime.backImagePath!.isNotEmpty &&
             File(anime.backImagePath!).existsSync()) {
@@ -295,7 +309,6 @@ class BackupService {
           item['backImagePath'] = null;
         }
 
-        // فيديو
         if (anime.videoPath != null &&
             anime.videoPath!.isNotEmpty &&
             File(anime.videoPath!).existsSync()) {
@@ -308,7 +321,6 @@ class BackupService {
           item['videoPath'] = null;
         }
 
-        // شخصيات
         final updatedChars = <Map<String, dynamic>>[];
         for (var j = 0; j < anime.characters.length; j++) {
           final char = Map<String, dynamic>.from(anime.characters[j]);
@@ -324,7 +336,6 @@ class BackupService {
         }
         item['characters'] = updatedChars;
 
-        // مشاهد
         final updatedScenes = <Map<String, dynamic>>[];
         for (var k = 0; k < anime.scenes.length; k++) {
           final scene = Map<String, dynamic>.from(anime.scenes[k]);
@@ -366,15 +377,58 @@ class BackupService {
         }
       }
 
+      // 🆕 الأخبار: صور + JSON
+      if (news.isNotEmpty) {
+        final newsAssets = <String, String>{};
+
+        // صور الأخبار
+        if (await newsDir.exists()) {
+          await for (final entity in newsDir.list()) {
+            if (entity is! File) continue;
+            final fileName = entity.uri.pathSegments.last;
+            final asset =
+                'news_images/${Uri.encodeComponent(fileName)}';
+            await addFile(entity, asset, 'صورة خبر: $fileName');
+            newsAssets[fileName] = asset;
+          }
+        }
+
+        // تحديث مسارات الصور في الأخبار
+        final newsJson = <Map<String, dynamic>>[];
+        for (final n in news) {
+          final j = n.toJson();
+          if (n.imagePath != null && n.imagePath!.isNotEmpty) {
+            final fileName = n.imagePath!.replaceAll('\\', '/').split('/').last;
+            if (newsAssets.containsKey(fileName)) {
+              j['imagePath'] = 'backup://${newsAssets[fileName]}';
+            } else {
+              j['imagePath'] = null;
+            }
+          }
+          newsJson.add(j);
+        }
+
+        final newsFile = File('${tempDir.path}/news_$ts.json');
+        await newsFile.writeAsString(jsonEncode(newsJson));
+        await encoder.addFile(newsFile, 'anime_news.json');
+        _currentFile++;
+        progress.value = progress.value!.copyWith(
+          currentFile: _currentFile,
+          currentFileName: 'anime_news.json',
+        );
+        try { await newsFile.delete(); } catch (_) {}
+      }
+
       // JSON
       final metadata = {
         'format': 'anime_memory_backup',
-        'version': 8,
+        'version': 9,
         'createdAt': DateTime.now().toIso8601String(),
         'coverAssets': coverAssets,
         'backCoverAssets': backCoverAssets,
         'characterAssets': characterAssets,
         'videoAssets': videoAssets,
+        'includesNews': news.isNotEmpty,
       };
       final metaFile = File('${tempDir.path}/metadata_$ts.json');
       await metaFile.writeAsString(jsonEncode(metadata));
@@ -404,7 +458,6 @@ class BackupService {
       _stage = 'اختيار مكان الحفظ...';
       progress.value = progress.value!.copyWith(stage: _stage);
 
-      // ✅ حفظ باختيار المجلد من المستخدم
       final saveResult = await _saveFileWithUserChoice(
           tempZipPath, 'anime_memory_backup_$ts.zip');
 
@@ -461,7 +514,7 @@ class BackupService {
   }
 
   // ══════════════════════════════════════════════════════════════
-  // 2️⃣ النسخة الخفيفة
+  // 2️⃣ النسخة الخفيفة (بدون فيديوهات أو مشاهد أو ذكريات أو أخبار)
   // ══════════════════════════════════════════════════════════════
   Future<String> createLiteBackup() async {
     final tempDir = await getTemporaryDirectory();
@@ -491,7 +544,6 @@ class BackupService {
 
       final animes = await StorageService().loadAnimes();
 
-      // ═══ احسب الحجم الإجمالي + عدد الملفات قبل البدء ═══
       _totalBytes = 0;
       _totalFiles = 0;
 
@@ -516,7 +568,6 @@ class BackupService {
         }
       }
 
-      // + ملفان إضافيان (metadata.json + animes.json)
       _totalFiles += 2;
 
       _checkCancelled();
@@ -679,7 +730,7 @@ class BackupService {
   }
 
   // ══════════════════════════════════════════════════════════════
-  // 3️⃣ الاستعادة الكاملة
+  // 3️⃣ الاستعادة الكاملة (تستعيد الأخبار أيضاً)
   // ══════════════════════════════════════════════════════════════
   Future<String> restoreBackup() async {
     final createdFiles = <File>[];
@@ -734,25 +785,30 @@ class BackupService {
       final charImgsDir = Directory('${appDir.path}/character_images');
       final scenesDir = Directory('${appDir.path}/anime_scenes');
       final memDir = Directory('${appDir.path}/anime_memory_photos');
+      final newsDir = Directory('${appDir.path}/anime_news_images');
       await coversDir.create(recursive: true);
       await videosDir.create(recursive: true);
       await charsDir.create(recursive: true);
       await charImgsDir.create(recursive: true);
       await scenesDir.create(recursive: true);
       await memDir.create(recursive: true);
+      await newsDir.create(recursive: true);
 
       final restoredPaths = <String, String>{};
       Map<String, dynamic>? metadata;
       List<dynamic>? animeList;
+      List<dynamic>? newsList; // 🆕
       final ts = DateTime.now().millisecondsSinceEpoch;
-      int fileIndex = 0; // 🆕 عداد لتوليد أسماء فريدة وقصيرة
+      int fileIndex = 0;
 
       for (final file in archive) {
         _checkCancelled();
         if (!file.isFile) continue;
         final name = file.name.replaceAll('\\', '/');
 
-        if (name == 'metadata.json' || name == 'animes.json') {
+        if (name == 'metadata.json' ||
+            name == 'animes.json' ||
+            name == 'anime_news.json') {
           final content = file.content;
           Uint8List? bytes;
           if (content is Uint8List) bytes = content;
@@ -762,8 +818,10 @@ class BackupService {
           if (bytes != null) {
             if (name == 'metadata.json') {
               metadata = jsonDecode(utf8.decode(bytes));
-            } else {
+            } else if (name == 'animes.json') {
               animeList = jsonDecode(utf8.decode(bytes));
+            } else if (name == 'anime_news.json') {
+              newsList = jsonDecode(utf8.decode(bytes));
             }
           }
           _currentFile++;
@@ -774,12 +832,12 @@ class BackupService {
           continue;
         }
 
-        fileIndex++; // 🆕 زيادة العداد
+        fileIndex++;
 
         String? targetPath;
         String label = 'استعادة ملف';
         final ext = _extension(name);
-        final unique = '${ts}_$fileIndex'; // 🆕 اسم قصير وفريد
+        final unique = '${ts}_$fileIndex';
 
         if (name.startsWith('covers/')) {
           targetPath = '${coversDir.path}/cover_$unique.$ext';
@@ -799,6 +857,9 @@ class BackupService {
         } else if (name.startsWith('memories/')) {
           targetPath = '${memDir.path}/memory_$unique.$ext';
           label = 'ذكرى';
+        } else if (name.startsWith('news_images/')) { // 🆕
+          targetPath = '${newsDir.path}/news_$unique.$ext';
+          label = 'صورة خبر';
         }
 
         if (targetPath != null) {
@@ -892,6 +953,39 @@ class BackupService {
         if (p != null) await prefs.setString(entry.key, p);
       }
 
+      // 🆕 استعادة الأخبار
+      int restoredNewsCount = 0;
+      if (newsList != null && newsList.isNotEmpty) {
+        final restoredNews = <AnimeNews>[];
+        for (final n in newsList) {
+          try {
+            final j = Map<String, dynamic>.from(n as Map);
+            final p = j['imagePath'] as String?;
+            if (p != null && p.startsWith('backup://')) {
+              final k = p.replaceFirst('backup://', '');
+              if (restoredPaths.containsKey(k)) {
+                j['imagePath'] = restoredPaths[k];
+              } else {
+                j['imagePath'] = null;
+              }
+            }
+            restoredNews.add(AnimeNews.fromJson(j));
+          } catch (_) {}
+        }
+
+        if (restoredNews.isNotEmpty) {
+          await prefs.setString(
+            _newsPrefsKey,
+            jsonEncode(restoredNews.map((n) => n.toJson()).toList()),
+          );
+          await prefs.setString(
+            _newsLastFetchKey,
+            DateTime.now().toIso8601String(),
+          );
+          restoredNewsCount = restoredNews.length;
+        }
+      }
+
       progress.value = BackupProgress(
         currentFile: _totalFiles,
         totalFiles: _totalFiles,
@@ -905,7 +999,10 @@ class BackupService {
         resultPath: null,
       );
 
-      return '✅ تمت استعادة ${animes.length} أنمي بنجاح.';
+      final newsMsg = restoredNewsCount > 0
+          ? ' + $restoredNewsCount خبر'
+          : '';
+      return '✅ تمت استعادة ${animes.length} أنمي$newsMsg بنجاح.';
     } catch (e) {
       await _cleanup(createdFiles);
       final msg = e is _BackupCancelledException
@@ -975,7 +1072,7 @@ class BackupService {
       Map<String, dynamic>? metadata;
       List<dynamic>? animeList;
       final ts = DateTime.now().millisecondsSinceEpoch;
-      int fileIndex = 0; // 🆕 عداد لتوليد أسماء فريدة وقصيرة
+      int fileIndex = 0;
 
       for (final file in archive) {
         _checkCancelled();
@@ -1004,12 +1101,12 @@ class BackupService {
           continue;
         }
 
-        fileIndex++; // 🆕 زيادة العداد
+        fileIndex++;
 
         String? targetPath;
         String label = 'استعادة ملف';
         final ext = _extension(name);
-        final unique = '${ts}_$fileIndex'; // 🆕 اسم قصير وفريد
+        final unique = '${ts}_$fileIndex';
 
         if (name.startsWith('covers/')) {
           targetPath = '${coversDir.path}/lite_cover_$unique.$ext';
@@ -1106,22 +1203,18 @@ class BackupService {
   // ══════════════════════════════════════════════════════════════
   Future<String?> _saveFileWithUserChoice(
       String tempPath, String fileName) async {
-    // 1. الخيار الأساسي: المستخدم يختار المجلد
     try {
       final selectedDir = await FilePicker.platform.getDirectoryPath(
         dialogTitle: 'اختر مجلداً لحفظ النسخة الاحتياطية',
       );
 
       if (selectedDir == null) {
-        return null; // المستخدم ألغى
+        return null;
       }
 
       final targetPath = '$selectedDir/$fileName';
-
-      // نسخ مباشر (streaming - يدعم 10GB+)
       await File(tempPath).copy(targetPath);
 
-      // تحقق من نجاح النسخ
       final target = File(targetPath);
       if (await target.exists() && await target.length() > 0) {
         return targetPath;
@@ -1129,10 +1222,8 @@ class BackupService {
 
       return null;
     } catch (e) {
-      // إذا فشل (مثلاً Google Drive) → انتقل للمشاركة
     }
 
-    // 2. احتياطي: نافذة المشاركة
     try {
       final result = await Share.shareXFiles(
         [XFile(tempPath)],
@@ -1145,7 +1236,6 @@ class BackupService {
       }
       return 'shared';
     } catch (_) {
-      // 3. احتياطي أخير: مجلد التطبيق
       try {
         final appDir = await getApplicationDocumentsDirectory();
         final folder = Directory('${appDir.path}/backups');
