@@ -37,6 +37,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _continueSort = 'newest';
   bool _continueSeasonOnly = false;
   bool _continueHideCompleted = false;
+  List<String> _continueSelectedIds = [];
 
   // إعدادات المكتبة
   bool _cinematicEnabled = false;
@@ -68,6 +69,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _continueSeasonOnly = prefs.getBool('continue_season_only') ?? false;
       _continueHideCompleted =
           prefs.getBool('continue_hide_completed') ?? false;
+      _continueSelectedIds =
+          prefs.getStringList('continue_selected_ids') ?? [];
 
       _cinematicEnabled = prefs.getBool('anime_cinematic_enabled') ?? false;
       _autoCompressVideos = prefs.getBool('auto_compress_videos') ?? false;
@@ -111,6 +114,137 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await prefs.setBool('isDarkMode', value);
     themeNotifier.value = value ? ThemeMode.dark : ThemeMode.light;
     AppEvents.fire('settings_changed');
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // 🆕 اختيار الأنميات المرئية في "استمر في المشاهدة"
+  // ══════════════════════════════════════════════════════════════
+  Future<void> _openAnimeSelector() async {
+    final allAnimes = await storage.loadAnimes();
+    final inProgress = allAnimes.where((a) {
+      return a.watchedEpisodes > 0 &&
+          (a.episodes == 0 || a.watchedEpisodes < a.episodes);
+    }).toList();
+
+    if (inProgress.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('لا توجد أنميات قيد المشاهدة حالياً.')),
+      );
+      return;
+    }
+
+    // ترتيب أبجدي
+    inProgress.sort((a, b) =>
+        a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+
+    final selected = Set<String>.from(_continueSelectedIds);
+
+    final result = await showDialog<List<String>?>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) => AlertDialog(
+          backgroundColor: const Color(0xFF1B1F28),
+          title: Row(children: [
+            const Icon(Icons.checklist, color: Colors.tealAccent),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text('اختر الأنميات (${inProgress.length})',
+                  style: const TextStyle(fontSize: 14)),
+            ),
+          ]),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 420,
+            child: Column(
+              children: [
+                Row(children: [
+                  TextButton(
+                    onPressed: () => setSt(() {
+                      selected.clear();
+                      for (final a in inProgress) {
+                        selected.add(a.id);
+                      }
+                    }),
+                    child: const Text('تحديد الكل'),
+                  ),
+                  TextButton(
+                    onPressed: () => setSt(() => selected.clear()),
+                    child: const Text('إلغاء التحديد'),
+                  ),
+                ]),
+                const Divider(color: Colors.white12),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: inProgress.length,
+                    itemBuilder: (ctx, i) {
+                      final a = inProgress[i];
+                      return CheckboxListTile(
+                        dense: true,
+                        title: Text(
+                            a.title.isEmpty ? 'بدون اسم' : a.title,
+                            style: const TextStyle(fontSize: 13),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis),
+                        subtitle: Text(
+                            '${a.watchedEpisodes}/${a.episodes == 0 ? "?" : a.episodes}',
+                            style: const TextStyle(fontSize: 11)),
+                        value: selected.contains(a.id),
+                        activeColor: primaryColorNotifier.value,
+                        onChanged: (v) => setSt(() {
+                          if (v == true) {
+                            selected.add(a.id);
+                          } else {
+                            selected.remove(a.id);
+                          }
+                        }),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('إلغاء'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, []),
+              child: const Text('تلقائي (الكل)',
+                  style: TextStyle(color: Colors.cyan)),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                  backgroundColor: primaryColorNotifier.value),
+              onPressed: () => Navigator.pop(ctx, selected.toList()),
+              child: Text('حفظ (${selected.length})'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (result == null) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('continue_selected_ids', result);
+    setState(() => _continueSelectedIds = result);
+    AppEvents.fire('continue_prefs_changed');
+    AppEvents.fire('settings_changed');
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result.isEmpty
+              ? '✅ تم تفعيل العرض التلقائي'
+              : '✅ تم حفظ ${result.length} أنمي'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
   }
 
   Future<void> _markAnimesAsCompleted() async {
@@ -1241,9 +1375,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await _runAction(action: () => bulkService.downloadAllScenes());
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // 🆕 جلب أخبار الأنمي (مع شريط تقدم حقيقي)
-  // ══════════════════════════════════════════════════════════════
   Future<void> _fetchAnimeNews() async {
     final progressNotifier = ValueNotifier<double>(0.0);
     final stageNotifier = ValueNotifier<String>('جارٍ التحضير...');
@@ -1708,6 +1839,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     setState(() => _continueHideCompleted = v);
                   },
                 ),
+                const SizedBox(height: 8),
+                // 🆕 زر اختيار الأنميات المرئية
+                _settingsTile(
+                  icon: Icons.checklist,
+                  color: Colors.tealAccent,
+                  title: 'تخصيص الأنميات الظاهرة',
+                  subtitle: _continueSelectedIds.isEmpty
+                      ? 'تلقائي (كل الأنميات قيد المشاهدة)'
+                      : '${_continueSelectedIds.length} أنمي محدد يدوياً',
+                  trailing: const Icon(Icons.chevron_left,
+                      color: Colors.white38),
+                  onTap: _openAnimeSelector,
+                ),
               ],
             ),
 
@@ -1867,7 +2011,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
 
-            // 🆕 قسم أخبار الأنمي
             _buildSection(
               id: 'news',
               title: 'أخبار الأنمي',
