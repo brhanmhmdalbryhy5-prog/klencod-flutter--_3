@@ -10,10 +10,12 @@ import '../models/anime_news.dart';
 class NewsFetchResult {
   final bool success;
   final int count;
+  final int failed;
   final String? error;
   const NewsFetchResult({
     required this.success,
     required this.count,
+    this.failed = 0,
     this.error,
   });
 }
@@ -23,7 +25,6 @@ class AnimeNewsService {
   static const String _lastFetchKey = 'anime_news_last_fetch';
   static const String _baseUrl = 'https://api.jikan.moe/v4';
 
-  // ─── تحميل الأخبار المحفوظة ───
   Future<List<AnimeNews>> loadNews() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_prefsKey);
@@ -44,7 +45,6 @@ class AnimeNewsService {
     return str != null ? DateTime.tryParse(str) : null;
   }
 
-  // ─── مسح الأخبار ───
   Future<int> clearNews() async {
     final existing = await loadNews();
     for (final n in existing) {
@@ -61,46 +61,65 @@ class AnimeNewsService {
     return existing.length;
   }
 
-  // ─── جلب الأنميات القادمة بمواعيد مؤكدة ───
+  // 🆕 حفظ فوري لكل عنصر + الحفاظ على الأخبار القديمة + معالجة فشل منفصل
   Future<NewsFetchResult> fetchUpcoming({
     required void Function(double progress, String stage, String? title)
         onProgress,
+    void Function(AnimeNews news)? onItemFetched,
   }) async {
+    int newCount = 0;
+    int failedCount = 0;
+
     try {
+      // 1. تحميل الأخبار الموجودة (لن تُفقد)
+      final savedNews = await loadNews();
+      final existingIds = savedNews.map((n) => n.malId).toSet();
+
       onProgress(0.0, 'جارٍ الاتصال بالخادم...', null);
 
+      // 2. جلب الأنميات القادمة (بدون فشل كلي عند خطأ صفحة واحدة)
       final allResults = <Map<String, dynamic>>[];
-      int? lastPage;
       const maxPages = 3;
 
-      // ① جلب الصفحات
-      for (int page = 1; page <= (lastPage ?? maxPages); page++) {
+      for (int page = 1; page <= maxPages; page++) {
         onProgress(
           0.02 + (page - 1) * 0.15,
-          'جلب الصفحة $page من ${lastPage ?? maxPages}...',
+          'جلب الصفحة $page من $maxPages...',
           null,
         );
-
         try {
           final response = await http
-              .get(Uri.parse('$_baseUrl/seasons/upcoming?page=$page&limit=25'))
+              .get(
+                Uri.parse('$_baseUrl/seasons/upcoming?page=$page&limit=25'),
+                headers: {'User-Agent': 'AnimeMemory/1.0'},
+              )
               .timeout(const Duration(seconds: 30));
 
           if (response.statusCode == 200) {
             final data = jsonDecode(response.body) as Map<String, dynamic>;
             final list = data['data'] as List? ?? [];
-            if (list.isNotEmpty) {
-              allResults.addAll(list.cast<Map<String, dynamic>>());
-              final pg = data['pagination'] as Map<String, dynamic>?;
-              lastPage = (pg?['last_visible_page'] as num?)?.toInt();
-            }
+            allResults.addAll(list.cast<Map<String, dynamic>>());
+          } else if (response.statusCode == 429) {
+            // Rate limited - انتظر وأعد
+            await Future.delayed(const Duration(seconds: 2));
+            try {
+              final retry = await http.get(
+                Uri.parse('$_baseUrl/seasons/upcoming?page=$page&limit=25'),
+                headers: {'User-Agent': 'AnimeMemory/1.0'},
+              );
+              if (retry.statusCode == 200) {
+                final data = jsonDecode(retry.body) as Map<String, dynamic>;
+                final list = data['data'] as List? ?? [];
+                allResults.addAll(list.cast<Map<String, dynamic>>());
+              }
+            } catch (_) {}
           }
-
-          // احترام حدود Jikan (3 req/s)
-          if (page < (lastPage ?? maxPages)) {
+          if (page < maxPages) {
             await Future.delayed(const Duration(milliseconds: 450));
           }
-        } catch (_) {}
+        } catch (_) {
+          // تخطي الصفحة الفاشلة، تابع
+        }
       }
 
       if (allResults.isEmpty) {
@@ -108,13 +127,13 @@ class AnimeNewsService {
         return const NewsFetchResult(
           success: false,
           count: 0,
-          error: 'تعذر جلب البيانات من الخادم',
+          error: 'تعذر جلب البيانات من الخادم. جرّب لاحقاً.',
         );
       }
 
-      onProgress(0.55, 'تصفية الأنميات القادمة...', null);
+      onProgress(0.55, 'تصفية الأنميات...', null);
 
-      // ② تصفية: فقط التي لها موعد رسمي مؤكد مستقبلي
+      // 3. تصفية
       final now = DateTime.now();
       final filtered = <Map<String, dynamic>>[];
       final seenIds = <int>{};
@@ -131,7 +150,6 @@ class AnimeNewsService {
           continue;
         }
 
-        // مرفوض: تاريخ ماضٍ أو اليوم
         if (!releaseDate.isAfter(now)) continue;
 
         final malId = (anime['mal_id'] as num?)?.toInt();
@@ -142,125 +160,148 @@ class AnimeNewsService {
         filtered.add(anime);
       }
 
-      if (filtered.isEmpty) {
-        onProgress(1.0, 'لا توجد أنميات بمواعيد مؤكدة', null);
-        return const NewsFetchResult(
-          success: true,
-          count: 0,
-          error: 'لا توجد أنميات بمواعيد عرض مؤكدة حالياً',
-        );
-      }
-
-      // ③ ترتيب حسب تاريخ العرض
+      // ترتيب حسب أقرب موعد
       filtered.sort((a, b) {
-        final aDate = DateTime.parse(a['aired']['from'] as String);
-        final bDate = DateTime.parse(b['aired']['from'] as String);
-        return aDate.compareTo(bDate);
+        try {
+          final aDate = DateTime.parse(a['aired']['from'] as String);
+          final bDate = DateTime.parse(b['aired']['from'] as String);
+          return aDate.compareTo(bDate);
+        } catch (_) {
+          return 0;
+        }
       });
 
-      onProgress(0.6, 'تحميل الصور (${filtered.length} أنمي)...', null);
-
-      // ④ تحميل الصور محلياً
+      // 4. تحميل الصور + حفظ فوري لكل عنصر
       final directory = await getApplicationDocumentsDirectory();
       final imagesDir = Directory('${directory.path}/anime_news_images');
       if (!await imagesDir.exists()) await imagesDir.create(recursive: true);
 
-      final savedNews = <AnimeNews>[];
-
       for (int i = 0; i < filtered.length; i++) {
-        final anime = filtered[i];
-        final malId = (anime['mal_id'] as num).toInt();
-        final title = anime['title'] as String? ??
-            anime['title_english'] as String? ??
-            'بدون اسم';
+        try {
+          final anime = filtered[i];
+          final malId = (anime['mal_id'] as num).toInt();
+          final title = anime['title'] as String? ??
+              anime['title_english'] as String? ??
+              'بدون اسم';
 
-        // شريط تقدم حقيقي: 60% → 95%
-        final itemProgress = 0.60 + (i / filtered.length) * 0.35;
-        onProgress(
-          itemProgress,
-          'تحميل الصور (${i + 1}/${filtered.length})',
-          title,
-        );
+          // تخطي المحفوظ مسبقاً
+          if (existingIds.contains(malId)) {
+            onProgress(
+              0.6 + (i / filtered.length) * 0.35,
+              'موجود مسبقاً (${i + 1}/${filtered.length})',
+              title,
+            );
+            continue;
+          }
 
-        // تحميل الصورة
-        String? imageUrl;
-        String? imagePath;
-        final images = anime['images'] as Map<String, dynamic>?;
-        final jpg = images?['jpg'] as Map<String, dynamic>?;
-        imageUrl = jpg?['large_image_url'] as String? ??
-            jpg?['image_url'] as String?;
+          final itemProgress = 0.6 + (i / filtered.length) * 0.35;
+          onProgress(
+            itemProgress,
+            'جديد (${i + 1}/${filtered.length})',
+            title,
+          );
 
-        if (imageUrl != null && imageUrl.isNotEmpty) {
-          try {
-            final imgRes = await http
-                .get(Uri.parse(imageUrl))
-                .timeout(const Duration(seconds: 15));
-            if (imgRes.statusCode == 200) {
-              final path =
-                  '${imagesDir.path}/news_${malId}_${DateTime.now().microsecondsSinceEpoch}.jpg';
-              final file = File(path);
-              await file.writeAsBytes(imgRes.bodyBytes);
-              imagePath = path;
-            }
-          } catch (_) {}
-        }
+          // تحميل الصورة
+          String? imageUrl;
+          String? imagePath;
+          final images = anime['images'] as Map<String, dynamic>?;
+          final jpg = images?['jpg'] as Map<String, dynamic>?;
+          imageUrl = jpg?['large_image_url'] as String? ??
+              jpg?['image_url'] as String?;
 
-        final aired = anime['aired'] as Map<String, dynamic>;
-        final releaseDate = DateTime.parse(aired['from'] as String);
+          if (imageUrl != null && imageUrl.isNotEmpty) {
+            try {
+              final imgRes = await http
+                  .get(Uri.parse(imageUrl),
+                      headers: {'User-Agent': 'AnimeMemory/1.0'})
+                  .timeout(const Duration(seconds: 15));
+              if (imgRes.statusCode == 200) {
+                final path =
+                    '${imagesDir.path}/news_${malId}_${DateTime.now().microsecondsSinceEpoch}.jpg';
+                final file = File(path);
+                await file.writeAsBytes(imgRes.bodyBytes);
+                imagePath = path;
+              }
+            } catch (_) {}
+          }
 
-        final genresList = (anime['genres'] as List?)
-                ?.map((g) => (g as Map)['name'] as String?)
-                .where((g) => g != null)
-                .cast<String>()
-                .toList() ??
-            [];
+          final aired = anime['aired'] as Map<String, dynamic>;
+          final releaseDate = DateTime.parse(aired['from'] as String);
 
-        final studiosList = (anime['studios'] as List?)
-                ?.map((s) => (s as Map)['name'] as String?)
-                .where((s) => s != null)
-                .cast<String>()
-                .toList() ??
-            [];
+          final genresList = (anime['genres'] as List?)
+                  ?.map((g) => (g as Map)['name'] as String?)
+                  .where((g) => g != null)
+                  .cast<String>()
+                  .toList() ??
+              [];
 
-        savedNews.add(AnimeNews(
-          id: 'news_$malId',
-          malId: malId,
-          title: title,
-          imageUrl: imageUrl,
-          imagePath: imagePath,
-          releaseDate: releaseDate,
-          format: anime['type'] as String? ?? '',
-          episodes: (anime['episodes'] as num?)?.toInt() ?? 0,
-          genres: genresList.join('، '),
-          studios: studiosList.join('، '),
-          synopsis: (anime['synopsis'] as String? ?? '').trim(),
-          score: (anime['score'] as num?)?.toDouble(),
-          fetchedAt: DateTime.now(),
-        ));
+          final studiosList = (anime['studios'] as List?)
+                  ?.map((s) => (s as Map)['name'] as String?)
+                  .where((s) => s != null)
+                  .cast<String>()
+                  .toList() ??
+              [];
 
-        // تبريد بسيط (CDN ليس صارماً)
-        if (i < filtered.length - 1) {
-          await Future.delayed(const Duration(milliseconds: 80));
+          final newsItem = AnimeNews(
+            id: 'news_$malId',
+            malId: malId,
+            title: title,
+            imageUrl: imageUrl,
+            imagePath: imagePath,
+            releaseDate: releaseDate,
+            format: anime['type'] as String? ?? '',
+            episodes: (anime['episodes'] as num?)?.toInt() ?? 0,
+            genres: genresList.join('، '),
+            studios: studiosList.join('، '),
+            synopsis: (anime['synopsis'] as String? ?? '').trim(),
+            score: (anime['score'] as num?)?.toDouble(),
+            fetchedAt: DateTime.now(),
+          );
+
+          // 🆕 الحفظ الفوري لكل عنصر
+          savedNews.add(newsItem);
+          existingIds.add(malId);
+          newCount++;
+
+          final prefs = await SharedPreferences.getInstance();
+          final encoded =
+              jsonEncode(savedNews.map((n) => n.toJson()).toList());
+          await prefs.setString(_prefsKey, encoded);
+          await prefs.setString(
+              _lastFetchKey, DateTime.now().toIso8601String());
+
+          // 🆕 إعلام الواجهة بالعنصر الجديد
+          onItemFetched?.call(newsItem);
+
+          if (i < filtered.length - 1) {
+            await Future.delayed(const Duration(milliseconds: 100));
+          }
+        } catch (_) {
+          failedCount++;
+          // متابعة العنصر التالي
         }
       }
 
-      onProgress(0.97, 'حفظ البيانات...', null);
+      onProgress(
+        1.0,
+        newCount > 0
+            ? 'اكتمل: $newCount جديد'
+            : 'لا توجد أخبار جديدة',
+        null,
+      );
 
-      // ⑤ الحفظ في SharedPreferences
-      final prefs = await SharedPreferences.getInstance();
-      final encoded =
-          jsonEncode(savedNews.map((n) => n.toJson()).toList());
-      await prefs.setString(_prefsKey, encoded);
-      await prefs.setString(_lastFetchKey, DateTime.now().toIso8601String());
-
-      onProgress(1.0, 'اكتمل!', null);
-      return NewsFetchResult(success: true, count: savedNews.length);
+      return NewsFetchResult(
+        success: true,
+        count: newCount,
+        failed: failedCount,
+      );
     } catch (e) {
       onProgress(1.0, 'فشل: $e', null);
       return NewsFetchResult(
         success: false,
-        count: 0,
-        error: e.toString(),
+        count: newCount,
+        failed: failedCount,
+        error: 'حدث خطأ: $e',
       );
     }
   }
