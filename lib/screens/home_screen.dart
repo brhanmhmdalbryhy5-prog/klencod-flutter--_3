@@ -40,6 +40,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String _continueSort = 'newest';
   bool _continueSeasonOnly = false;
   bool _continueHideCompleted = false;
+  List<String> _continueSelectedIds = [];
 
   StreamSubscription? _eventSub;
 
@@ -57,7 +58,11 @@ class _HomeScreenState extends State<HomeScreen> {
     'ألعاب', 'فنون قتالية', 'ساموراي', 'شياطين', 'إيسيكاي'
   ];
 
-  // ═══ مولّد الألقاب (مطابق لـ otaku_oracle) ═══
+  // ══════════════════════════════════════════════════════════════
+  // 🆕 2000 لقب فريد — 50 بادئة × 40 نواة (مُبعثرة بمعامل أولي)
+  // كل 1 أنمي = لقب جديد | 2000 أنمي = كل الألقاب
+  // لا تشابه في البدايات (بفضل الـ prime scrambling)
+  // ══════════════════════════════════════════════════════════════
   static const List<String> _titlePrefixes = [
     'حارس', 'أمير', 'بطل', 'فارس', 'روح', 'قلب', 'ظل', 'نور', 'نجم', 'صقر',
     'نمر', 'تنين', 'فينيق', 'ساموراي', 'نينجا', 'ساحر', 'محارب', 'مستكشف',
@@ -76,14 +81,17 @@ class _HomeScreenState extends State<HomeScreen> {
     'الألحان', 'النغمات', 'الأصوات', 'الصور', 'الألوان', 'النجوم', 'الأكوان',
   ];
 
-  static const int _titlesPerLevel = 5;
-  static int get _totalTitles => _titlePrefixes.length * _titleCores.length;
+  static const int _titlesPerLevel = 1; // كل أنمي = لقب جديد
+  static int get _totalTitles =>
+      _titlePrefixes.length * _titleCores.length; // = 2000
 
+  // 🆕 خوارزمية بعثرة: prime 997 coprime with 2000 → لا تكرار، تباين عالٍ
   static String _generateTitle(int index) {
     if (index < 0) index = 0;
     final i = index % _totalTitles;
-    final prefixIdx = i ~/ _titleCores.length;
-    final coreIdx = i % _titleCores.length;
+    final scrambled = (i * 997) % _totalTitles;
+    final prefixIdx = scrambled % _titlePrefixes.length;
+    final coreIdx = (scrambled ~/ _titlePrefixes.length) % _titleCores.length;
     return '${_titlePrefixes[prefixIdx]} ${_titleCores[coreIdx]}';
   }
 
@@ -92,7 +100,6 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _initialLoad();
 
-    // إعادة تحميل الإعدادات عند تغييرها
     _eventSub = AppEvents.stream.listen((event) {
       if (event == 'continue_prefs_changed') {
         _loadContinuePrefs();
@@ -114,7 +121,10 @@ class _HomeScreenState extends State<HomeScreen> {
       _continueLimit = prefs.getInt('continue_limit') ?? 5;
       _continueSort = prefs.getString('continue_sort') ?? 'newest';
       _continueSeasonOnly = prefs.getBool('continue_season_only') ?? false;
-      _continueHideCompleted = prefs.getBool('continue_hide_completed') ?? false;
+      _continueHideCompleted =
+          prefs.getBool('continue_hide_completed') ?? false;
+      _continueSelectedIds =
+          prefs.getStringList('continue_selected_ids') ?? [];
     });
   }
 
@@ -195,7 +205,12 @@ class _HomeScreenState extends State<HomeScreen> {
     return rated.fold<double>(0, (sum, a) => sum + a.rating) / rated.length;
   }
 
-  // ═══ قائمة "استمر في المشاهدة" مع دعم المواسم ═══
+  // ══════════════════════════════════════════════════════════════
+  // 🆕 قائمة "استمر في المشاهدة"
+  // - يدعم التحديد اليدوي (فتُطبّق الفلاتر لكن التحديد يتجاوز limit)
+  // - الترتيب: حسب id (microseconds) → يعطي أدق ترتيب زمني
+  // - عند +1 تُحدَّث date → تظهر في القمة فوراً
+  // ══════════════════════════════════════════════════════════════
   List<Anime> get _continueWatchingList {
     var list = _allAnimes.where((a) {
       if (_continueHideCompleted && a.status == 'مكتمل') return false;
@@ -204,21 +219,28 @@ class _HomeScreenState extends State<HomeScreen> {
           (a.episodes == 0 || a.watchedEpisodes < a.episodes);
     }).toList();
 
+    // فلتر التحديد اليدوي
+    if (_continueSelectedIds.isNotEmpty) {
+      list = list.where((a) => _continueSelectedIds.contains(a.id)).toList();
+    }
+
     switch (_continueSort) {
       case 'progress':
         list.sort((a, b) {
-          final pA = a.episodes > 0
-              ? a.watchedEpisodes / a.episodes
-              : 0.0;
-          final pB = b.episodes > 0
-              ? b.watchedEpisodes / b.episodes
-              : 0.0;
+          final pA =
+              a.episodes > 0 ? a.watchedEpisodes / a.episodes : 0.0;
+          final pB =
+              b.episodes > 0 ? b.watchedEpisodes / b.episodes : 0.0;
           return pB.compareTo(pA);
         });
         break;
       case 'newest':
       default:
+        // 🆕 ترتيب أدق: id = microsecondsSinceEpoch
         list.sort((a, b) {
+          final idA = int.tryParse(a.id) ?? 0;
+          final idB = int.tryParse(b.id) ?? 0;
+          if (idA != idB) return idB.compareTo(idA);
           final dA = DateTime.tryParse(a.date) ?? DateTime(2000);
           final dB = DateTime.tryParse(b.date) ?? DateTime(2000);
           return dB.compareTo(dA);
@@ -226,6 +248,8 @@ class _HomeScreenState extends State<HomeScreen> {
         break;
     }
 
+    // إذا كان المستخدم اختار يدوياً → لا تُطبّق limit
+    if (_continueSelectedIds.isNotEmpty) return list;
     if (_continueLimit > 0) return list.take(_continueLimit).toList();
     return list;
   }
@@ -248,6 +272,9 @@ class _HomeScreenState extends State<HomeScreen> {
     if (idx == -1) return;
 
     all[idx].watchedEpisodes++;
+    // 🆕 تحديث date → يجعلها الأولى في "استمر في المشاهدة"
+    all[idx].date = DateTime.now().toIso8601String();
+
     final isNowComplete = all[idx].episodes > 0 &&
         all[idx].watchedEpisodes >= all[idx].episodes;
     final isOneLeft = all[idx].episodes > 0 &&
@@ -278,7 +305,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // ═══ منفذ "استمر في المشاهدة" حسب التخطيط ═══
   Widget _buildContinueWatching(Color primaryColor) {
     final list = _continueWatchingList;
     if (list.isEmpty) return const SizedBox.shrink();
@@ -326,7 +352,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // ─── نمط 1: قائمة عمودية (الحالي) ───
   Widget _buildContinueCard(Anime anime, Color primaryColor) {
     final progress = anime.episodes > 0
         ? (anime.watchedEpisodes / anime.episodes).clamp(0.0, 1.0)
@@ -416,22 +441,25 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _plusOneButton(Anime anime, Color primaryColor,
       {bool mini = false}) {
+    final isComplete =
+        anime.episodes > 0 && anime.watchedEpisodes >= anime.episodes;
     return Material(
-      color: primaryColor,
+      color: isComplete ? Colors.white12 : primaryColor,
       borderRadius: BorderRadius.circular(mini ? 8 : 10),
       child: InkWell(
         borderRadius: BorderRadius.circular(mini ? 8 : 10),
-        onTap: () => _incrementWatched(anime),
+        onTap: isComplete ? null : () => _incrementWatched(anime),
         child: Padding(
           padding: EdgeInsets.all(mini ? 6 : 10),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.add,
-                  color: Colors.white, size: mini ? 16 : 22),
+              Icon(isComplete ? Icons.check : Icons.add,
+                  color: isComplete ? Colors.greenAccent : Colors.white,
+                  size: mini ? 16 : 22),
               if (!mini)
-                const Text('+1',
-                    style: TextStyle(
+                Text(isComplete ? 'تم' : '+1',
+                    style: const TextStyle(
                         color: Colors.white,
                         fontSize: 10,
                         fontWeight: FontWeight.bold)),
@@ -442,7 +470,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ─── نمط 2 و 3: شبكة 2×N أو 3×N ───
   Widget _buildGridLayout(
       List<Anime> list, int crossCount, Color primaryColor) {
     return GridView.builder(
@@ -544,7 +571,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ─── نمط 4: سينمائي ───
   Widget _buildCinematicLayout(List<Anime> list, Color primaryColor) {
     return Column(
       children: list.map((anime) {
@@ -652,10 +678,10 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ─── نمط 5: شريط أفقي (Carousel) ───
+  // ─── 🆕 نمط 5: شريط أفقي (Carousel) — أضيف زر +1 ───
   Widget _buildCarouselLayout(List<Anime> list, Color primaryColor) {
     return SizedBox(
-      height: 190,
+      height: 210,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         itemCount: list.length,
@@ -668,7 +694,7 @@ class _HomeScreenState extends State<HomeScreen> {
               File(anime.imagePath!).existsSync();
 
           return Container(
-            width: 130,
+            width: 140,
             margin: const EdgeInsets.only(left: 10),
             decoration: BoxDecoration(
               color: const Color(0xFF1B1F28),
@@ -723,7 +749,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.all(6),
+                    padding: const EdgeInsets.fromLTRB(6, 6, 6, 6),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -733,11 +759,20 @@ class _HomeScreenState extends State<HomeScreen> {
                             style: const TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 2),
-                        Text(
-                            '${anime.watchedEpisodes}/${anime.episodes == 0 ? "?" : anime.episodes}',
-                            style: const TextStyle(
-                                color: Colors.white54, fontSize: 9)),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                  '${anime.watchedEpisodes}/${anime.episodes == 0 ? "?" : anime.episodes}',
+                                  style: const TextStyle(
+                                      color: Colors.white54,
+                                      fontSize: 9)),
+                            ),
+                            // 🆕 زر +1 داخل الشريط
+                            _plusOneButton(anime, primaryColor, mini: true),
+                          ],
+                        ),
                       ],
                     ),
                   ),
@@ -750,7 +785,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ─── نمط 6: قائمة مضغوطة ───
   Widget _buildCompactLayout(List<Anime> list, Color primaryColor) {
     return Column(
       children: list.map((anime) {
@@ -1379,16 +1413,18 @@ class _HomeScreenState extends State<HomeScreen> {
     if (totalCount < _titlesPerLevel) return const SizedBox.shrink();
 
     final List<Color> achColors = [
-      const Color(0xFFCD7F32), const Color(0xFFC0C0C0), const Color(0xFFFFD700),
-      const Color(0xFF00E5FF), const Color(0xFFE040FB), const Color(0xFFFF5252),
-      const Color(0xFF69F0AE), const Color(0xFFFFAB40), const Color(0xFF448AFF),
-      const Color(0xFFFF4081)
+      const Color(0xFFCD7F32), const Color(0xFFC0C0C0),
+      const Color(0xFFFFD700), const Color(0xFF00E5FF),
+      const Color(0xFFE040FB), const Color(0xFFFF5252),
+      const Color(0xFF69F0AE), const Color(0xFFFFAB40),
+      const Color(0xFF448AFF), const Color(0xFFFF4081)
     ];
 
     final List<IconData> achIcons = [
-      Icons.star_border, Icons.explore, Icons.local_cafe, Icons.psychology,
-      Icons.auto_awesome, Icons.verified, Icons.workspace_premium,
-      Icons.military_tech, Icons.diamond, Icons.emoji_events
+      Icons.star_border, Icons.explore, Icons.local_cafe,
+      Icons.psychology, Icons.auto_awesome, Icons.verified,
+      Icons.workspace_premium, Icons.military_tech,
+      Icons.diamond, Icons.emoji_events
     ];
 
     int index = (totalCount ~/ _titlesPerLevel) - 1;
